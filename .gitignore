@@ -1,3 +1,4 @@
+.gitignore
 卷积神经网络-CNN(基本原理-独特价值-实际应用).pdf
 /ansible 2.17  官方文档翻译/
 /c++ 笔记/
@@ -43,9 +44,9 @@ O&M(Operation and Maintenance)/容器及云平台/openshift/OpenShift容器平�
 O&M(Operation and Maintenance)/压力测试/sysbench/sysbench压力测试工具的安装和使用 _ 小强斋太-Study Notes (2019-10-15 下午1_56_13).html
 Scripting language/php/Laravel/
 /shell变量详解.pdf
-/SRE 读书笔记
+/SRE 读书笔记/
 tensorflow/26种神经网络激活函数可视化.pdf
 tensorflow/必备知识/numpy/
-tensorflow/一文弄懂神经网络中的反向传播法 - BackPropagation.png 一文弄懂神经网络中的反向传播法.png
-tensorflow/Keras(中英对照)
-tensorflow/python 基础知识点
+tensorflow/一文弄懂神经网络中的反向传播法.png
+tensorflow/Keras(中英对照)/
+tensorflow/python 基础知识点/
