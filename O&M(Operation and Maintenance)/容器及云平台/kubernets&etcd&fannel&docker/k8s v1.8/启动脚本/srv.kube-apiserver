@@ -1,0 +1,74 @@
+#!/bin/bash
+# author:jack
+# date:20170209
+# startup kube-apiserver service
+# FILENAME:srv.kube-apiserver
+###########################
+set -e
+set -x
+
+if [ -e GLOBAL-ENV ];then
+  source GLOBAL-ENV
+else
+  echo 'File GLOBAL-ENV does not exist.'
+  echo -1
+fi
+
+LOGS_PATH="$KUBERNETES_PREFIX/server/logs"
+
+$KUBERNETES_PREFIX/server/bin/kube-apiserver \
+--admission-control="AlwaysAdmit" \
+--allow-privileged="true" \
+--alsologtostderr="false" \
+--anonymous-auth="false" \
+--apiserver-count="2" \
+--authorization-mode="AlwaysAllow" \
+--cert-dir="$CERTIFICATE_PATH/" \
+--default-watch-cache-size="150" \
+--delete-collection-workers="3" \
+--enable-bootstrap-token-auth="true" \
+--enable-garbage-collector="true" \
+--enable-logs-handler="true" \
+--etcd-servers="http://$ETCD_NODE01_IPADDRESS:4001,http://$ETCD_NODE02_IPADDRESS:4001,http://$ETCD_NODE03_IPADDRESS:4001" \
+--event-ttl="30m" \
+--external-hostname="$LOCAL_IPADDRESS" \
+--insecure-bind-address="0.0.0.0" \
+--insecure-port="8080" \
+--kubelet-https="true" \
+--kubelet-preferred-address-types="InternalIP,ExternalIP,Hostname,InternalDNS,ExternalDNS" \
+--kubelet-timeout="8s" \
+--log-dir="$LOGS_PATH/" \
+--log-flush-frequency="2s" \
+--logtostderr="false" \
+--max-mutating-requests-inflight="300" \
+--profiling="true" \
+--runtime-config="rbac.authorization.k8s.io/v1alpha1" \
+--secure-port="6443" \
+--service-cluster-ip-range="10.0.0.0/16" \
+--service-node-port-range="30000-33500" \
+--v="6" \
+--watch-cache="true" \
+--client-ca-file="$CERTIFICATE_PATH/ca.crt" \
+--service-account-key-file="$CERTIFICATE_PATH/ca.key" \
+--tls-cert-file="$CERTIFICATE_PATH/server.crt"  \
+--tls-private-key-file="$CERTIFICATE_PATH/server.key" \
+--token-auth-file="$CERTIFICATE_PATH/token.csv"
+
+#--admission-control="NamespaceLifecycle,LimitRanger,ServiceAccount,DefaultStorageClass,ResourceQuota" \
+#--admission-control="AlwaysAdmit" \
+#--audit-log-path="$LOGS_PATH/" \
+#--audit-log-maxage="7" \
+#--audit-log-maxbackup="10" \
+#--audit-policy-file="$KUBERNETES_PREFIX/server/conf/audit-policy.yaml" \
+
+
+#--anonymous-auth="false" \
+#--authorization-mode="RBAC" \
+#--authorization-mode="AlwaysAllow" \
+#--enable-swagger-ui=false \
+#--kubelet-client-certificate="$CERTIFICATE_PATH/dd_kubelet_client.crt" \
+#--kubelet-client-key="$CERTIFICATE_PATH/dd_kubelet_client.key" \
+#--kubelet-certificate-authority="$CERTIFICATE_PATH/ca.crt" \
+
+
+

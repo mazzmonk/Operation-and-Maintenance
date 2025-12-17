@@ -1,0 +1,114 @@
+/* flyweight.h */
+
+#include <string>
+
+class Flyweight {
+ public:
+  virtual ~Flyweight() {
+  }
+  virtual void Operation(const std::string& extrinsicState) {
+  }
+  std::string GetIntrinsicState();
+
+ protected:
+  Flyweight(std::string intrinsicState);
+
+ private:
+  std::string _intrinsicState;
+};
+
+class ConcreteFlyweight : public Flyweight {
+ public:
+  ConcreteFlyweight(std::string intrinsicState);
+  ~ConcreteFlyweight() {
+  }
+  void Operation(const std::string& extrinsicState);
+};
+
+/* flyweight.cc */
+
+#include "flyweight.h"
+#include <iostream>
+
+Flyweight::Flyweight(std::string intrinsicState) {
+  this->_intrinsicState = intrinsicState;
+}
+
+std::string Flyweight::GetIntrinsicState() {
+  return this->_intrinsicState;
+}
+
+ConcreteFlyweight::ConcreteFlyweight(std::string intrinsicState)
+    : Flyweight(intrinsicState) {
+  std::cout << "ConcreteFlyweight Build..." << intrinsicState << std::endl;
+}
+
+void ConcreteFlyweight::Operation(const std::string& extrinsicState) {
+  std::cout << "ConcreteFlyweight:内蕴[" << this->GetIntrinsicState() << "]外蕴["
+            << extrinsicState << "]" << std::endl;
+}
+
+/* flyweightFactory.h */
+
+#include "flyweight.h"
+#include <string>
+#include <vector>
+
+class FlyweightFactory {
+ public:
+  FlyweightFactory() {
+  }
+  ~FlyweightFactory() {
+  }
+  Flyweight *GetFlyweight(const std::string& key);
+
+ private:
+  std::vector<Flyweight*> _fly;
+};
+
+/* flyweightFactory.cc */
+
+#include "flyweightFactory.h"
+#include <string>
+#include <cassert>
+#include <iostream>
+
+Flyweight* FlyweightFactory::GetFlyweight(const std::string& key) {
+  for (std::vector<Flyweight*>::iterator it = _fly.begin(); it != _fly.end();
+      it++) {
+    if ((*it)->GetIntrinsicState() == key) {
+      std::cout << "already created by users..." << std::endl;
+      return *it;
+    }
+  }
+  Flyweight *fn = new ConcreteFlyweight(key);
+  _fly.push_back(fn);
+  return fn;
+}
+
+#include "flyweight.h"
+#include "flyweightFactory.h"
+#include <iostream>
+
+int main(int argc, char* argv[]) {
+  FlyweightFactory *fc = new FlyweightFactory();
+  Flyweight *fw1 = fc->GetFlyweight("hello");
+  Flyweight *fw2 = fc->GetFlyweight("world!");
+  Flyweight *fw3 = fc->GetFlyweight("hello");
+
+  return 0;
+}
+
+flyweightFactory为一个对象构造工厂,当client需要一个对象时候就会向flyweightFactory发出请求对象的消息getflyweight()消息,flyweightFactory拥有一个管理,存储对象的"仓库"(或者叫对象池,这里用的vector),getflyweight()消息会遍历对象池中的对象,如果已经存在则直接返回给client,否则创建一个新的对象返回给client.
+
+				Flyweight
+				operation(virtual)
+				GetIntrinsicState()
+							^
+						  |
+				concreteFlyweight                      FlyweightFactory        
+        operation                              getflyweight 这里创建flyweight对象
+
+
+
+

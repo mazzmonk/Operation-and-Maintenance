@@ -1,0 +1,152 @@
+varnish 4.1.2
+1.依赖关系
+ yum -y install autoconf automake jemalloc-devel libedit-devel libtool ncurses-devel  pkgconfig python-docutils python-sphinx graphviz
+
+2.安装pcre
+#./configure --prefix=/usr && make && make install
+
+3.设置环境
+$ export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig
+
+4.安装
+
+$./configure --prefix=$HOME/apps/varnish  --enable-dependency-tracking  --enable-shared --enable-pcre-jit --enable-kqueue --enable-epoll --enable-ports  --enable-ld-version-script --enable-stack-protector
+
+
+5.启动
+mkdir -p $HOME/apps/varnish/etc/varnish	
+mkdir -p $HOME/apps/varnish/logs
+建立文件default.vcl，内容见最后
+
+创建secret文件
+$uuidgen > secret 
+
+/home/blue/apps/varnish/sbin/varnishd -f /home/blue/apps/varnish/etc/varnish/default.vcl -S /home/blue/apps/varni
+sh/etc/varnish/secret -s file,/home/blue/apps/varnish/var/varnish_cache,10G -T 127.0.0.1:8888 -a 0.0.0.0:8090           
+//端口8888用于telnet，8090对外提供服务的端口
+
+6.日志
+可以采用2种方式采集
+1.可以得到详细的系统日志及运行日志
+./varnishlog -n /home/blue/apps/varnish/var/varnish/img01 日志会打印到终端屏幕 img01是机器名
+2.采用了类似apache的combined输出格式
+
+
+此种方式取消了在4.0以后的版本
+./varnishncsa -n /home/blue/apps/varnish/var/varnish/img01  -f |/usr/sbin/rotatelogs /home/blue/apps/varnish/logs/varnish.%Y.%m.%d.%H.log 3600 480
+
+4.0以后版本使用此方式，然后使用lograte来切
+./varnishncsa -a -n /home/blue/apps/varnish/var/varnish/img01 -w /home/blue/apps/varnish/logs/varnish.log
+
+
+
+https://www.varnish-cache.org/docs/4.1/users-guide/vcl-built-in-subs.html
+
+
+default.vcl内容：
+############################################################################################
+vcl 4.0;
+
+backend default {
+    .host = "10.101.33.84";
+    .port = "8080";
+}
+
+ 
+sub vcl_recv {
+    if (req.url ~ "\.(bmp|jpeg|swf|ico|swf|png|gif|jpg|css|js|html|htm|flv|mp4|pdf)$") { 
+        unset req.http.cookie;
+    }
+
+    if (req.method != "GET" &&
+        req.method != "HEAD" &&
+        req.method != "PUT" &&
+        req.method != "POST" &&
+        req.method != "TRACE" &&
+        req.method != "OPTIONS" &&
+        req.method != "DELETE") {
+        return (pipe);
+    }
+ 
+    if (req.method != "GET" && req.method != "HEAD") {
+        return (pass);
+    }
+     
+    if (req.http.Authorization || req.http.Cookie) {
+        return (pass);
+    }
+    return (hash);
+}
+ 
+sub vcl_pipe {
+    return (pipe);
+}
+ 
+sub vcl_pass {
+    return (fetch);
+}
+ 
+sub vcl_hash {
+    hash_data(req.url);
+    if (req.http.host) {
+        hash_data(req.http.host);
+    } else {
+        hash_data(server.ip);
+    }
+    return (lookup);
+}
+ 
+sub vcl_purge {
+    return (synth(200, "Purged"));
+}
+ 
+sub vcl_hit {
+    if (obj.ttl >= 0s) {
+        return (deliver);
+    }
+    if (obj.ttl + obj.grace > 0s) {
+        return (deliver);
+    }
+    return (miss);
+}
+ 
+sub vcl_miss {
+     return (fetch);
+}
+ 
+sub vcl_deliver {
+    if (obj.hits > 0) {
+	set resp.http.x-cache = "Hit from" + " " + server.ip;
+    } else {
+	set resp.http.x-cache = "Miss via" + " " + server.ip;
+    }
+    return (deliver);
+}
+ 
+sub vcl_backend_fetch {
+     return (fetch);
+}
+ 
+sub vcl_backend_response {
+    if (beresp.ttl <= 0s ||
+        beresp.http.Set-Cookie ||
+        beresp.http.Surrogate-control ~ "no-store" ||
+        (!beresp.http.Surrogate-Control &&
+        beresp.http.Cache-Control ~ "no-cache|no-store|private") ||
+        beresp.http.Vary == "*") {
+        set beresp.ttl = 120s;
+        set beresp.uncacheable = true;
+    }
+    return (deliver);
+}
+
+
+###########################################################################################
+
+
+
+
+
+
+
+

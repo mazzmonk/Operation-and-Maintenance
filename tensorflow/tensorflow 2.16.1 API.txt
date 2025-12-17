@@ -1,0 +1,236 @@
+官方原文: https://tensorflow.google.cn/api_docs/python/tf
+这里记录了类及函数,模块及类型的说明见原文档
+
+Classes
+class AggregationMethod：列出用于合并梯度的聚合方法的class.
+class CriticalSection：临界区.
+class DType：表示张量中元素的类型.
+class DeviceSpec：表示 TensorFlow 设备的(可能是部分)规范.
+class GradientTape：记录用于自动微分的操作.
+class Graph：以数据流图表示的 TensorFlow 计算.
+class IndexedSlices：给定索引处的一组张量切片的稀疏表示.
+class IndexedSlicesSpec：tf.IndexedSlices 的类型规范.
+class Module：基础神经网络模块 class.
+class Operation：表示对张量执行计算的图节点.
+class OptionalSpec：tf.experimental.Optional 的类型规范.
+class RaggedTensor：表示不规则张量.
+class RaggedTensorSpec：tf.RaggedTensor 的类型规范.
+class RegisterGradient：用于为操作类型注册梯度函数的装饰器.
+class SparseTensor：表示稀疏张量.
+class SparseTensorSpec：tf.sparse.SparseTensor 的类型规范.
+class Tensor：tf.Tensor 表示元素的多维数组.
+class TensorArray：包装动态大小、按时间步长的 Tensor 数组的class.
+class TensorArraySpec：tf.TensorArray 的类型规范.
+class TensorShape：表示 Tensor 的形状.
+class TensorSpec：描述 tf.Tensor 的类型.
+class TypeSpec：指定 TensorFlow 值类型.
+class UnconnectedGradients：控制当 y 不依赖于 x 时梯度计算的行为.
+class Variable：请参阅变量指南.
+class VariableAggregation：指示分布式变量的聚合方式.
+class VariableSynchronization：指示分布式变量的同步时间.
+class Constant_initializer：生成具有常量值的张量的初始化器.
+class Name_scope：定义 Python 操作时使用的上下文管理器.
+class ones_initializer：生成初始化为 1 的张量的初始化器.
+class random_normal_initializer：生成服从正态分布的张量的初始化器.
+class random_uniform_initializer：生成服从均匀分布的张量的初始化器.
+class zeros_initializer：生成初始化为 0 的张量的初始化器.
+
+函数
+Assert(...)：断言给定条件为真.
+abs(...)：计算张量的绝对值.
+acos(...)：逐个元素计算 x 的反双曲余弦值.
+acosh(...)：逐个元素计算 x 的反双曲余弦值.
+add(...)：逐个元素返回 x + y.
+add_n(...)：返回张量列表的逐个元素和.
+approx_top_k(...)：以近似方式返回输入操作数的最小/最大 k 个值及其索引.
+argmax(...)：返回张量在各个轴上最大值的索引.
+argmin(...)：返回张量在各个轴上最小值的索引.
+argsort(...)：返回张量沿某个轴排序后的索引.
+as_dtype(...)：将给定的 type_value 转换为 tf.DType.
+as_string(...)：将给定张量中的每个条目转换为字符串.
+asin(...)：逐个元素计算 x 的三角反正弦.
+asinh(...)：逐个元素计算 x 的反双曲正弦.
+assert_equal(...)：逐个元素断言条件 x == y 成立.
+assert_greater(...)：逐个元素断言条件 x > y 成立.
+assert_less(...)：逐个元素断言条件 x < y 成立.
+assert_rank(...)：断言 x 的秩等于 rank.
+atan(...)：逐个元素计算 x 的三角反正切.
+atan2(...)：逐个元素计算 y/x 的反正切,并保留参数的符号.
+atanh(...)：逐个元素计算 x 的反双曲正切.
+batch_to_space(...)：用于 T 类型 N 维张量的 BatchToSpace 转换.
+bitcast(...)：将张量从一种类型转换为另一种类型,且不复制数据.
+boolean_mask(...)：对张量应用布尔掩码.
+broadcast_dynamic_shape(...)：根据给定的符号形状计算广播的形状.
+broadcast_static_shape(...)：根据已知形状计算广播的形状.
+broadcast_to(...)：广播一个兼容形状的数组.
+case(...)：创建一个 case 操作.
+cast(...)：将张量转换为新类型.
+clip_by_global_norm(...)：根据多个张量范数之和的比率,对它们的值进行裁剪.
+clip_by_norm(...)：将张量值裁剪为最大 L2 范数.
+clip_by_value(...)：将张量值裁剪到指定的最小值和最大值.
+complex(...)：将两个实数转换为一个复数.
+concat(...)：沿一维连接张量.
+cond(...)：如果谓词 pred 为 true,则返回 true_fn(),否则返回 false_fn().
+constant(...)：从 class 张量对象创建一个常量张量.
+control_dependencies(...)：使用默认图对 Graph.control_dependencies() 进行包装.
+conv(...)：给定 (N+1+batch_dims) 维输入和 (N+2) 维滤波器张量,计算 N 维卷积.
+conv2d_backprop_filter_v2(...)：计算卷积相对于滤波器的梯度.
+conv2d_backprop_input_v2(...)：计算卷积相对于输入的梯度.
+convert_to_tensor(...)：将给定值转换为张量.
+cos(...)：计算 x 的余弦值(逐元素).
+cosh(...)：计算 x 的双曲余弦值(逐元素).
+cumsum(...)：计算张量 x 沿轴的累积和.
+custom_gradient(...)：用于定义具有自定义梯度的函数的装饰器.
+device(...)：指定在此上下文中创建/执行的操作的设备.
+divide(...)：计算 x 除以 y 的 Python 样式.
+dynamic_partition(...)：使用分区中的索引将数据分区为 num_partitions 个张量.
+dynamic_stitch(...)：将数据张量的值交织成单个张量.
+edit_distance(...)：计算序列之间的编辑距离.
+eig(...)：计算一批矩阵的特征分解.
+eigvals(...)：计算一个或多个矩阵的特征值.
+einsum(...)：对指定索引进行张量收缩并计算外积.
+ensure_shape(...)：更新张量的形状并在运行时检查该形状是否成立.
+equal(...)：逐个元素返回 (x == y) 的真值.
+executing_eagerly(...)：检查当前线程是否启用了 Eager Execution.
+exp(...)：逐个元素计算 x 的指数.
+expand_dims(...)：返回一个长度为 1 的张量,其轴插入到索引轴处.
+extract_volume_patches(...)：从输入中提取图像块,并将其放入“深度”输出维度.extract_image_patches 的 3D 扩展.
+eye(...)：构造一个单位矩阵或一批矩阵.
+fftnd(...)：N-N 快速傅里叶变换.
+fill(...)：创建一个用标量值填充的张量.
+fingerprint(...)：生成指纹值.
+floor(...)：返回不大于 x 的逐元素最大整数.
+foldl(...)：对从维度 0 的元素解包的张量列表执行 foldl 操作.(参数值已弃用)
+foldr(...)：对从维度 0 的元素解包的张量列表执行 foldr 操作.(参数值已弃用)
+function(...)：将函数编译为可调用的 TensorFlow 图. (弃用参数) (弃用参数) (弃用参数)
+gather(...)：根据索引从 params 的 axis 轴收集切片.(弃用参数)
+gather_nd(...)：将 params 的切片收集到一个由索引指定形状的张量中.
+get_current_name_scope(...)：返回由 tf.name_scope(...)s 指定的当前全名范围.
+get_logger(...)：返回 TF 记录器实例.
+get_static_value(...)：返回给定张量的常量值(如果可有效计算).
+grad_pass_through(...)：创建一个具有 f 中提供的前向行为的梯度传递操作.
+gradients(...)：构造 ys 相对于 x 的和在 xs 中的符号导数.
+greater(...)：逐个元素返回 (x > y) 的真值.
+greater_equal(...)：逐个元素返回 (x >= y) 的真值.
+group(...)：创建一个对多个操作进行分组的操作.
+guarantee_const(...)：向 TF 运行时承诺输入张量为常量.(已弃用)
+hessians(...)：构造 ys 中 x 的和的 Hessian 矩阵.
+histogram_fixed_width(...)：返回值的直方图.
+histogram_fixed_width_bins(...)：将给定值分箱以用于直方图.
+identity(...)：返回一个与输入形状和内容相同的张量.
+identity_n(...)：返回一个与输入形状和内容相同的张量列表.
+ifftnd(...)：ND 快速傅里叶逆变换.
+import_graph_def(...)：将 graph_def 中的图导入当前默认图. (已弃用参数)
+init_scope(...)：一个上下文管理器,用于将操作从控制流作用域和函数构建图中移除.
+inside_function(...)：指示调用者代码是否在 tf.function 内部执行.
+irfftnd(...)：ND 逆实快速傅里叶变换.
+is_symbolic_tensor(...)：测试张量是否为符号张量.
+is_tensor(...)：检查 x 是否为 TF 原生类型,可以传递给多个 TF 操作.
+less(...)：逐个元素返回 (x < y) 的真值.
+less_equal(...)：逐个元素返回 (x <= y) 的真值.
+linspace(...)：沿给定轴生成间隔均匀的值.
+load_library(...)：加载 TensorFlow 插件.
+load_op_library(...)：加载包含自定义操作和核的 TensorFlow 插件.
+logical_and(...)：逐个元素返回 x 与 y 的真值.
+logical_not(...)：逐个元素返回 x 与 y 的真值.
+logical_or(...)：逐个元素返回 x 与 y 的真值.
+make_ndarray(...)：从张量创建 NumPy ndarray.
+make_tensor_proto(...)：创建 TensorProto.
+map_fn(...)：通过将 fn 应用于轴 0 上未堆叠的每个元素来转换元素.(弃用参数)
+matmul(...)：将矩阵 a 与矩阵 b 相乘,得到 a * b.
+matrix_square_root(...)：计算一个或多个方阵的平方根：
+maximum(...)：返回逐元素求 x 和 y 的最大值(即 x > y ? x : y).
+meshgrid(...)：广播用于在 N 维网格上求值的参数.
+minimum(...)：逐元素返回 x 和 y 的最小值(即 x < y ? x : y).
+multiply(...)：逐元素返回 x * y.
+negative(...)：逐元素计算数值负值.
+no_gradient(...)：指定 op_type 类型的操作不可微.
+no_op(...)：不执行任何操作.仅用作控制边的占位符.
+nondifferentiable_batch_function(...)：对装饰函数完成的计算进行批处理.
+norm(...)：计算向量、矩阵和张量的范数.
+not_equal(...)：逐个元素返回 (x != y) 的真值.
+numpy_function(...)：包装一个 Python 函数并将其用作 TensorFlow 操作.
+one_hot(...)：返回一个独热张量.
+ones(...)：创建一个所有元素都设置为 1 的张量.
+ones_like(...)：创建一个所有元素都为 1 的张量,其形状与输入相同.
+pad(...)：填充一个张量.
+parallel_stack(...)：将一个 R 阶张量列表并行堆叠成一个 R+1 阶张量.
+pow(...)：计算一个值对另一个值的幂.
+print(...)：打印指定的输入.
+py_function(...)：将一个 Python 函数包装到 TensorFlow 操作中,并立即执行该操作.
+ragged_fill_empty_rows(...)
+ragged_fill_empty_rows_grad(...)
+random_index_shuffle(...)：输出值在 [0, ..., max_index] 排列中的位置.
+range(...)：创建一个数字序列.
+rank(...)：返回张量的秩.
+realdiv(...)：对于实数类型,逐个元素返回 x / y.
+recompute_grad(...)：定义一个函数作为磁带自动微分的重新计算检查点.
+reduce_all(...)：计算张量各个维度元素的 tf.math.logical_and.
+reduce_any(...)：计算张量各个维度元素的 tf.math.logical_or.
+reduce_logsumexp(...)：计算 log(sum(exp(张量各个维度元素))).
+reduce_max(...)：计算张量各个维度元素的 tf.math.maximum.
+reduce_mean(...)：计算张量各个维度元素的平均值.
+reduce_min(...)：计算张量各个维度元素的 tf.math.minimum.
+reduce_prod(...)：计算张量各个维度元素的 tf.math.multiply.
+reduce_sum(...)：计算张量各个维度元素的 sum.
+register_tensor_conversion_function(...)：注册一个函数,用于将 base_type 对象转换为 Tensor.
+repeat(...)：重复输入元素.
+required_space_to_batch_paddings(...)：计算 block_shape 除以 input_shape 所需的填充.
+reshape(...)：重塑张量.
+reverse(...)：反转张量的特定维度.
+reverse_sequence(...)：反转变长切片.
+rfftnd(...)：ND 快速实数傅里叶变换.
+roll(...)：沿某个轴滚动张量的元素.
+round(...)：将张量的值逐个元素四舍五入为最接近的整数.
+saturate_cast(...)：对值执行安全的饱和转换,将值转换为 dtype.
+scalar_mul(...)：将标量乘以 Tensor 或 IndexedSlices 对象.
+scan(...)：扫描从 0 维元素解包的张量列表.(参数值已弃用)
+scatter_nd(...)：根据索引将更新分散到形状为 shape 的张量中.
+searchsorted(...)：搜索值在排序序列中的位置.
+sequence_mask(...)：返回一个表示每个单元前 N 个位置的掩码张量.
+shape(...)：返回一个包含输入张量形状的张量.
+shape_n(...)：返回张量列表的形状.
+sigmoid(...)：逐个元素计算 x 的 S 形函数.
+sign(...)：返回一个数字符号的逐个元素指示.
+sin(...)：逐个元素计算 x 的正弦值.
+sinh(...)：逐个元素计算 x 的双曲正弦值.
+size(...)：返回张量的大小.
+slice(...)：从张量中提取切片.
+sort(...)：对张量进行排序.
+space_to_batch(...)：用于 N 维 T 类型张量的 SpaceToBatch 函数.
+space_to_batch_nd(...)：用于 N 维 T 类型张量的 SpaceToBatch 函数.
+split(...)：将一个张量值拆分为一个子张量列表.
+sqrt(...)：计算输入张量的逐元素平方根.
+square(...)：计算 x 元素的平方.
+squeeze(...)：从张量的形状中删除大小为 1 的维度.
+stack(...)：将一个 R 阶张量列表堆叠成一个 R+1 阶张量.
+stop_gradient(...)：停止梯度计算.
+strided_slice(...)：提取张量的步长切片(通用 Python 数组索引).
+subtract(...)：返回 x - y 阶的元素.
+switch_case(...)：创建一个 switch/case 操作,例如：
+tan(...)：逐个元素计算 x 的正切值.
+tanh(...)：逐个元素计算 x 的双曲正切值.
+tensor_scatter_nd_add(...)：根据索引向现有张量添加稀疏更新.
+tensor_scatter_nd_max(...)：对取元素最大值的张量应用稀疏更新.
+tensor_scatter_nd_min(...)
+tensor_scatter_nd_sub(...)：从现有张量中减去稀疏更新 根据索引更新张量.
+tensor_scatter_nd_update(...)：根据索引将更新分散到现有张量中.
+tensordot(...)：沿指定轴对 a 和 b 进行张量收缩并计算外积.
+tile(...)：通过平铺给定张量来构造张量.
+timestamp(...)：提供自纪元以来的时间(以秒为单位).
+transpose(...)：转置 a,其中 a 是一个张量.
+truediv(...)：逐元素执行 x / y 相除(使用 Python 3 除法运算符语义).
+truncatediv(...)：逐元素返回 x / y 的结果,并向零舍入.
+truncatemod(...)：返回逐元素除法的余数.
+tuple(...)：将张量分组.
+type_spec_from_value(...)：返回表示给定值的 tf.TypeSpec.
+unique(...)：在一维张量中查找唯一元素.
+unique_with_counts(...)：在一维张量中查找唯一元素.
+unravel_index(...)：将平面索引数组转换为坐标数组元组.
+unstack(...)：将给定维度的 R 阶张量解包为 (R-1) 阶张量.
+variable_creator_scope(...)：定义供variable()使用的变量创建函数的作用域.
+vectorized_map(...)：对从维度 0 的元素解包的张量列表进行并行映射.
+where(...)：返回非零元素的索引,或复用 x 和 y.
+while_loop(...)：当条件 cond 为真时重复执行循环体.(不推荐使用的参数值)
+zeros(...)：创建一个所有元素都设置为零的张量.
+zeros_like(...)：创建一个所有元素都设置为零的张量.

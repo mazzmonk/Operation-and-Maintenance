@@ -1,0 +1,3 @@
+valgrind用于内存溢出检查,介绍如下
+
+http://www.cprogramming.com/debugging/valgrind.html

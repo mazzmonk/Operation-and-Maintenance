@@ -1,0 +1,198 @@
+
+FreeBSD常用命令和packages使用方法讲解
+
+点评：安装 packages 目前 FreeBSD 的 packages 是由 .tgz 所打包。如果想安装一个 packages ，可使用 pkg_add，如安装一个 joe 的 tgz： pkg_add joe-{version}.tgz 强制安装 packages 由於有些 packages 会有与其他 packages 相依性的关系，所以必须先行
+
+ 安装 packages
+
+目前 FreeBSD 的 packages 是由 .tgz 所打包。如果想安装一个 packages ，可使用 pkg_add，如安装一个 joe 的 tgz： 
+
+pkg_add joe-{version}.tgz
+
+强制安装 packages 
+由於有些 packages 会有与其他 packages 相依性的关系，所以必须先行安装那些 packages 才能正常安装。 如果须要强制安装 packages ，可以不须安装那些有相依性 packages ，但要注意的是强制安装的结果可能会导致执行或运作的不正常。强制安装 packages 的指令如下，如强制安装一个 joe 的 tgz： 
+pkg_add -f joe-{version}.tgz  
+
+查询 packages 与其他 packages 之间的相依性
+
+由於有些 packages 会有与其他 packages 相依性的关系，所以必须先行安装那些 packages 才能正常安装。 查询 packages 与其他 packages 之间的相依性的指令如下，如查询与 portupgrade 相依的其他 packages： 
+
+pkg_info -r portupgrade-{version}.tgz  
+
+远端安装 packages 
+
+有两种设定方式，首先是 PACKAGEROOT，如： 
+
+setenv PACKAGEROOT ftp://ftp.cn.freebsd.org/ #设定 PACKAGEROOT 为 ftp.cn.freebsd.org 站台另一种方式是设定 PACKAGESITE，好处是若该站台的 packages 仓储并不是符合 
+官方的设定或你想自己指定一个路径。以 ftp.cn.freebsd.org i386 的 current pakcages 为例：
+
+setenv PACKAGESITE ftp://ftp.cn.freebsd.org/pub/FreeBSD/ports/i386/packages-current/Latest/ 
+两种方式选择其中一种皆可，接下来的步骤都一样。 往後要安装 packages 的时候，如 portupgrade 的话，则： 
+
+pkg_add -r portupgrade  
+则系统会自动於 ftp.cn.freebsd.org 下载所有与 portupgrade 相依的 packages 并安装。
+
+
+查询目前系统安装了哪些套件
+
+查询目前系统已安装的全部套件： 
+pkg_info  
+
+查询目前系统有没有安装这个关键字的套件
+pkg_info | grep  
+
+查询某个档案是属於哪些套件
+
+如果想查询 /usr/local/bin/joe 是属於哪个套件的话，则： 
+
+pkg_info -W /usr/local/bin/joe  
+如果没有回传任何资讯的话，代表着这个档案是由 FreeBSD 内建的。 
+
+查询某个套件安装了哪些档案
+
+如果想查询目前系统所安装的 joe 包含了哪些档案，则： 
+
+pkg_info -L /var/db/pkg/joe-{version}
+
+
+列出所有可以升级的 ports
+
+ports collection 的更新速度很快，在每次更新 ports collections 後，往往会出现比目前现在安装的套件还新的版本，可 以令系统自行整理并提供可升级套件的列表： 
+
+pkg_version –c
+
+移除已安装的 ports
+以 editors/joe 为例的话，则： 
+cd /usr/ports/editors/joe/ 
+make deinstall  
+或是使用 pkg_delete 
+cd /var/db/pkg/ 
+pkg_delete joe-{version}  
+有时候套件之间的相依性会导致无法直接移除，如果要强制移除的话，则： 
+cd /var/db/pkg/ 
+pkg_delete -f joe-{version}但很有可能会导致其它的套件执行起来出现问题。
+
+
+
+一并移除所相依的 ports
+以 sysutils/portupgrade 为例的话，则： 
+cd /usr/ports/sysutils/portupgrade/ 
+make deinstall-depends  
+执行此步骤前，请注意是否会移除应该保护的套件。
+或是使用 pkg_delete 
+cd /var/db/pkg/ 
+pkg_delete -r portupgrade-{version}  
+
+对一个已经安装的 port 打包 
+
+如果安装好一个套软，事前并未打包，事後想打包的话，则： 
+以 editors/joe 为例的话 
+
+cd /var/db/pkg/ 
+pkg_create -b joe-{版本号}
+会将已安装的 port 打包起来，放在 /var/db/pkg/ 目录下。 
+
+`make deinstall' 与 `pkg_delete' 有什麽不同
+
+简单来说，`make deinstall' 会移除该 port，并且不会叁照其相依/相关的 ports。 `pkg_delete' 在移除该 port 前，会叁照其相依/相关的 ports，并且 `pkg_delete' 有支援 wild card，如要移除所有 p 开头的 ports，则：
+
+cd /var/db/pkg/ 
+pkg_delete p*
+要注意的是，如果使用 `make deinstall'，则最好确定系统目前所安装的版本，与 ports collection 中显示的版本符合，否则有可能会出现非预期性错误；而 `pkg_delete' 是因为直接删除系统中所安装的版本，所以没有此问题。 
+
+因此，换句话说，当系统所安装的版本符合 ports collections 中的版本，则可以使用 `make deinstall' 或 `pkg_delete'，否则的话最好用 `pkg_delete'。 
+
+
+对一个已经安装的 port 打包 
+
+如果安装好一个套软，事前并未打包，事後想打包的话，则： 
+以 editors/joe 为例的话 
+
+cd /var/db/pkg/ 
+pkg_create -b joe-{版本号}
+会将已安装的 port 打包起来，放在 /var/db/pkg/ 目录下。
+
+QQ空间 新浪微博 腾讯微博 搜狐微博 人人网 开心网 百度搜藏 更多
+[收藏] [复制链接发给好友] [评论] [打印] [关闭]
+0
+顶一下
+上一篇：BSD系统让某个用户登陆就关机的办法 
+下一篇：FreeBSD常用命令--ports使用方法讲解
+
+ 
+相关文章
+unix下的常用命令详解Unix操作系统命令和配置文件的保护知识分享Unix BSD Linux的口令机制初探OPENBSD上的ADSL和防火墙设置配置Unix vmstat 命令详解宝典freebsd下重启网络相关命令分析FreeBSD为powerd设置cpu最小工作频率UNIX 操作系统复杂的关机过程
+最新评论共有 0 位网友发表了评论 查看所有评论
+发表评论
+评论内容：不能超过250字，需审核，请自觉遵守互联网相关政策法规。 
+用户名： 密码： 匿名评论 
+相关栏目
+bios系统安装系统进程Windows系列LINUX技术RedHat/CentosUbuntuFedoraSolaris麒麟系统红旗LinuxUnix/BSD苹果MAC注册表其它系统
+
+ 
+最近更新
+unix下的常用命令详解
+Unix操作系统命令和配置文件的保护知识分享
+Unix BSD Linux的口令机制初探
+OPENBSD上的ADSL和防火墙设置配置
+Unix vmstat 命令详解宝典
+freebsd下重启网络相关命令分析
+FreeBSD为powerd设置cpu最小工作频率
+UNIX 操作系统复杂的关机过程
+Unix 操作系统中处理字符串问题的简单方式
+freebsd 服务器 ARP绑定脚本
+portupgrade 中文手册(翻译)
+更新FreeBSD Port Tree的几种方法小结
+热点关注
+FreeBSD系统SSH配置详解
+freebsd7.0安装系统图解（最新版）
+UNIX系统下监视磁盘空间和使用情况
+UNIX下VI编辑器使用
+FreeBSD mpd VPN服务器安装步骤
+FreeBSD FTP 的架设教程
+FreeBSD软件安装卸载工具--Ports和Packages详解
+FREEBSD软件安装
+Freebsd 下运行 QQ For Linux 的方法
+Freebsd 6.0安装配置Apache+MySQL+PHP+Myphpadmin+Web
+Freebsd7.0+Apache2.2+MySQL5+PHP5安装配置
+服务器的时间同步设置方法
+
+
+
+
+整理了Ubuntu Linux操作系统下apt-get命令的详细说明,分享给大家。
+常用的APT命令参数：
+
+apt-cache search package 搜索包
+
+apt-cache show package 获取包的相关信息，如说明、大小、版本等
+
+sudo apt-get install package 安装包
+
+sudo apt-get install package - - reinstall 重新安装包
+
+sudo apt-get -f install 修复安装"-f = ——fix-missing"
+
+sudo apt-get remove package 删除包
+
+sudo apt-get remove package - - purge 删除包，包括删除配置文件等
+
+sudo apt-get update 更新源
+
+sudo apt-get upgrade 更新已安装的包
+
+sudo apt-get dist-upgrade 升级系统
+
+sudo apt-get dselect-upgrade 使用 dselect 升级
+
+apt-cache depends package 了解使用依赖
+
+apt-cache rdepends package 是查看该包被哪些包依赖
+
+sudo apt-get build-dep package 安装相关的编译环境
+
+apt-get source package 下载该包的源代码
+
+sudo apt-get clean && sudo apt-get autoclean 清理无用的包
+
+sudo apt-get check 检查是否有损坏的依赖

@@ -1,0 +1,398 @@
+1.场景：docker-1.12-rc5 版本，当某个容器使用salt-mioin时，出现异常，此时，杀死了所有的容器进程及docker进程，再次启动出现如下错误
+
+ime="2016-08-05T10:40:30.657388377+08:00" level=info msg="Loading containers: start." 
+.........time="2016-08-05T10:40:30.680839064+08:00" level=error msg="libcontainerd: error sending sigterm to 1b0418225d722377cc2c1b74ff5cff44a8e631348ae96a26cafede9d237ac74b: rpc error: code = 2 desc = no such process" 
+time="2016-08-05T10:40:30.696637200+08:00" level=error msg="libcontainerd: error sending sigterm to 0cbc91249d457657936b7f775e8671797a2efd8e768838462975811a40a96c60: rpc error: code = 2 desc = no such process" 
+time="2016-08-05T10:40:30.710126594+08:00" level=error msg="libcontainerd: error sending sigterm to eb2e3682be4368256f5483c44c2dc364a5b8ca8aeef3c15a4ce81ed4ce18636a: rpc error: code = 2 desc = no such process" 
+time="2016-08-05T10:40:30.724575647+08:00" level=error msg="libcontainerd: error sending sigterm to 30311c11a2c1050d0695703081087350bfc4a711ac129d7b303f5eec1abd173b: rpc error: code = 2 desc = no such process" 
+time="2016-08-05T10:40:40.681872129+08:00" level=error msg="libcontainerd: error sending sigkill to 1b0418225d722377cc2c1b74ff5cff44a8e631348ae96a26cafede9d237ac74b: rpc error: code = 2 desc = no such process" 
+time="2016-08-05T10:40:40.697404632+08:00" level=error msg="libcontainerd: error sending sigkill to 0cbc91249d457657936b7f775e8671797a2efd8e768838462975811a40a96c60: rpc error: code = 2 desc = no such process" 
+time="2016-08-05T10:40:40.710678215+08:00" level=error msg="libcontainerd: error sending sigkill to eb2e3682be4368256f5483c44c2dc364a5b8ca8aeef3c15a4ce81ed4ce18636a: rpc error: code = 2 desc = no such process" 
+time="2016-08-05T10:40:40.725098491+08:00" level=error msg="libcontainerd: error sending sigkill to 30311c11a2c1050d0695703081087350bfc4a711ac129d7b303f5eec1abd173b: rpc error: code = 2 desc = no such process" 
+panic: sync: Unlock of unlocked RWMutex
+
+goroutine 56 [running]:
+panic(0x177c680, 0xc82022b380)
+	/usr/local/go/src/runtime/panic.go:481 +0x3e6
+sync.(*RWMutex).Unlock(0xc820466d00)
+	/usr/local/go/src/sync/rwmutex.go:115 +0xa3
+github.com/docker/docker/libcontainerd.(*client).Restore(0xc82016cde0, 0xc82022fec0, 0x40, 0xc82051e030, 0x1, 0x1, 0x0, 0x0)
+	/go/src/github.com/docker/docker/libcontainerd/client_linux.go:569 +0xd11
+github.com/docker/docker/daemon.(*Daemon).restore.func1(0xc8203f22b0, 0xc82051a1a0, 0xc8203f22c0, 0xc820443500, 0xc8204434d0, 0xc8202ed6d8, 0xc820510f00)
+	/go/src/github.com/docker/docker/daemon/daemon.go:178 +0x6f6
+created by github.com/docker/docker/daemon.(*Daemon).restore
+	/go/src/github.com/docker/docker/daemon/daemon.go:220 +0xa11
+
+
+根据https://github.com/docker/docker/issues/25110的描述，这是一个bug
+解决：升级到1.12版本解决
+
+
+2.场景：docker-1.12-rc5版本启动时候，使用的内核版本是2.6.xxx，升级到3.10版本
+
+[root@MMD-GEN ~]# docker daemon
+WARN[0000] devmapper: Udev sync is not supported. This will lead to unexpected behavior, data loss and errors. For more information, see https://docs.docker.com/reference/commandline/daemon/#daemon-storage-driver-option 
+WARN[0000] devmapper: Usage of loopback devices is strongly discouraged for production use. Please use `--storage-opt dm.thinpooldev` or use `man docker` to refer to dm.thinpooldev section. 
+WARN[0000] devmapper: Base device already exists and has filesystem ext4 on it. User specified filesystem will be ignored. 
+INFO[0000] [graphdriver] using prior storage driver "devicemapper" 
+INFO[0000] Graph migration to content-addressability took 0.00 seconds 
+INFO[0000] Default bridge (docker0) is assigned with an IP address 172.17.0.0/16. Daemon option --bip can be used to set a preferred IP address 
+WARN[0000] Your kernel does not support cgroup memory limit: mountpoint for memory not found 
+WARN[0000] mountpoint for cpu not found 
+WARN[0000] mountpoint for blkio not found 
+WARN[0000] mountpoint for cpuset not found 
+FATA[0000] Error starting daemon: Devices cgroup isn't mounted
+
+
+解决：这个错误为cgroup在宿主机上没有挂载。
+我们编辑挂载上去
+
+vi /etc/fstab
+#在结尾添加
+none        /sys/fs/cgroup        cgroup        defaults    0    0
+然后执行reboot重启服务器。
+
+3.docker容器中命令运行错误
+docker容器中如果出现TERM environment variable not set.错误
+执行export TERM=dumb
+
+
+4.当容器在启动的时候使用了“/bin/sh -c '/usr/sbin/vsftpd &&  /usr/sbin/sshd -D && \t /usr/bin/salt-minion -d' /bin/bash”参数，当修改了ssh的配置文件，ssh启动有错误，因此导致整个容器无法启动。
+
+解决：修改此容器所在的目录的jason文件，但是，必须把docker进程关闭，然后修改，否认，启动容器会覆盖修改的jason文件，具体如下：
+根据容器ID查询到容器所在目录，下边的例子显示了查询方法：
+**********************************************************************************************************************
+
+$docker ps -a  |grep mysql_1
+3da05993ce95        mycentos6.8                                     "/bin/sh -c /bin/bash"   5 days ago          Up 11 minutes                                        mysql_1
+$docker ps --no-trunc|grep mysql_1
+3da05993ce953a12cd97e57f3bcca00de6501f06016d055d158a81dcb37ba119   mycentos6.8         "/bin/sh -c /bin/bash"                                                                                        5 days ago          Up 11 minutes                                mysql_1
+$ps axu |grep docker |grep 3da
+root      3087  0.0  0.0 185960  1916 ?        Sl   10:47   0:00 docker-containerd-shim 3da05993ce953a12cd97e57f3bcca00de6501f06016d055d158a81dcb37ba119 /home/blue/apps/docker/var/run/docker/libcontainerd/3da05993ce953a12cd97e57f3bcca00de6501f06016d055d158a81dcb37ba119 docker-runc
+
+**********************************************************************************************************************
+具体的容器目录：/home/blue/apps/docker/var/lib/docker/containers/3da05993ce953a12cd97e57f3bcca00de6501f06016d055d158a81dcb37ba119
+此目录下有config.v2.json此文件，修改此文件。
+原文件内容如下：
+
+"Args":["-c","/usr/sbin/vsftpd \u0026\u0026             /usr/sbin/sshd -D \u0026\u0026 \t    /usr/bin/salt-minion -d","/bin/bash"]
+"Entrypoint":["/bin/sh","-c","/usr/sbin/vsftpd \u0026\u0026             /usr/sbin/sshd -D \u0026\u0026 \t    /usr/bin/salt-minion -d"]
+
+这里是启动的时候容器的程序。
+
+因此修改如下：
+
+"Args":["-c","/bin/bash"]
+"Entrypoint":["/bin/sh","-c","/bin/bash"]
+
+最后启动docker进程。
+
+5. 容器中使用crontab时候，会有计划不执行的情况
+容器中运行crond时候报错
+Cannot make/remove an entry for the specified session
+
+解决：修改容器中/etc/pam.d/crond文件，注销
+#session    required   pam_loginuid.so
+
+6.添加容器中的端口映射，外部能访问
+iptables -t nat -A PREROUTING -d 192.168.81.97 -p tcp --dport 63306 -j DNAT --to-destination 172.17.81.4:3306  
+
+访问192.168.81.97的63306端口可以访问到172.168.81.4的3306端口
+
+7.Dockerfile文件中的内容
+command:["/bin/echo","hello","world"]  此命令会覆盖Entrypoint
+
+8.is invalid: spec.template.spec.containers[0].securityContext.privileged: Forbidden: disallowed by policy 
+这个是在建立rc时候的提示，其实就是需要在建立容器的时候使用privileged模式，因为在使用nfs的时候需要使用此种模式
+
+解决：在kubelet及api server都需要开启支持，--allow-privileged=true，如此参数
+
+
+9.在kubernetes-dashboard中提交了deployment，但是没有pod生成及其他的资源，比如rs
+原因：这里是因为在kubernetes的master端没有启动controller_manager，
+解决：启动即可
+
+10.当部署service时，ep资源显示为空，网上资料上有显示是在service的yaml文件中没有seletor
+
+原因：这里确实是因为在deployment中有内容不完整。如下：
+********************************************************
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  namespace: own-project
+  name: nexus
+  labels:
+    name: nexus
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:                         #这里很重要，用于service中的selector
+        name: nexus
+    spec:
+      containers:
+      - name: nexus
+        image: 192.168.81.97:5000/centos:6.8.1
+        ports:
+        - containerPort: 8081
+********************************************************
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: own-project
+  name: nexus
+  labels:
+    name: nexus
+spec:
+  ports:
+  - port: 8081
+    targetPort: 8081
+    nodePort: 30005
+  selector:                         #这里和上述的对应
+    name: nexus
+  type: NodePort
+********************************************************
+
+11.当重新deployment以后，理论上只要原来的文件中的name等等信息没有变，service仍然可以用，但是事实上不能用，只能重新部署service
+
+12.missing br-netfilter module or unset br-nf-call-iptables; proxy may not work as intended 使用kubernetes 1.3及centos 7.2版本，在启动kubernetes_kube-proxy时候报错
+
+解决：找不到br_netfilter模块所以报⚠️，CentOS7 目前使用的3.10版本内核，是把这个功能编译到内核的(CONFIG_BRIDGE_NETFILTER=y)，而不是模块。
+
+13.在安装好centos的openssh以后，出现了Could not load host key: /etc/ssh/ssh_host_rsa_key 类似的报错，是因为需要公钥。
+
+解决：/usr/bin/ssh-keygen -A生成
+
+14.由于centos7.x容器的众多问题和bug，因此放弃，主要问题如下：
+1.ssh，默认的ssh安装完毕以后，无法通过远程，有lost connection类似的报错，scp也同样的报错，如下是远程debug时候的信息
+**********************************************************************************
+xxh -vvv 172.17.9.5
+OpenSSH_5.3p1, OpenSSL 1.0.1e-fips 11 Feb 2013
+debug1: Reading configuration data /etc/ssh/ssh_config
+debug1: Applying options for *
+debug2: ssh_connect: needpriv 0
+debug1: Connecting to 172.17.9.5 [172.17.9.5] port 22.
+debug1: Connection established.
+debug1: identity file /home/blue/.ssh/identity type -1
+debug1: identity file /home/blue/.ssh/identity-cert type -1
+debug3: Not a RSA1 key file /home/blue/.ssh/id_rsa.
+debug2: key_type_from_name: unknown key type '-----BEGIN'
+debug3: key_read: missing keytype
+debug3: key_read: missing whitespace
+debug3: key_read: missing whitespace
+debug3: key_read: missing whitespace
+debug3: key_read: missing whitespace
+debug3: key_read: missing whitespace
+debug3: key_read: missing whitespace
+debug3: key_read: missing whitespace
+debug3: key_read: missing whitespace
+debug3: key_read: missing whitespace
+debug3: key_read: missing whitespace
+debug3: key_read: missing whitespace
+debug3: key_read: missing whitespace
+debug3: key_read: missing whitespace
+debug3: key_read: missing whitespace
+debug3: key_read: missing whitespace
+debug3: key_read: missing whitespace
+debug3: key_read: missing whitespace
+debug3: key_read: missing whitespace
+debug3: key_read: missing whitespace
+debug3: key_read: missing whitespace
+debug3: key_read: missing whitespace
+debug3: key_read: missing whitespace
+debug3: key_read: missing whitespace
+debug3: key_read: missing whitespace
+debug3: key_read: missing whitespace
+debug2: key_type_from_name: unknown key type '-----END'
+debug3: key_read: missing keytype
+debug1: identity file /home/blue/.ssh/id_rsa type 1
+debug1: identity file /home/blue/.ssh/id_rsa-cert type -1
+debug1: identity file /home/blue/.ssh/id_dsa type -1
+debug1: identity file /home/blue/.ssh/id_dsa-cert type -1
+debug1: identity file /home/blue/.ssh/id_ecdsa type -1
+debug1: identity file /home/blue/.ssh/id_ecdsa-cert type -1
+debug1: Remote protocol version 2.0, remote software version OpenSSH_5.3
+debug1: match: OpenSSH_5.3 pat OpenSSH*
+debug1: Enabling compatibility mode for protocol 2.0
+debug1: Local version string SSH-2.0-OpenSSH_5.3
+debug2: fd 3 setting O_NONBLOCK
+debug1: SSH2_MSG_KEXINIT sent
+debug3: Wrote 960 bytes for a total of 981
+debug1: SSH2_MSG_KEXINIT received
+debug2: kex_parse_kexinit: diffie-hellman-group-exchange-sha256,diffie-hellman-group-exchange-sha1,diffie-hellman-group14-sha1,diffie-hellman-group1-sha1
+debug2: kex_parse_kexinit: ssh-rsa-cert-v01@openssh.com,ssh-dss-cert-v01@openssh.com,ssh-rsa-cert-v00@openssh.com,ssh-dss-cert-v00@openssh.com,ssh-rsa,ssh-dss
+debug2: kex_parse_kexinit: aes128-ctr,aes192-ctr,aes256-ctr,arcfour256,arcfour128,aes128-cbc,3des-cbc,blowfish-cbc,cast128-cbc,aes192-cbc,aes256-cbc,arcfour,rijndael-cbc@lysator.liu.se
+debug2: kex_parse_kexinit: aes128-ctr,aes192-ctr,aes256-ctr,arcfour256,arcfour128,aes128-cbc,3des-cbc,blowfish-cbc,cast128-cbc,aes192-cbc,aes256-cbc,arcfour,rijndael-cbc@lysator.liu.se
+debug2: kex_parse_kexinit: hmac-md5,hmac-sha1,umac-64@openssh.com,hmac-sha2-256,hmac-sha2-512,hmac-ripemd160,hmac-ripemd160@openssh.com,hmac-sha1-96,hmac-md5-96
+debug2: kex_parse_kexinit: hmac-md5,hmac-sha1,umac-64@openssh.com,hmac-sha2-256,hmac-sha2-512,hmac-ripemd160,hmac-ripemd160@openssh.com,hmac-sha1-96,hmac-md5-96
+debug2: kex_parse_kexinit: none,zlib@openssh.com,zlib
+debug2: kex_parse_kexinit: none,zlib@openssh.com,zlib
+debug2: kex_parse_kexinit: 
+debug2: kex_parse_kexinit: 
+debug2: kex_parse_kexinit: first_kex_follows 0 
+debug2: kex_parse_kexinit: reserved 0 
+debug2: kex_parse_kexinit: diffie-hellman-group-exchange-sha256,diffie-hellman-group-exchange-sha1,diffie-hellman-group14-sha1,diffie-hellman-group1-sha1
+debug2: kex_parse_kexinit: ssh-dss
+debug2: kex_parse_kexinit: aes128-ctr,aes192-ctr,aes256-ctr,arcfour256,arcfour128,aes128-cbc,3des-cbc,blowfish-cbc,cast128-cbc,aes192-cbc,aes256-cbc,arcfour,rijndael-cbc@lysator.liu.se
+debug2: kex_parse_kexinit: aes128-ctr,aes192-ctr,aes256-ctr,arcfour256,arcfour128,aes128-cbc,3des-cbc,blowfish-cbc,cast128-cbc,aes192-cbc,aes256-cbc,arcfour,rijndael-cbc@lysator.liu.se
+debug2: kex_parse_kexinit: hmac-md5,hmac-sha1,umac-64@openssh.com,hmac-sha2-256,hmac-sha2-512,hmac-ripemd160,hmac-ripemd160@openssh.com,hmac-sha1-96,hmac-md5-96
+debug2: kex_parse_kexinit: hmac-md5,hmac-sha1,umac-64@openssh.com,hmac-sha2-256,hmac-sha2-512,hmac-ripemd160,hmac-ripemd160@openssh.com,hmac-sha1-96,hmac-md5-96
+debug2: kex_parse_kexinit: none,zlib@openssh.com
+debug2: kex_parse_kexinit: none,zlib@openssh.com
+debug2: kex_parse_kexinit: 
+debug2: kex_parse_kexinit: 
+debug2: kex_parse_kexinit: first_kex_follows 0 
+debug2: kex_parse_kexinit: reserved 0 
+debug2: mac_setup: found hmac-md5
+debug1: kex: server->client aes128-ctr hmac-md5 none
+debug2: mac_setup: found hmac-md5
+debug1: kex: client->server aes128-ctr hmac-md5 none
+debug1: SSH2_MSG_KEX_DH_GEX_REQUEST(1024<1024<8192) sent
+debug1: expecting SSH2_MSG_KEX_DH_GEX_GROUP
+debug3: Wrote 24 bytes for a total of 1005
+debug2: dh_gen_key: priv key bits set: 130/256
+debug2: bits set: 507/1024
+debug1: SSH2_MSG_KEX_DH_GEX_INIT sent
+debug1: expecting SSH2_MSG_KEX_DH_GEX_REPLY
+debug3: Wrote 144 bytes for a total of 1149
+debug3: check_host_in_hostfile: host 172.17.9.5 filename /home/blue/.ssh/known_hosts
+debug3: check_host_in_hostfile: host 172.17.9.5 filename /home/blue/.ssh/known_hosts
+debug3: check_host_in_hostfile: match line 19
+debug1: Host '172.17.9.5' is known and matches the DSA host key.
+debug1: Found key in /home/blue/.ssh/known_hosts:19
+debug2: bits set: 500/1024
+debug1: ssh_dss_verify: signature correct
+debug2: kex_derive_keys
+debug2: set_newkeys: mode 1
+debug1: SSH2_MSG_NEWKEYS sent
+debug1: expecting SSH2_MSG_NEWKEYS
+debug3: Wrote 16 bytes for a total of 1165
+debug2: set_newkeys: mode 0
+debug1: SSH2_MSG_NEWKEYS received
+debug1: SSH2_MSG_SERVICE_REQUEST sent
+debug3: Wrote 48 bytes for a total of 1213
+debug2: service_accept: ssh-userauth
+debug1: SSH2_MSG_SERVICE_ACCEPT received
+debug2: key: /home/blue/.ssh/identity ((nil))
+debug2: key: /home/blue/.ssh/id_rsa (0x7f850cdfd990)
+debug2: key: /home/blue/.ssh/id_dsa ((nil))
+debug2: key: /home/blue/.ssh/id_ecdsa ((nil))
+debug3: Wrote 64 bytes for a total of 1277
+debug1: Authentications that can continue: publickey,password
+debug3: start over, passed a different list publickey,password
+debug3: preferred gssapi-keyex,gssapi-with-mic,publickey,keyboard-interactive,password
+debug3: authmethod_lookup publickey
+debug3: remaining preferred: keyboard-interactive,password
+debug3: authmethod_is_enabled publickey
+debug1: Next authentication method: publickey
+debug1: Trying private key: /home/blue/.ssh/identity
+debug3: no such identity: /home/blue/.ssh/identity
+debug1: Offering public key: /home/blue/.ssh/id_rsa
+debug3: send_pubkey_test
+debug2: we sent a publickey packet, wait for reply
+debug3: Wrote 368 bytes for a total of 1645
+debug1: Authentications that can continue: publickey,password
+debug1: Trying private key: /home/blue/.ssh/id_dsa
+debug3: no such identity: /home/blue/.ssh/id_dsa
+debug1: Trying private key: /home/blue/.ssh/id_ecdsa
+debug3: no such identity: /home/blue/.ssh/id_ecdsa
+debug2: we did not send a packet, disable method
+debug3: authmethod_lookup password
+debug3: remaining preferred: ,password
+debug3: authmethod_is_enabled password
+debug1: Next authentication method: password
+blue@172.17.9.5's password:
+debug3: packet_send2: adding 64 (len 59 padlen 5 extra_pad 64)
+debug2: we sent a password packet, wait for reply
+debug3: Wrote 144 bytes for a total of 1789
+debug1: Authentication succeeded (password).
+debug1: channel 0: new [client-session]
+debug3: ssh_session2_open: channel_new: 0
+debug2: channel 0: send open
+debug1: Requesting no-more-sessions@openssh.com
+debug1: Entering interactive session.
+debug3: Wrote 128 bytes for a total of 1917
+debug2: callback start
+debug2: client_session2_setup: id 0
+debug2: channel 0: request pty-req confirm 1
+debug1: Sending environment.
+debug3: Ignored env HOSTNAME
+debug3: Ignored env SHELL
+debug3: Ignored env TERM
+debug3: Ignored env HISTSIZE
+debug3: Ignored env GRADLE_HOME
+debug3: Ignored env QTDIR
+debug3: Ignored env QTINC
+debug3: Ignored env JRE_HOME
+debug3: Ignored env USER
+debug3: Ignored env LS_COLORS
+debug3: Ignored env MAIL
+debug3: Ignored env PATH
+debug3: Ignored env PWD
+debug3: Ignored env JAVA_HOME
+debug1: Sending env LANG = en_US.UTF-8
+debug2: channel 0: request env confirm 0
+debug3: Ignored env MODULEPATH
+debug3: Ignored env LOADEDMODULES
+debug3: Ignored env HISTCONTROL
+debug3: Ignored env SHLVL
+debug3: Ignored env HOME
+debug1: Sending env LANGUAGE = en_US.UTF-8
+debug2: channel 0: request env confirm 0
+debug3: Ignored env LOGNAME
+debug3: Ignored env QTLIB
+debug3: Ignored env CVS_RSH
+debug3: Ignored env CLASSPATH
+debug3: Ignored env MODULESHOME
+debug3: Ignored env LESSOPEN
+debug3: Ignored env HISTTIMEFORMAT
+debug3: Ignored env G_BROKEN_FILENAMES
+debug3: Ignored env BASH_FUNC_module()
+debug3: Ignored env _
+debug3: Ignored env OLDPWD
+debug2: channel 0: request shell confirm 1
+debug2: fd 3 setting TCP_NODELAY
+debug2: callback done
+debug2: channel 0: open confirm rwindow 0 rmax 32768
+debug3: Wrote 528 bytes for a total of 2445
+debug2: channel_input_status_confirm: type 99 id 0
+debug2: PTY allocation request accepted on channel 0
+debug2: channel 0: rcvd adjust 2097152
+debug2: channel_input_status_confirm: type 99 id 0
+debug2: shell request accepted on channel 0
+Last login: Wed Oct 19 10:20:29 2016 from 172.17.34.0
+**********************************************************************************
+2.vsftpd无法启动，目前原因未知
+3.centos7自带的systemctl即使是在主机是centos7的机器上也无法启动，有D-bus无法启动的报错，同时这个程序必须在使用centos7的主机上才可以用，centos6.x无法使用，最终找了一个镜像，solita/centos-systemd，但是启动仍然需要众多参数，https://hub.docker.com/r/solita/centos-systemd/，这是官方的描述。
+
+15.容器操作系统为ubuntu 16.04，ssh安装以后，无法连接上去
+解决：设置此选项 UsePAM no
+
+16.etcd错误，12月25日，出现etcd无法连接的情况，后确定是磁盘写满导致，但有进程不断占用IO，具体如下：
+
+root     24261  0.0  0.0  19108   956 ?        Ss   04:01   0:00 /usr/sbin/anacron -s
+root     24312  0.0  0.0 106156  1264 ?        SN   04:30   0:00 /bin/bash /usr/bin/run-parts /etc/cron.daily
+root     24780  0.0  0.0 106156  1184 ?        SN   04:32   0:00 /bin/sh /etc/cron.daily/mlocate.cron
+root     24781  0.0  0.0 106012   776 ?        SN   04:32   0:00 awk -v progname=/etc/cron.daily/mlocate.cron progname {?????   print pr
+ogname ":\n"?????   progname="";????       }????       { print; }
+root     24786  0.0  0.0 101104   852 ?        DN   04:32   0:09 /usr/bin/updatedb -f sysfs?rootfs?bdev?proc?cgroup?cpuset?tmpfs?devtmpf
+s?binfmt_misc?debugfs?securityfs?sockfs?pipefs?anon_inodefs?devpts?ramfs?hugetlbfs?pstore?mqueue?mtd_inodefs?fuse?fusectl
+
+计划任务升级updatedb，就是local命令的一个库，关闭
+
+解决：
+redhat 6.4
+centos 6.8
+chmod -x /etc/cron.daily/mlocate.cron
+
+centos 7.2
+chmod -x /etc/cron.daily/mlocate
+
+
+
+
+
+
+
+
+

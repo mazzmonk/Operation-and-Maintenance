@@ -1,0 +1,25 @@
+1. 行号指定行范围
+  . N,M: 指定从第N行到第M行的范围.
+  . N: 指定第N行.
+  . $: 表示最后一行.
+  . 示例：
+    . sed '2,5d' file.txt: 删除file.txt文件的第2行到第5行.
+    . sed '1d' file.txt: 删除file.txt文件的第一行.
+    . sed '$d' file.txt: 删除file.txt文件的最后一行.
+    . sed '2,${d}' file.txt: 删除file.txt文件的第2行到最后一行.
+
+2. 模式匹配指定行范围
+  . /pattern/: 匹配包含指定模式(正则表达式)的行.
+  . N,/pattern/: 从第N行开始,到第一个匹配指定模式的行结束.
+  . /pattern/,M: 从第一个匹配指定模式的行开始,到第M行结束.
+  . /pattern1/,/pattern2/: 从第一个匹配pattern1的行开始,到第一个匹配pattern2的行结束.
+  . 示例：
+    . sed '/start/,/end/d' file.txt: 删除file.txt中,从包含"start"的行到包含"end"的行之间的所有行.
+    . sed '2,/pattern/d' file.txt: 删除file.txt文件中,从第2行开始,到第一个包含"pattern"的行结束的所有行.
+    . sed '/pattern/,2d' file.txt: 删除file.txt文件中,从第一个包含"pattern"的行开始,到第2行结束的所有行.
+
+3. 行范围与命令结合
+  . sed '2,5d' file.txt: 删除file.txt文件的第2行到第5行.
+  . sed '1,${s/old/new/g}' file.txt: 替换file.txt文件中,从第1行到最后一行中所有"old"为"new".
+  . sed '1,5{s/old/new/g; p }' file.txt: 替换file.txt文件中,从第1行到第5行中所有"old"为"new",并打印这些行.
+  . sed -n '1,5p' file.txt: 打印file.txt文件的第1行到第5行.

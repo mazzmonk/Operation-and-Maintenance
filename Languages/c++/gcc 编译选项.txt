@@ -1,0 +1,56 @@
+1.  -I(大写 i 字母)dirname: 将 dirname 所指出的目录加入到程序头文件目录列表
+
+#include <A.h>
+#include "B.h"
+
+对于<>,预处理程序cpp在系统预设的头文件目录(比如:/usr/include)中搜寻对应的文件
+对于"",cpp 在当前目中搜寻头文件
+
+例: gcc foo.c -I /home/include -o foo
+
+
+2. -Ldirname: 将 dirname 所指出的目录加入到库文件的目录列表.默认状态下,连接程序 ld 在系统的预设路径中(如/usr/lib)寻找所需要的库文件,这个选项告诉连接程序,首先到 -L 指定的目录中去寻找,然后再到系统预设路径中寻找
+
+
+3. -l(小写 l 字母)name: 在连接时,装载名字为 "libname.a" 的函数库,该函数库位于系统预设的目录或者又 -L 选项确定的目录下.例如,-lm 表示连接名为 "libm.a" 的函数库
+
+例: gcc foo.c -L /home/lib -lfoo -o foo
+
+
+ 4.  -static: 静态链接库文件
+
+例: gcc -static hello.c -o hello
+
+ 库有动态和静态两种,动态通常用 .so 为后缀,静态用 .a 为后缀.例如:libhello.so libhello.a.当使用静态库时,连接器找出程序所需的函数,然后将它们拷贝到可执行文件,一旦连接成功,静态程序库也就不需要了.然后,动态库而言,就不是这样,动态库会在执行程序内留下一个标价'指明当程序执行时,首先必须载入这个库.由于动态库节省空间,linux 下进行连接的缺省操作是首先连接动态库.
+
+
+5. -Wall: 生成所有警告信息
+    -w: 不生成任何警告信息
+    -DMACRO: 定义 MACRO 宏,等效在程序中用 #define MACRO  
+
+例:
+
+#include <stdio.h>
+#define YES
+
+int main() {
+
+#ifdef YES
+  printf("hello world!\n");
+#endif 
+  return 0;
+}
+
+上述代码编译的时候,会打印 hello world! 这句话
+当注销掉 #define YES 这行,编译后,则不会执行 printf 这行语句,但是,如果在编译的时候使用 gcc -DYES  hello.c -o hello 的时候,效果与上述的代码相同了
+
+
+
+
+
+
+
+
+
+
+

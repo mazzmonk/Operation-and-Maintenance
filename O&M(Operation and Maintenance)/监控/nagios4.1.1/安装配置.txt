@@ -1,0 +1,116 @@
+nagios 4.1.1
+
+./configure --prefix=$HOME/apps/nagios --with-nagios-user=$LOGNAME --with-nagios-group=$LOGNAME --with-command-user=$LOGNAME --with-command-group=$LOGNAME
+
+
+make all
+make install
+
+make install-config
+make install-commandmode
+
+cp -R contrib/eventhandlers/ ~/apps/nagios/libexec/
+
+
+
+nagios-plugins-2.0
+./configure --prefix=/home/blue/apps/nagios/ --with-nagios-user=$LOGNAME --with-nagios-group=$LOGNAME
+
+make
+make install
+
+
+nagios配置完成以后，需要web支持cgi，这里使用的是apache，配置如下：
+1.apache的httpd.conf文件需要有如下部分
+
+LoadModule cgi_module modules/mod_cgi.so
+LoadModule cgid_module modules/mod_cgid.so
+
+ScriptAlias /cgi-bin/ "/home/blue/apps/apache/cgi-bin/"
+
+
+2.网站配置部分
+
+<VirtualHost *:9090>
+    ServerAdmin admin@abc.cn
+    DocumentRoot "/home/blue/apps/nagios/sbin"
+    ServerName a.b.com
+    ServerAlias a.b.com
+
+    ScriptAlias /nagios/cgi-bin "/home/blue/apps/nagios/sbin"
+
+    ErrorLog "/home/blue/logs/apache/a.b.com-error_log"
+    CustomLog "/home/blue/logs/apache/a.b.com-access_log" common
+    
+    <Directory "/home/blue/apps/nagios/sbin">
+         Options ExecCGI
+         AllowOverride None
+         Require all granted
+   </Directory>
+
+   Alias /nagios "/home/blue/apps/nagios/share"
+
+   <Directory "/home/blue/apps/nagios/share">
+        Options FollowSymLinks
+        AllowOverride None
+        Require all granted
+   </Directory>    
+
+</VirtualHost>
+
+3.修改nagios的cgi.cfg文件
+
+use_authentication=0
+
+这里设置成0
+
+
+
+关于调用远程nrpe
+在客户端必须定义好检测状态的脚本，比如： check_cpu，这个脚本必须在nrpe的相应的目录中存在，并且在nrpe.cfg中已经定义类似如下的内容
+
+command[check_cpu]=/home/blue/apps/nrpe/libexec/check_cpu -w 90 -c 98 -i 90 -I 98
+
+
+在服务器端有个牛B的脚本check_nrpe，这个脚本是安装nrpe时带的，因此，将其拷贝到nagios的libexec目录下就ok
+
+定义commands.cfg文件，在其中加入
+
+define command{
+	command_name	check_cpu
+	command_line	$USER1$/check_nrpe -H $HOSTADDRESS$ -c check_cpu 
+	}
+
+这里的check_nrpe就起到牛B的用处了，这个脚本可以远程调用在客户段定义好的脚本命令，如上。这样就完成整个调用远程nrpe监控的过程
+
+
+描述一下check_disk这个脚本
+command[check_disk]=/home/blue/apps/nrpe/libexec/check_disk -w 6% -c 3% -p / -w 10% -c 5% -p /apps /usr /var
+
+这里表示/分区6% 3%报警，/apps /usr /var 10% 5%报警
+
+
+在nagios web上关闭监控，disabled等操作。
+注意以下的内容，加上的用户blue是在安装nagios时指定的用户
+开启
+use_authentication=1
+
+设置用户
+authorized_for_system_information=nagiosadmin,blue
+authorized_for_configuration_information=nagiosadmin,blue
+authorized_for_system_commands=nagiosadmin,blue
+authorized_for_all_services=nagiosadmin,blue
+authorized_for_all_hosts=nagiosadmin,blue
+authorized_for_all_service_commands=nagiosadmin,blue
+authorized_for_all_host_commands=nagiosadmin,blue
+
+同时修改如下内容：
+default_user_name=blue
+
+这里很关键，如果不设置，web无法查看
+
+
+默认情况下警告会发邮件和短信报警一次
+
+访问http://a.b.com:9090/nagios/
+

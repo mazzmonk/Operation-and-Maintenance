@@ -1,0 +1,24 @@
+安装环境：
+automake autoconf libtool ncurses-devel libxslt groff pcre-devel pkgconfig readline*
+
+上述内容除pcre以外，其他通过yum方式安装
+
+pcre-8.32.tar.gz
+varnish-3.0.4.tar.gz
+
+varnish-3.0.5版本有错误提示，因此放弃，后退一个版本
+
+pcre安装
+./configure --prefix=/home/blue/apps/pcre-8.32
+make 
+make install
+
+varnish安装
+export PKG_CONFIG_PATH=/home/blue/apps/pcre-8.32/lib/pkgconfig
+
+./configure --prefix=/home/blue/apps/varnish/
+make
+make install
+
+
+

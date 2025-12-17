@@ -1,0 +1,42 @@
+参考：
+模板及脚本下载
+
+脚本需要修改的地方及描述
+
+主要是如下的部分：
+
+def __init__(self, user_name='guest', password='guest', host_name='172.20.20.3',
+                 port=15672, conf='/etc/zabbix/zabbix_agentd.conf', senderhostname=None, protocol='http'):
+        self.user_name = user_name
+        self.password = password
+        #self.host_name = host_name or socket.gethostname()
+        self.host_name = '172.20.20.3'
+        self.port = port
+        self.conf = conf or '/etc/zabbix/zabbix_agentd.conf'
+        self.senderhostname = senderhostname or socket.gethostname()
+        self.protocol = protocol or 'http'
+
+    def call_api(self, path):
+        '''Call the REST API and convert the results into JSON.'''
+        url = 'http://172.20.20.3:15672/api/{3}'.format(self.protocol, self.host_name, self.port, path)
+
+
+然后就是 list_rabbit_nodes.sh  list_rabbit_queues.sh  list_rabbit_shovels.sh这几个脚本修改的地方
+
+#!/bin/bash
+#
+#
+cd "$(dirname "$0")"
+. .rab.auth
+
+if [[ -z "$HOSTNAME" ]]; then
+    HOSTNAME=`hostname`
+fi
+if [[ -z "$NODE" ]]; then
+    NODE=`hostname`
+fi
+
+HOSTNAME='172.20.20.3'	#注意这里
+
+./api.py --username=$USERNAME --password=$PASSWORD --check=list_nodes --filter="$FILTER" --conf=$CONF --hostname=$HOSTNAME --node="$NODE" --loglevel=${LOGLEVEL} --logfile=${LOGFILE} --po
+rt=$PORT --protocol=$PROTOCOL

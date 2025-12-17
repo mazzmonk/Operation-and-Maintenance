@@ -1,0 +1,68 @@
+/* proxy.h */
+
+class Subject {
+ public:
+  virtual ~Subject() {
+  }
+  virtual void Request() = 0;
+
+ protected:
+  Subject() {
+  }
+};
+
+class ConcreteSubject : public Subject {
+ public:
+  ConcreteSubject() {
+  }
+  ~ConcreteSubject() {
+  }
+  void Request();
+};
+
+class Proxy {
+ public:
+  Proxy() {
+  }
+  Proxy(Subject* sub) {
+    _sub = sub;
+  }
+  ~Proxy() {
+    delete _sub;
+  }
+  void Request();
+
+ private:
+  Subject* _sub;
+};
+
+/* proxy.cc */
+
+#include "proxy.h"
+#include <iostream>
+
+void ConcreteSubject::Request() {
+  std::cout << "ConcreteSubject ... request ... " << std::endl;
+}
+
+void Proxy::Request() {
+  std::cout << "Proxy request..." << std::endl;
+  _sub->Request();
+}
+
+#include "proxy.h"
+#include <iostream>
+
+int main(int argc, char* argv[]) {
+  Subject *sub = new ConcreteSubject();
+  Proxy *p = new Proxy(sub);
+  p->Request();
+  return 0;
+}
+
+
+代理模式,proxy包裹subject类,具体操作来之concreteSubject
+
+
+
+

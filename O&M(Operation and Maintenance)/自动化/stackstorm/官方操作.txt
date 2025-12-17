@@ -1,0 +1,485 @@
+st2 action list --pack=core
+st2 trigger list
+st2 rule list
+
+# corelocal通过st2 action list --pack=core查询到
+st2 run corelocal -- date -R
+
+
+# 查看执行结果
+st2 execution list
+
+# 执行一个远程shell,必须有ssh配置,默认使用key模式
+# st2 run coreremote hosts='1921681015' -- uname -a,--用于分离参数
+# st2 run coreremote hosts='abcexamplecom, cdeexamplecom' username='mysshuser' -- ls -l
+st2 run coreremote hosts='1921681015' username="root" password="123456" uname -a
+
+#############################################################
+root@7da53aa512fe:/# st2 run coreremote hosts='1921681015' username="root" password="123456" uname -a
+To get the results, execute:
+ st2 execution get 5add95b64002a1025bc3560e
+
+To view output in real-time, execute:
+ st2 execution tail 5add95b64002a1025bc3560e
+
+root@7da53aa512fe:/# st2 execution get 5add95cf4002a1025bc35611
+id: 5add95cf4002a1025bc35611
+status: succeeded (1s elapsed)
+parameters: 
+  cmd: uname
+  hosts: 1921681015
+  password: '********'
+  username: root
+result: 
+  1921681015:
+    failed: false
+    return_code: 0
+    stderr: ''
+    stdout: Linux
+    succeeded: true
+
+root@7da53aa512fe:/#  st2 execution tail 5add95b64002a1025bc3560e
+Linux
+
+Execution 5add95b64002a1025bc3560e has completed (status=succeeded)
+#############################################################
+
+
+st2 action list
+st2 action get corehttp
+st2 run corehttp --help
+
+# 访问http://wwwbaiducom使用GET方法
+st2 run corehttp url='http://wwwbaiducom'  method="GET"
+
+# st2 run <action> key=value positional arguments
+# 使用CLI方式运行action
+
+# st2 run corelocal -- ls -al 和 st2 run corelocal cmd="ls -al" 命令一致
+
+
+st2 run coreremote hosts='1921681015' username="root" password="123456" cmd="for u in bob phill luke; do echo \"Logins by \$u per day:\"; grep \$u/var/log/secure | grep opened | awk '{print \$1 \"-\" \$2}' | uniq -c | sort; done;"
+
+
+# 执行任务列表历史记录
+st2 execution list
+
+st2 execution get <execution_id>
+st2 execution list -n 5
+
+
+sample_rule_with_webhookyaml
+##########################################
+
+---
+    name: "sample_rule_with_webhook"
+    pack: "examples"
+    description: "Sample rule dumping webhook payload to a file."
+    enabled: true
+
+    trigger:
+        type: "core.st2.webhook"
+        parameters:
+            url: "sample"
+
+    criteria:
+        trigger.body.name:
+            pattern: "st2"
+            type: "equals"
+
+    action:
+        ref: "core.local"
+        parameters:
+            cmd: "echo \"{{trigger.body}}\" >> ~/st2.webhook_sample.out ; sync"
+
+
+##########################################
+
+root@7da53aa512fe:/# st2 rule list
++--------------------------------+----------+--------------------------------+---------+
+| ref                            | pack     | description                    | enabled |
++--------------------------------+----------+--------------------------------+---------+
+| examplessample_rule_with_webh | examples | Sample rule dumping webhook    | True    |
+| ook                            |          | payload to a file             |         |
++--------------------------------+----------+--------------------------------+---------+
+
+ref对应上述rule的yaml文件中的name:
+pack对应pack:,如果没有设置,将会是"default"		
+description对应description:
+enabled对应enabled:
+
+
+rule的yaml文件解说
+
+---
+    name: "rule_name"                      # required
+    pack: "examples"                       # optional
+    description: "Rule description"       # optional
+    enabled: true                          # required
+
+    trigger:                               # required
+        type: "trigger_type_ref"
+
+    criteria:                              # optional
+        triggerpayload_parameter_name1:
+            type: "regex"
+            pattern : "^value$"
+        triggerpayload_parameter_name2:
+            type: "iequals"
+            pattern : "watchevent"
+
+    action:                                # required
+        ref: "action_ref"
+        parameters:                        # optional
+            foo: "bar"
+            baz: "{{ triggerpayload_parameter_1 }}"
+
+
+
+The "name" of the rule
+The "pack" that the rule belongs to default is assumed if a pack is not specified
+The "description" of the rule
+The "enabled" state of a rule (true or false)
+
+The "type" of trigger emitted from sensors to monitor, and optionally parameters associated with that trigger
+
+An optional set of criteria, consisting of:
+An attribute of the trigger payload
+The "type" of criteria comparison
+The "pattern" to match against
+
+The action to execute when a rule is matched, consisting of:
+The "ref" (action/workflow) to execute
+An optional set of parameters to pass to the action execution
+
+规则的名称
+规则所属的包如果未指定包,则默认为假
+规则的描述
+规则的启用状态(true或false)
+
+从传感器发出的要触发的触发器类型,以及可选的与该触发器相关的参数
+
+一套可选的标准,包括：
+触发器有效负载的属性
+标准比较的类型
+匹配的模式
+
+规则匹配时执行的操作,包括：
+执行的ref(动作/工作流)
+一组可选的参数传递给动作执行
+
+
+
+actives
+操作是可以在您的环境中执行任意自动化或修复任务的代码片段. 它们可以用任何编程语言编写.
+
+为了给你一个更好的想法,下面是一个可以作为动作实施的简短任务列表：
+
+重新启动服务器上的服务
+创建一个新的云服务器
+确认Nagios/PagerDuty警报
+通过电子邮件或短信发送通知或提醒
+向IRC频道发送通知
+发送消息给Slack
+启动一个Docker容器
+快照虚拟机
+运行Nagios检查
+当具有匹配标准的规则被触发时,可以执行操作. 可以将多个操作串联到一个工作流中. 操作也可以通过CLI,API或UI直接从客户端执行.
+
+
+Action Runners
+
+可以用的Runners
+1.local-shell-cmd - 这是本地Runners.该运行程序在运行StackStorm的主机上执行Linux命令.
+2.local-shell-script - 这是本地Runners.动作是作为脚本实现的.它们在运行StackStorm的主机上执行.
+3.remote-shell-cmd - 这是一个远程运行程序.该Runners在用户提供的一个或多个远程主机上执行Linux命令.
+4.remote-shell-script - 这是一个远程运行程序.动作是作为脚本实现的.它们运行在用户提供的一个或多个远程主机上.
+5.python-script - 这是一个PythonRunners.使用run()方法将操作作为Python类实现.它们在运行StackStorm组件的同一台机器上本地运行.run()方法的返回值分别是成功状态标志的元组和结果对象,或者它只是结果对象.有关更多信息,请参阅文档中的Action Runners部分.
+6.http-request - 执行HTTP请求以运行HTTP操作的HTTP客户端.
+7.action-chain - 此runner支持执行简单的线性工作流程.有关更多信息,请参阅Workflows和ActionChain文档.
+8.mistral-v2 - 该Runners建立在Mistral OpenStack项目之上,支持执行复杂的工作流程.有关更多信息,请参阅工作流程和Mistral文档.
+9.cloudslang - 此Runners建立在CloudSlang项目之上,并支持执行复杂的工作流程.有关更多信息,请参阅Workflows和CloudSlang文档.
+注意：该Runners目前处于实验阶段,这意味着可能存在错误,并且外部面向用户的API可能会发生变化.
+10.inquirer - 这个Runners提供了查询功能的核心逻辑.
+
+
+
+自定义Actions
+
+一个action包含2部分
+1.YAML文件中描述action,及输入
+2.一个实现动作逻辑的脚本文件
+
+脚本可以用任意语言实现,必须遵循如下:
+1.脚本结束0表示成功,非0表示error
+2.所有的log输出到标准错误
+
+
+
+actions/ping.yaml
+####################################
+description: A ping host action.
+enabled: true
+entry_point: bash_ping/bash_ping.sh
+name: ping
+parameters:
+  count:
+    type: integer
+runner_type: "local-shell-cmd"
+
+#####################################
+
+runner_type这个参数,只能对应上述提到的Runners,上述描述的是10种
+parameters - 描述类型和默认值的参数和可选元数据字典.元数据是遵循JSON模式规范草案4的结构化数据.允许使用的通用参数类型是字符串,布尔值,数字（整数和小数 - 例如1.0,1,3,333,33等）,对象,整数（仅整数 - 1,1000等）和数组.如果提供了元数据,则在执行操作时验证输入参数.否则,跳过验证.
+这个参数实际是上述bash_ping/bash_ping.sh脚本的参数,比如直接执行bash_ping/bash_ping.sh 192.168.10.15,这里的192.168.10.15就对应上述yaml文件中的内容
+parameters:
+  count:
+    type: integer
+
+
+bash_ping/bash_ping.sh脚本内容
+#####################################
+#!/usr/bin/env bash
+
+echo "count>>${count}<<"
+if [[ ! $count ]]; then
+    # count variable not set so default to 3
+    PING_COUNT=3
+else
+    PING_COUNT=${count}
+fi
+
+ping -c ${PING_COUNT} ${1}
+#####################################
+
+这里的count这个参数,在脚本里,也是通过环境变量传递
+
+
+官方例子:
+##############################################
+---
+name: "send_sms"
+runner_type: "python-script"
+description: "This sends an SMS using twilio."
+enabled: true
+entry_point: "send_sms.py"
+parameters:
+    from_number:
+        type: "string"
+        description: "Your twilio 'from' number in E.164 format. Example +14151234567."
+        required: true
+        position: 0
+    to_number:
+        type: "string"
+        description: "Recipient number in E.164 format. Example +14151234567."
+        required: true
+        position: 1
+        secret: true
+    body:
+        type: "string"
+        description: "Body of the message."
+        required: true
+        position: 2
+        default: "Hello {% if system.user %} {{ st2kv.system.user }} {% else %} dude {% endif %}!"
+###########################################################
+脚本send_sms.py有3个参数,from_number,to_number,body
+
+to_number有个secret属性,值为true,如果参数被标记为secret,该属性的值将在StackStorm服务日志中被屏蔽
+
+上述参数中有个position属性,这个值指的是脚本运行的参数位置,比如:from_number中的position: 0指这个参数必须是脚本的第一个参数,to_number中的position: 1指这个参数必须是脚本的第二个参数,以此类推.
+
+注册action
+将actions的packs放在/opt/stackstorm/packs目录中
+使用st2 action create my_action_metadata.yaml,reload所有的actions,st2ctl reload --register-actions
+
+
+
+Sensors
+传感器是一种将外部系统和事件与StackStorm集成的方式.传感器是一些Python代码,可以定期轮询某个外部系统,也可以被动等待入站事件.然后他们将触发器注入StackStorm,可以通过规则进行匹配,以执行潜在的操作。
+
+传感器是用Python编写的,并且必须遵循StackStorm定义的传感器接口要求。
+
+Triggers
+触发器是StackStorm构造,用于识别传入StackStorm的事件.触发器是类型(字符串)和可选参数(对象)的元组.规则被编写为与触发器一起工作.传感器通常会注册触发器,但这并非严格要求.例如,在StackStorm中注册了一个通用webhooks触发器,它不需要自定义传感器。
+
+
+默认情况下,StackStorm会发出一些可以在规则中使用的内部触发器.这些触发器可以与非系统触发器区分开来,因为它们的前缀是st2
+
+
+
+Creating a Sensor
+创建传感器涉及编写一个Python文件和一个定义传感器的YAML元数据文件.这是一个最小的骨架示例.这是元数据文件:
+
+##################################################
+
+---
+  class_name: "SampleSensor"
+  entry_point: "sample_sensor.py"
+  description: "Sample sensor that emits triggers."
+  trigger_types:
+    -
+      name: "event"
+      description: "An example trigger."
+      payload_schema:
+        type: "object"
+        properties:
+          executed_at:
+            type: "string"
+            format: "date-time"
+            default: "2014-07-30 05:04:24.578325"
+####################################################
+
+
+如下是一个python的框架
+####################################################
+from st2reactor.sensor.base import Sensor
+
+
+class SampleSensor(Sensor):
+    """
+    * self.sensor_service
+        - provides utilities like
+            - get_logger() - returns logger instance specific to this sensor.
+            - dispatch() for dispatching triggers into the system.
+    * self._config
+        - contains parsed configuration that was specified as
+          config.yaml in the pack.
+    """
+
+    def setup(self):
+        # Setup stuff goes here. For example, you might establish connections
+        # to external system once and reuse it. This is called only once by the system.
+        pass
+
+    def run(self):
+        # This is where the crux of the sensor work goes.
+        # This is called once by the system.
+        # (If you want to sleep for regular intervals and keep
+        # interacting with your external system, you'd inherit from PollingSensor.)
+        # For example, let's consider a simple flask app. You'd run the flask app here.
+        # You can dispatch triggers using sensor_service like so:
+        # self.sensor_service(trigger, payload, trace_tag)
+        #   # You can refer to the trigger as dict
+        #   # { "name": ${trigger_name}, "pack": ${trigger_pack} }
+        #   # or just simply by reference as string.
+        #   # i.e. dispatch(${trigger_pack}.${trigger_name}, payload)
+        #   # E.g.: dispatch('examples.foo_sensor', {'k1': 'stuff', 'k2': 'foo'})
+        #   # trace_tag is a tag you would like to associate with the dispatched TriggerInstance
+        #   # Typically the trace_tag is unique and a reference to an external event.
+        pass
+
+    def cleanup(self):
+        # This is called when the st2 system goes down. You can perform cleanup operations like
+        # closing the connections to external system here.
+        pass
+
+    def add_trigger(self, trigger):
+        # This method is called when trigger is created
+        pass
+
+    def update_trigger(self, trigger):
+        # This method is called when trigger is updated
+        pass
+
+    def remove_trigger(self, trigger):
+        # This method is called when trigger is deleted
+        pass
+
+
+####################################################
+
+
+****************************************************
+＃这是传感器工作的关键所在。
+＃这被系统调用一次。
+＃（如果你想定期睡觉并保持
+＃与外部系统进行交互，您可以继承PollingSensor。）
+＃例如，让我们考虑一个简单的应用程序。 你会在这里运行烧瓶应用程序。
+＃你可以使用sensor_service调度触发器，如下所示：
+＃self.sensor_service（触发器，有效载荷，trace_tag）
+＃＃你可以参考触发器的字典
+＃＃{“name”：$ {trigger_name}，“pack”：$ {trigger_pack}}
+＃＃或者只是简单地通过引用作为字符串。
+＃＃即dispatch（$ {trigger_pack}。$ {trigger_name}，有效载荷）
+＃＃例如：dispatch（'examples.foo_sensor'，{'k1'：'stuff'，'k2'：'foo'}）
+＃＃trace_tag是您希望与调度的TriggerInstance关联的标记
+＃＃通常trace_tag是唯一的，并且是对外部事件的引用。
+
+****************************************************
+
+
+
+
+您的传感器应该在Python dict格式中生成触发器：
+
+####################################################
+trigger = 'pack.name'
+payload = {
+    'executed_at': '2014-08-01T00:00:00.000000Z'
+}
+trace_tag = external_event_id
+
+####################################################
+
+
+传感器在实例化时通过使用传感器传入传感器来注入此类触发器。
+
+self.sensor_service.dispatch(trigger=trigger, payload=payload, trace_tag=trace_tag)
+
+如果您需要定期轮询外部系统的传感器,则可以使用PollingSensor而不是Sensor作为基类。
+
+from st2reactor.sensor.base import PollingSensor
+
+....
+....
+
+
+How Sensors are Run
+
+每个传感器作为一个单独的进程运行st2sensorcontainer(请参阅概述)启动sensor_wrapper.py,它将您的Sensor类(如上面的SampleSensor或SamplePollingSensor)包装在st2reactor.container.sensor_wrapper.SensorWrapper中。
+
+正如你在上面的例子中看到的,一个sensor_service在实例化时被传递给每个传感器类的构造函数。
+
+传感器服务通过公共方法为传感器提供不同的服务.最重要的一点是调度方法,它允许传感器将触发器注入系统。
+
+所有公共方法如下所述：
+
+常见操作
+1. dispatch（trigger,payload,trace_tag）
+该方法允许传感器将触发器注入系统
+
+For example:
+
+trigger = 'pack.name'
+payload = {
+    'executed_at': '2014-08-01T00:00:00.000000Z'
+}
+trace_tag = uuid.uuid4().hex
+
+self.sensor_service.dispatch(trigger=trigger, payload=payload, trace_tag=trace_tag)
+
+
+
+
+除了触发注入之外,传感器服务还提供读取和操作数据存储的功能
+每个传感器都有一个本地名称空间,默认情况下,所有数据存储操作都在该传感器本地名称空间中的键上运行.如果要在全局名称空间上操作,则需要将local = False参数传递给数据存储操作方法
+
+除此之外,如果您想在传感器运行之间保留临时数据,则此功能非常有用
+
+
+这个功能的一个很好的例子就是TwitterSensor.Twitter传感器在数据存储区中的每次轮询之后都会持续最后处理的鸣叫的ID.这样,如果传感器重新启动或者如果它崩溃,传感器可以从停止的位置恢复,而不会将重复的触发器注入系统。
+
+
+
+当sensor完成以后,可以开始使用
+1.将传感器Python文件和YAML元数据放置在default包中的/opt/stackstorm/packs/default/sensors/中.或者,可以在/opt/stackstorm/packs/中创建一个具有适当包装结构的定制包装,并将sensor工件放置在那里
+2.使用st2ctl注册sensor
+st2ctl reload --register-all
+3.一旦你喜欢你的传感器,你可以通过在/opt/stackstorm/packs/${pack_name}中创建一个包并将传感器工件(YAML和Python)移动到/opt/stackstorm/packs/${pack_name}/sensors/.
+
+
+##############################################
+
+
+
+

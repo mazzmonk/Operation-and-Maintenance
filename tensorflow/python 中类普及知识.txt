@@ -1,0 +1,40 @@
+class Dog():
+  def __init__(self, name, age=10):  # 类实例化时需要的参数,age 具有默认值 10
+    self.name = name    # 类成员变量初始化,使用传入的参数 name
+    self.age = age
+
+
+子类继承
+class Adog(Dog):
+  def __init__(self, name, age=12):
+    super().__init__(name, age)   # 初始化父类成员变量
+
+
+一般情况下类方法的调用是通过先创建类对象再通过a.b()的方式来调用，但是如果类中只有一个方法或者一个方法的使用频率非常高，那么就可以为这个方法命名为__call__来简化调用。
+
+__call__
+
+存在__call__方法的类对象被称为可调用对象，它的作用可以总结为以下两点：
+ . 简化了对象下方法的调用  (当某方法调用频率很高)
+ . 模糊了对象和函数调用时的区别  (提高了代码的兼容性)
+
+# 使用__call__前
+class A():
+    def m(self):
+        print('a')
+    def n(self):
+        print('b')
+
+a = A()
+a.m()
+
+# 使用__call__后
+class A():
+    def __call__(self):
+        print('a')
+    def n(self):
+        print('b')
+
+a = A()
+a()
+

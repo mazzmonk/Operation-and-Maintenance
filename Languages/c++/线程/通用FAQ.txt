@@ -1,0 +1,178 @@
+1. What header file should you include for using C++11 multithreading capabilities?
+Use the <thread> header file
+
+#include <thread>
+
+Note: The thread functionality is defined in the "std" namespace.
+
+2. What are the different ways of creating a thread in C++11?
+There are essentially four ways of creating a thread:
+
+Create a thread with a function pointer
+Create a thread with a function object
+Create a thread with a lambda
+Create a thread with a member function
+3. How can a C++11 thread be created with a function pointer?
+Just pass in the address of a function to the thread constructor. The thread will start executing the function immediately.
+
+#include "stdafx.h"
+#include <thread>
+#include <iostream>
+using namespace std;
+void FireMissile()
+{
+  cout << "Firing sidewinder missile " << endl;
+}
+int main()
+{
+  //Creating a thread with a function pointer
+  thread t1(FireMissile);
+  t1.join();
+  
+  return 0;
+}
+4.How can a C++11 thread be created with a function Object?
+
+Create a function object "Missile" and pass it to the thread constructor.
+
+#include "stdafx.h"
+#include <thread>
+#include <iostream>
+using namespace std;
+//Create the function object
+class Missile
+{
+public:
+  void operator() () const
+  {
+    cout << "Firing Tomahawk missile" << endl;
+  }
+};
+int main()
+{
+  //Creating a thread with an function object
+  Missile tomahawk;
+  thread t1(tomahawk);
+  t1.join();
+  return 0;
+}
+5. How can a C++11 thread be created with a lambda?
+
+#include "stdafx.h"
+#include <thread>
+#include <iostream>
+using namespace std;
+int main()
+{
+  thread t1([] {
+    cout << "Launching Scud missile" << endl;
+  });
+  t1.join();
+  return 0;
+}
+6.Can a lambda closure be used to create a C++11 thread?
+
+Yes ! A lambda closure is nothing but a variable storing a lambda expression. You can store a lambda in a closure if you intend to reuse the lambda expression at more than one place in your code.
+
+#include "stdafx.h"
+#include <thread>
+#include <iostream>
+using namespace std;
+int main()
+{
+  // Define a lambda closure
+  auto LaunchMissileFunc = []() -> void { cout << "Launching Cruiser Missile" << endl; };
+  thread t1(LaunchMissileFunc);
+  t1.join();
+  return 0;
+}
+7.How can a C++11 thread be created with a member function?
+#include "stdafx.h"
+#include <thread>
+#include <iostream>
+using namespace std;
+class Torpedo
+{
+public:
+  void LaunchTorpedo()
+  {
+    cout << " Launching Torpedo" << endl;
+  }
+};
+int main()
+{
+  //Execute the LaunchTorpedo() method for a specific Torpedo object on a seperate thread
+  Torpedo torpedo;
+  thread t1(&Torpedo::LaunchTorpedo, &torpedo);
+  t1.join();
+  return 0;
+}
+Note that here you're executing the LaunchTorpedo() method for a specific Torpedo object on a seperate thread. If other threads are accessing the same "torpedo" object, you'll need to protect the shared resources of that object with a mutex.
+
+
+
+如何使用C ++ 11线程创建后台任务？
+您可以通过调用std :: thread :: detach（）来在后台执行std :: thread运行。一旦分离，线程将继续在后台运行，不能与之通信或等待完成。当您分离线程时，所有权和控制权转移到C ++运行时库，这样可以确保分配给线程的资源在线程退出后被释放。
+
+
+
+C ++ 11线程的所有权是否可以在运行时传输？
+是。std :: thread对象拥有资源，资源是当前的执行线程。您可以调用std :: move将底层资源的所有权从一个std :: thread对象移动到另一个。问题是 - 你为什么要这样做？这是一个场景：你想编写一个创建一个线程但不想等待完成的函数。相反，它希望将线程传递给另一个函数，这将在执行完成后等待线程完成并执行一些操作。
+
+
+
+如果在上面的例子中我们试图“复制”线程而不是“移动”它会发生什么 
+编译器的花哨的方式告诉你，你不能复制线程 - 而是你需要移动它。
+
+
+什么是C ++ 11线程本地存储（thread_local）？
+一个thread_local对象在线程启动时出现，当线程结束时被破坏。每个线程都有自己的线程本地对象的实例。
+
+为了充分了解这些含义，我们来看一个例子 - 在这里我们将一个全局变量“globalvar”声明为thread_local。这将给每个线程自己的globalVar副本，对globalVar所做的任何修改只会保留在该特定线程内。在下面的示例中，两个线程中的每个线程都在修改globalVar - 但是它们没有看到对方的更改，主线程。
+
+#include "stdafx.h"
+#include <string>
+#include <thread>
+#include <iostream>
+#include <functional>
+#include <mutex>
+using namespace std;
+thread_local int globalVar = 0;
+mutex mu;
+void PrettyPrint(int valueToPrint)
+{
+  lock_guard<mutex> lock(mu);
+  cout << "Value of globalVar in thread " << this_thread::get_id() << " is " << globalVar << endl;
+}
+void thread_Local_Test_Func(int newVal)
+{
+  globalVar = newVal;
+  PrettyPrint(globalVar);
+}
+int main()
+{
+  globalVar = 1;
+  thread t1(thread_Local_Test_Func, 5);
+  thread t2(thread_Local_Test_Func, 20);
+  t1.join();
+  t2.join();
+  cout << "Value of globalVar in MAIN thread is " << globalVar << endl;
+    return 0;
+}
+
+
+这是程序的输出 - 你可以看到三个线程（t1，t2和MAIN）没有看到对方对globalVar的更改。
+
+Value of globalVar in thread 17852 is 5
+Value of globalVar in thread 29792 is 20
+Value of globalVar in MAIN thread is 1
+
+
+如果globalVar没有被声明为thread_local，你可以猜测输出是什么？这里是 ：
+
+Value of globalVar in thread 27200 is 5
+Value of globalVar in thread 31312 is 20
+Value of globalVar in MAIN thread is 20
+
+
+如果全局值不是线程局部的，则每个线程所做的更改将在线程外部持久化 - 这里MAIN线程感觉到t2所做的更改的影响，因此打印“20”而不是“1”。

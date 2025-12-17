@@ -1,0 +1,193 @@
+/* subject.h */
+#include <string>
+#include <list>
+
+typedef std::string State;
+
+class Observer;
+
+class Subject {
+ public:
+  virtual ~Subject();
+  virtual void Attache(Observer* obv);
+  virtual void Detach(Observer* obv);
+  virtual void Notify();
+  virtual void SetState(const State& st) = 0;
+  virtual State GetState() = 0;
+
+ protected:
+  Subject();
+
+ private:
+  std::list<Observer*>* _obvs;
+};
+
+class ConcreteSubject : public Subject {
+ public:
+  ConcreteSubject();
+  ~ConcreteSubject();
+  State GetState();
+  void SetState(const State& st);
+
+ private:
+  State _st;
+};
+
+/* subject.cc */
+#include "subject.h"
+#include "observer.h"
+#include <list>
+
+Subject::Subject() {
+  _obvs = new std::list<Observer*>;
+}
+
+Subject::~Subject() {
+}
+
+void Subject::Attache(Observer* obv) {
+  _obvs->push_front(obv);
+}
+
+void Subject::Detach(Observer* obv) {
+  if (obv != NULL)
+    _obvs->remove(obv);
+}
+
+void Subject::Notify() {
+  for (std::list<Observer*>::iterator it = _obvs->begin(); it != _obvs->end();
+      it++)
+    (*it)->Update(this);
+}
+
+ConcreteSubject::ConcreteSubject() {
+  _st = '\0';
+}
+
+ConcreteSubject::~ConcreteSubject() {
+}
+
+State ConcreteSubject::GetState() {
+  return _st;
+}
+
+void ConcreteSubject::SetState(const State& st) {
+  _st = st;
+}
+
+/* observer.h */
+#include "subject.h"
+#include <iostream>
+
+
+class Observer {
+ public:
+  virtual ~Observer() {
+  }
+  virtual void Update(Subject* sub) = 0;
+  virtual void PrintInfo() = 0;
+
+ protected:
+  Observer() {
+    _st = '\0';
+  }
+  State _st;
+};
+
+class ConcreteObserverA : public Observer {
+ public:
+  virtual Subject* GetSubject() {
+    return _sub;
+  }
+  ConcreteObserverA(Subject* sub) {
+    _sub = sub;
+    _sub->Attache(this);
+  }
+  virtual ~ConcreteObserverA() {
+    _sub->Detach(this);
+    if (_sub != 0)
+      delete _sub;
+  }
+  void Update(Subject* sub) {
+    _st = sub->GetState();
+    PrintInfo();
+  }
+  void PrintInfo() {
+    std::cout << "ConcreteObserverA observer..." << _sub->GetState()
+              << std::endl;
+  }
+
+ private:
+  Subject* _sub;
+};
+
+class ConcreteObserverB : public Observer {
+ public:
+  virtual Subject* GetSubject() {
+    return _sub;
+  }
+  ConcreteObserverB(Subject* sub) {
+    _sub = sub;
+    _sub->Attache(this);
+  }
+  virtual ~ConcreteObserverB() {
+    _sub->Detach(this);
+    if (_sub != 0)
+      delete _sub;
+  }
+
+  void Update(Subject* sub) {
+    _st = sub->GetState();
+    PrintInfo();
+  }
+  void PrintInfo() {
+    std::cout << "ConcreteObserverB observer..." << _sub->GetState()
+              << std::endl;
+  }
+
+ private:
+  Subject* _sub;
+
+};
+
+#include "subject.h"
+#include "observer.h"
+
+#include <iostream>
+
+int main(int argc, char* argv[]) {
+  ConcreteSubject* sub = new ConcreteSubject();
+  Observer* o1 = new ConcreteObserverA(sub);
+  Observer* o2 = new ConcreteObserverB(sub);
+  sub->SetState("old");
+  sub->Notify();
+  sub->SetState("new");
+  sub->Notify();
+  return 0;
+}
+
+
+observer是一种"一"(subject)对"多"(observer)的依赖关系,并且做到当"一"变换的时候,依赖这个"一"的多也能同步改变.
+这里的"一"通常是用容器(标准容器,结构等等)保存需要变换的数据,更新容器的操作调用相应的操作更新容器内容,具体的更新则是依赖多的基类定义的纯虚函数,
+这些虚函数在子类中执行操作,这些操作最后调用observer的子类完成具体的步骤(具体的操作在subject类中定义为虚函数).注销其中的多的时候,则会直接调用
+subject的成员函数注销操作.
+
+此种方式对于"多"这端来说比较松散,但是"一"这端耦合紧密
+
+这里大概描述注册多的流程,注册实际是2个过程,上述的SetState只是把新内容临时存储在变量中,Notify把上一布的内容刷新到容器中.
+
+整个Notify的过程,subject.Notify->observerA.update(此类的基类定义的该函数是纯需函数)->concretesubject.getState
+
+
+      subject                             observer
+         ^                         ^                      ^ 
+				 |                         |                      |
+    concretesubject            observerA              observerB
+
+
+
+
+
+
+
+

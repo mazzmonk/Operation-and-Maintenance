@@ -1,0 +1,20 @@
+#!/bin/bash
+# author:jack
+# date:20171025
+# conver flannel to docker0  network
+# execute with ROOT user 
+# FILENAME:set-netbridge
+##########################################
+
+if [ -e GLOBAL-ENV ];then
+  source GLOBAL-ENV
+else
+  echo 'File GLOBAL-ENV does not exist.'
+  echo -1
+fi
+
+FLANNEL_PATH=$HOME_PATH/apps/flannel
+
+$FLANNEL_PATH/bin/mk-docker-opts.sh -i
+source /run/flannel/subnet.env
+ip addr add ${FLANNEL_SUBNET} dev docker0

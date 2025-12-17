@@ -1,0 +1,345 @@
+# 从头开始设置 vs code 及 cmake
+开始之前,确定 vs code 中安装好了 C/C++, C/C++ Extension Pack, CMake, CMake Tools 扩展
+按照如下的 1, 2, 3, 4, 5, 6 设置
+
+# 1. 设置全局用户设置 先 Ctrl+Shift+P,然后输入 user setting 搜索,找到 首选项:打开用户设置(JSON)
+# 这里设置的是 vs code 的全局设置,比如编辑器的字体,字宽,代码风格等等.
+~/.config/Code/User/settings.json
+此文件中的 editor.wordWrapColumn 可以在 首选项-设置 中搜索 wordWrapColumn 得到 文本编辑器的 2 个设置
+Editor: Word Wrap Column
+Editor: Word Warp
+设置每行显示多少列,及折叠
+
+同时可能存在一个在项目目录下的 .vscode/settings.json 文件,这里的设置则可以覆盖上一个 settings.json 文件
+
+# 2. vs code 中的工作区与本地目录的 workspace 不是一个概念,如果要把某个目录设置为 vs code 中的工作区时,则在 VS Code 菜单栏中选择“文件” > “将文件夹添加到工作区”,然后选择你的项目文件夹即可,这里可以将多个目录设置为工作区
+# ~/.config/Code/Workspaces   # 设置好的工作区,如果要把某个目录设置为工作区,就删除这里的内容,vs code 这里就可以重新设置工作区
+# 设置的是当前工作区的目录 先 Ctrl+Shift+P,然后输入 setting 搜索,找到 工作区设置(JSON)
+将生成文件: ~/.config/Code/Workspaces/1651749125094/workspace.json
+
+# 3. C/C++: 编辑配置(JSON)  -  注意这里也是全局配置
+打开命令面板(ctrl+shift+p)
+输入 C/C++ 选择 C/C++: 编辑配置(JSON)
+将生成 .vscode/c_cpp_properties.json
+这里设置 include,编译器路径等等参数.
+
+# 4. 打开命令面板(ctrl+shift+p),输入:Cmake 快速入门   -  cmake 的预设内容
+将生成 CMakePresets.json 文件
+注意:当点击 编译 的时候需要此文件,如果不存在,将需要生成一个.
+
+# 5. cmake g++ 设置(注意,这里的 CMakeLists.txt 文件需要按照需要自行设置)
+特别注意: CMakeLists.txt 会覆盖 .vscode/c_cpp_properties.json 及 CMakePresets.json 文件内容
+比如,当在 c_cpp_properties.json 中设置了头文件路径,但是在 CMakeLists.txt 中没有设置,则会出现找不到头文件路径的情况
+
+将 CMake 与 Visual Studio Code 中的 C++ 开发集成,为管理、构建和调试 C++ 项目提供了强大且简化的工作流程.
+先决条件:
+  . Visual Studio Code: 核心编辑器.
+  . C/C++ Extension: 提供智能感知、调试和其他 C++ 特定功能.
+  . CMake Tools Extension: 将 CMake 功能直接集成到 VS Code 中.
+  . CMake: 构建系统生成器本身,安装在系统的 PATH 中并可访问.
+  . 编译器和调试器: C++ 编译器(例如 GCC、Clang、MSVC)和调试器(例如 GDB、LLDB、MSVC 调试器).
+
+工作流程:
+  . 项目设置:
+    . 创建项目文件夹.
+    . 在项目的根目录下创建一个 CMakeLists.txt 文件,定义项目、源文件和任何依赖项.例如:
+
+        cmake_minimum_required(VERSION 3.10)
+        project(MyProject CXX)
+        add_executable(MyProject main.cpp)
+
+  . 配置 CMake:
+    . 在 VS Code 中打开项目.
+    . CMake 工具扩展将检测 CMakeLists.txt 并提示您配置项目.
+    . 您可以选择“Kit”(一组预定义的编译器和调试器配置)或手动配置 CMake.
+    . 或者,使用命令面板 (Ctrl+Shift+P) 并搜索“CMake: Configure”.
+
+  . 构建项目:
+    . 配置完成后,您可以构建项目.
+    . 使用命令面板并搜索“CMake: Build”.
+    . 您还可以单击 VS Code 状态栏中的“Build”按钮(如果已启用).
+
+  . 运行和调试:
+    . 生成后,您可以运行和调试可执行文件.
+    . CMake 工具扩展会自动生成用于调试的启动配置.
+    . 使用命令面板并搜索“CMake: Debug”,或使用活动栏中的“运行和调试”视图.
+
+
+# 6. 建立 c++ 头文件的时候自动生成条件编译等等代码
+打开命令面板(ctrl+shift+p)
+输入 snippets 选择 代码片段:配置用户代码片段
+选择 c_cpp_header.code-snippets (C,C++)
+
+在新建好 .h 文件以后,在文件中输入 header,回车,即会出现类似
+
+#ifndef INCLUDE_TEST_H_
+#define INCLUDE_TEST_H_
+
+#endif /* INCLUDE_TEST_H_ */
+
+的内容
+
+7. CMakeLists.txt 文件的详细内容见下面的 CMakeLists.txt 文件详解
+
+
+----------------------------------------------------------------------------------------------------------
+
+* 在 Visual Studio Code (VS Code) 中,当新建一个项目后,会在项目根目录下生成一个名为 .vscode 的文件夹.这个文件夹是用来存放与项目配置和工具相关的文件的.它提供了一些功能和设置,可以帮助我们更好地管理和开发项目.
+
+* 下面是一些常见的文件和内容,这些文件可以在 .vscode 文件夹中找到:
+
+settings.json: 这个文件包含了项目的设置选项.可以在这里进行各种配置,如设置代码风格、启用或禁用扩展插件、定义编辑器的行为等.这些设置会覆盖全局设置,只对当前项目有效.
+
+launch.json: 这个文件用于配置调试器.可以在这里设置调试选项,如指定调试目标(例如 Node.js、Python 等),设置启动参数、环境变量等.它定义了如何启动和调试Visual Studio Code项目.
+
+tasks.json: 这个文件用于定义和配置任务(Tasks).任务是在 VS Code 中执行的命令或脚本,可以自动化一些常见的工作流程,如编译代码、运行测试、构建项目等.可以在这里定义自定义任务,并通过快捷键或命令面板执行它们.
+
+extensions.json: 这个文件用于记录项目所依赖的扩展插件.当共享项目时,其他人可以根据这个文件安装所需的插件,以便与大家的开发环境保持一致.
+
+jsconfig.json(对于 JavaScript/TypeScript 项目): 这个文件用于配置 JavaScript 或 TypeScript 项目的编译选项、语言服务设置等.它可以帮助提供更好的编辑器支持,例如代码补全、语法检查、跳转到定义等功能.
+
+tasks.vscode-tasks.json: 这个文件是 VS Code 1.57 版本之前的遗留文件,用于保存旧版本的任务配置.如果是从旧版本升级过来的,可能会看到这个文件,但新的任务配置应该使用 tasks.json.
+
+* CMake 工具扩展的主要功能:
+  . CMake 预设: 在文件中 CMakePresets.json 定义和管理不同的构建配置(例如,调试、发布、不同的编译器).
+  . CMake 套件: 简化编译器和调试器的选择.
+  . IntelliSense 集成: 为 CMake 脚本提供代码补全和导航.
+  . 目标管理: 轻松选择和构建特定的 CMake 目标.
+  . 内置调试器: 直接调试您的 CMake 脚本.
+  . 测试集成: 在 VS Code 中运行和监控 CTest 测试.
+
+* CMakePresets.json CMakeUserPresets.json 用于在 vs code 中设置 cmake 的全局配置
+CMake 支持下面两个文件,便于用户指定通用的配置、生成和测试选项,并与他人共享:  和 CMakePresets.json CMakeUserPresets.json. 使用这些文件,可以在 Visual Studio 和 Visual Studio Code 中、在持续集成 (CI) 管道中以及通过命令行驱动 CMake.
+
+用于保存项目范围内的生成CMakePresets.json. 可供开发人员用来保存自己的本地生成CMakeUserPresets.json. 这两个文件在 Visual Studio 2019 版本 16.10 或更高版本中都受到支持.
+
+受支持的 CMakePresets.json 和 CMakeUserPresets.json 架构版本取决于你所使用的 Visual Studio 的版本:
+
+Visual Studio 2019 版本 16.10 及更高版本支持架构版本 2 和 3.
+Visual Studio 2022 版本 17.4 预览版 1 添加了对架构版本 4 的支持.
+Visual Studio 2022 版本 17.5 预览版 1 添加了对架构版本 5 的支持.
+可以通过更改根对象中的 "version" 字段来更新版本.
+
+
+* CMakeLists.txt 文件详解   -   https://zhuanlan.zhihu.com/p/371257515
+1. 设置project名称  -   详细 1.1
+    project(xxx)
+    会自动创建两个变量,PROJECT_SOURCE_DIR 和 PROJECT_NAME
+    . ${PROJECT_SOURCE_DIR} : 本 CMakeLists.txt 所在的文件夹路径
+    . ${PROJECT_NAME} : 本 CMakeLists.txt 的 project 名称
+
+2. 获取路径下的所有.cpp/.c/.cc文件,并赋值给变量中
+    aux_source_directory(路径 变量)
+
+3. 给文件名/路径名或者其他字符串起别名,用${变量}获取变量内容
+    set(变量 文件名/路径/...)
+
+4. 添加编译选项   -   详细 4.1
+    add_definitions(编译选项)
+
+5. 打印消息
+    message(消息)
+
+6. 编译子文件夹的 CMakeLists.txt
+    add_subdirectory(子文件夹名称)
+
+7. 将 .cpp/.c/.cc文件生成 .a 静态库
+    注意,此时库文件名称通常为 libxxx.so,在这里只需要写 xxx 即可
+    add_library(库文件名称如xxx STATIC 文件)
+
+8. 将 .cpp/.c/.cc 文件生成可执行文件
+    add_executable(可执行文件名称 文件)
+
+9. 规定 .h 头文件路径    -   详细 9.1
+    include_directories(路径)
+
+10. 规定 .so/.a 库文件路径
+    link_directories(路径)
+
+11. 对 add_library 或者 add_executable 生成的文件进行链接操作
+    注意,此时库文件名称通常为 libxxx.so,在这里只需要写 xxx 即可
+    target_link_libraries(库文件名称/可执行文件名称 链接的库文件名称)
+
+12. 指定编程语言版本
+为了在不同机器上编译更加统一,最好指定语言的版本,比如声明 C 使用 c99 标准,C++ 使用 c++11 标准:
+
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_CXX_STANDARD 11)
+
+这里设置的变量都是 CMAKE_ 开头(包括 project 命令自动设置的变量),这类变量都是 CMake 的内置变量,正是通过修改这些变量的值来配置 CMake 构建的行为.
+
+13. 配置编译类型
+通过设置变量 CMAKE_BUILD_TYPE 来配置编译类型,可设置为: Debug、Release、RelWithDebInfo、MinSizeRel 等,比如:
+
+set(CMAKE_BUILD_TYPE Debug)
+
+当然,更好的方式应该是在执行 cmake 命令的时候通过参数 -D 指定:
+
+cmake -B build -DCMAKE_BUILD_TYPE=Debug
+
+如果设置编译类型为 Debug,那么对于c编译器,CMake 会检查是否有针对此编译类型的编译选项 CMAKE_C_FLAGS_DEBUG,如果有,则将它的配置内容加到 CMAKE_C_FLAGS 中.
+
+可以针对不同的编译类型设置不同的编译选项,比如对于 Debug 版本,开启调试信息,不进行代码优化:
+set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -g -O0")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -O0")
+
+对于 Release 版本,不包含调试信息,优化等级设置为2:
+set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -O2")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2")
+
+14. 添加全局宏定义
+通过命令 add_definitions 可以添加全局的宏定义,在源码中就可以通过判断不同的宏定义实现相应的代码逻辑.用法如下:
+
+add_definitions(-DDEBUG -DREAL_COOL_ENGINEER)
+
+**************************************************************
+
+1.1 通过 project 命令配置项目信息,如下:
+project(CMakeTemplate VERSION 1.0.0 LANGUAGES C CXX)
+
+第一个字段是项目名称；通过 VERSION 指定版本号,格式为 major.minor.patch.tweak,并且 CMake 会将对应的值分别赋值给以下变量(如果没有设置,则为空字符串):
+PROJECT_VERSION, <PROJECT-NAME>_VERSION
+PROJECT_VERSION_MAJOR, <PROJECT-NAME>_VERSION_MAJOR
+PROJECT_VERSION_MINOR, <PROJECT-NAME>_VERSION_MINOR
+PROJECT_VERSION_PATCH, <PROJECT-NAME>_VERSION_PATCH
+PROJECT_VERSION_TWEAK, <PROJECT-NAME>_VERSION_TWEAK
+
+4.1 配置编译选项
+通过命令add_compile_options命令可以为所有编译器配置编译选项(同时对多个编译器生效)； 通过设置变量CMAKE_C_FLAGS可以配置c编译器的编译选项； 而设置变量CMAKE_CXX_FLAGS可配置针对c++编译器的编译选项. 比如:
+
+add_compile_options(-Wall -Wextra -pedantic -Werror)
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pipe -std=c99")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pipe -std=c++11")
+
+9.1 添加 include 目录
+通过命令 include_directories 来设置头文件的搜索目录,比如:
+
+include_directories(src/c)
+
+
+*** 例子
+一般来说,编译目标(target)的类型一般有静态库、动态库和可执行文件. 这时编写CMakeLists.txt主要包括两步:
+1. 编译: 确定编译目标所需要的源文件
+2. 链接: 确定链接的时候需要依赖的额外的库
+
+下面以开源项目(cmake-template)来演示.项目的目录结构如下:
+
+./cmake-template
+├── CMakeLists.txt
+├── src
+│   └── c
+│       ├── cmake_template_version.h
+│       ├── cmake_template_version.h.in
+│       ├── main.c
+│       └── math
+│           ├── add.c
+│           ├── add.h
+│           ├── minus.c
+│           └── minus.h
+└── test
+    └── c
+        ├── test_add.c
+        └── test_minus.
+
+项目的构建任务为:
+1. 将 math 目录编译成静态库,命名为math
+2. 编译 main.c 为可执行文件 demo,依赖 math 静态库
+3. 编译 test 目录下的测试程序,可以通过命令执行所有的测试
+4. 支持通过命令将编译产物安装及打包
+
+1.1 编译静态库
+这一步需要将项目目录路径src/c/math下的源文件编译为静态库,那么需要获取编译此静态库需要的文件列表,可以使用set命令,或者file命令来进行设置.比如:
+
+file(GLOB_RECURSE MATH_LIB_SRC
+        src/c/math/*.c
+        )
+add_library(math STATIC ${MATH_LIB_SRC})
+
+使用 file 命令获取 src/c/math 目录下所有的 *.c 文件,然后通过add_library 命令编译名为math的静态库,库的类型是第二个参数 STATIC 指定的.
+
+如果指定为 SHARED 则编译的就是动态链接库.
+
+2.1 编译可执行文件
+通过 add_executable 命令来往构建系统中添加一个可执行构建目标,同样需要指定编译需要的源文件.但是对于可执行文件来说,有时候还会依赖其他的库,则需要使用 target_link_libraries 命令来声明构建此可执行文件需要链接的库.
+
+在示例项目中,main.c 就使用了 src/c/math 下实现的一些函数接口,所以依赖于前面构建的math库.所以在 CMakeLists.txt 中添加以下内容:
+
+add_executable(demo src/c/main.c)
+target_link_libraries(demo math)
+
+第一行说明编译可执行文件 demo 需要的源文件(可以指定多个源文件,此处只是以单个文件作为示例)；第二行表明对 math 库存在依赖.
+
+此时可以在项目的根目录下执行构建和编译命令,并执行 demo:
+# cmake -B cmake-build
+# cmake --build cmake-build
+# ./cmake-build/demo
+Hello CMake!
+10 + 24 = 34
+40 - 96 = -56
+
+# 快捷键
+跳转到函数完整定义
+快捷键: 将光标定位在函数名上,按下 F12 键.
+鼠标操作: 按住 Ctrl 键,同时用鼠标左键单击函数名.
+在函数名上右键点击,选择“转到定义”.
+
+在查看完函数定义后,如果需要返回到之前的位置,可以使用快捷键 Ctrl + Shift + 8 - ?不起作用
+这里注意在 vs code 上面的菜单栏,右边有 <- -> 这 2 个箭头,可以用于返回前一个,或者后一个
+
+上一次编辑位置 Ctrl+K Ctrl+Q
+
+# 要在 VS Code 中为 C++ 代码应用 Google 代码风格,你需要使用 clang-format 工具,它能根据预设的风格自动格式化你的代码.以下是详细的配置步骤:
+步骤一: 安装 Clang-Format 插件
+1. 打开 VS Code.
+2. 点击侧边栏的“扩展”图标(或使用快捷键 Ctrl+Shift+X).
+3. 在搜索框中输入 clang-format,然后安装由 xaver 提供的同名插件.
+
+步骤二: 配置 VS Code 设置
+1. 在 VS Code 中,打开设置界面.你可以通过以下任一方式操作:
+   . 点击 文件 > 首选项 > 设置.
+   . 使用快捷键 Ctrl+,.
+2. 在设置搜索框中,输入 clang-format.
+3. 找到 C_Cpp: Clang Format Fallback Style 和 C_Cpp: Clang Format Style 这两个选项.
+4. 将它们的值都从默认设置更改为 "Google".
+
+步骤三: 启用自动格式化(可选)
+为了提高效率,你可以设置在保存文件时自动应用格式化.
+1. 在设置搜索框中,输入 format on save.
+2. 勾选 Editor: Format On Save 选项.
+
+步骤四: 创建项目级 .clang-format 文件(可选)
+如果你想为特定项目使用不同的 Google 风格设置,可以在项目根目录创建 .clang-format 文件,这个文件将覆盖全局设置.
+1. 打开终端,导航到你的项目根目录.
+2. 运行以下命令生成一个包含 Google 默认设置的 .clang-format 文件:
+bash
+clang-format -dump-config -style=Google > .clang-format
+請謹慎使用程式碼.
+
+3. 你可以在这个新生成的 .clang-format 文件中,根据需要对特定规则进行微调.例如,修改 ColumnLimit 来调整行宽.
+
+如何使用
+配置完成后,你可以通过以下方式格式化代码:
+. 手动格式化整个文件:  在编辑器中,使用快捷键 Shift+Alt+F.
+. 手动格式化选定代码:  选中代码,然后使用快捷键 Ctrl+K Ctrl+F.
+. 自动格式化:  如果你启用了“保存时格式化”功能,只需保存文件(Ctrl+S)即可.
+
+额外工具: Cpplint
+如果你需要更严格的风格检查,而不仅仅是格式化,可以安装 cpplint 扩展.
+1. 在扩展市场搜索 cpplint 并安装.
+2. 安装后,它会在“问题”面板中显示不符合 Google 代码风格规则的警告.
+
+错误提示:
+如果提示没有 clang-format,则:
+apt install clang-format
+
+
+
+##############################################
+编译环境安装,在 linux mint 22.2 版本中,默认的 gcc 为 13.0 版本,安装 gcc 14.0 是为了支持 g++ 14.0 的特性
+apt update && apt install build-essential g++ g++-14 cmake ninja-build
+
+
+
+
+
+

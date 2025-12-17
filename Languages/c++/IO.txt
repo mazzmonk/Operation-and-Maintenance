@@ -1,0 +1,168 @@
+5种I/O模型
+blocking
+no-blocking
+I/O复用 select/poll
+信号驱动I/O
+异步I/O
+
+
+#include <sys/time.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+int select(int numfds,
+					fd_set *readfds,fd_set *writefds,fd_set *exceptfds,
+					struct timeval *timeout);
+
+select() 授予你同時監視多個 sockets 的權力，它會告訴你哪些 sockets 已經有資料可以讀取、哪些 sockets 已經可以寫入，如果你真的想知道，還可以告訴你哪些 sockets 觸發了例外。
+
+1.先说最后一个参数
+struct timeval {
+  int tv_sec; // 秒（second）
+  int tv_usec; // 微秒（microseconds）
+};
+
+只要將tv_sec設定為要等待的秒數，並將tv_usec設定為要等待的微秒數。是的，就是微秒，不是毫秒。一毫秒有1,000微秒，而一秒有1,000毫秒。所以，一秒就有1,000,000微秒。
+
+这个参数有3种可能
+1.永远等待:仅在有一个描述符准备好I/O时才返回.此时把该参数设置成空指针.
+2.等待一段固定时间:在有一个描述符准备好I/O时返回,但是不超过由该参数指向的timeval结构中指定的秒数和微秒数.(二者之和)
+3.根本不等待:检查描述符后立即返回,称为轮询.该参数指向一个timeval结构,而且其中的定时器值(由该结构指定的秒数和微秒数)必须为0.
+
+3.中间三个参数readset,writeset,exceptset指定我们要让内核测试读,写,异常条件的描述符.目前只支持异常条件只有两个:
+(1)某个套接字的带外数据的到达.
+(2)某个已置为分组模式的伪终端存在可从其主端读取的控制状态信息.
+
+如何给这3个参数中的每一个参数指定一个或多个描述值是一个设计上的问题.
+select使用描述符集,通常是一个整数数组,其中每个整数中的每一位对应一个描述符.
+举例来说,假设使用32位整数,那么该数组的第一个元素对应于描述符0-31,第二个元素对应于描述符32-63,以此类推.这些实现细节和应用程序无关,他们隐藏在名为fd_set的数据类型和以下四个宏中:
+	void FD_ZERO(fd_set *fdset);             /* clear all bits in fdset 将set整个清零 */
+	void FD_SET(int fd,fd_set *fdset);			 /* turn on the bit for fd in fdset 将fd新增到set */   
+	void FD_CLR(int fd,fd_set *fdset);			 /* turn off the bit for fd in fdset 从set中移除fd */
+	int FD_ISSET(int fd,fd_set *fdset);      /* is the bit for fd on in fdset ? 如果fd在set中,传回true */
+
+当调用select时,告知内核仅在下列情况下发生时才返回
+集合{1,4,5}中的任何描述符准备好读;
+集合{2,7}中的任何描述符准备好写;
+集合{1,4}中的任何描述符有异常条件待处理;
+已经历了10.2秒
+这里描述了select对哪些描述符感兴趣(读,写,异常条件)及等待时间
+
+如以下代码定义一个fd_set类型变量,然后打开描述符1,4和5的对应位:
+
+fd_set rset;
+FD_ZERO(&rset);                  /* initialize the set: all bits off */
+FD_SET(1,&rset);								 /* turn on bit for fd 1 */
+FD_SET(4,&rset);                 /* turn on bit for fd 4 */
+FD_SET(5,&rset);                 /* turn on bit for fd 5 */
+
+
+#include <poll.h>
+
+int poll(struct pollfd *fdarray,unsigned long nfds,int timeout);
+poll提供的功能与select类似,不过在处理流设备时,它能够提供额外的信息.
+第一个参数是指向一个结构数组第一个元素的指针.每个数组元素都是一个pollfd结构,用于指定测试某个给定描述符fd的条件.
+struct pollfd {
+	int fd;               /* 需要检测的文件描述符;-1表示结构无效 */
+	short	events;         /* 要测试的条件 */
+	short	revents;        /* 测到的事件  */
+};
+
+
+events與revents由下列bit flag 組成
+Constant events revents Description
+POLLIN 			x 			x 		normal or priority band to read
+POLLRDNORM 	x 			x 		normal data to read
+POLLRDBAND 	x 			x 		priority band data to read
+POLLPRI 		x 			x 		high-priority data to read
+POLLOUT 		x 			x 		normal data can be written
+POLLWRNORM 	x 			x 		normal data can be written
+POLLWRBAND 	x 			x 		priority band data can be written
+POLLERR 		x 						an error has occurred
+POLLHUP 		x 						hangup has occurred
+POLLNVAL 		x 						descriptor is not an open file
+
+设定events:使用bitwise OR
+struct pollfd		clent[OPEN_MAX];
+
+client[0].events = POLLRDNORM | POLLRDBAND;
+
+测试revents:使用bitwise AND
+struct pollfd		clent[OPEN_MAX];
+
+if (client[0].revents & POLLRDNORM) 
+
+
+IPC是进程间通讯的简称.描述的是运行在某个操作系统之上的不同进程间各种消息传递的方式.
+消息传递历经了如下几个发展阶段
+管道,管道的问图在于他们只能在具有共同祖先(值父子进程关系)的进程间使用,不过该问题已随这有名管道FIFO的引入解决了.
+System V消息队列,可用在同一主机上有亲缘关系或者无亲缘关系的进程之间.
+Posix消息队列,是由Posix实时标准加入的.他们可以用在同一个主机上有亲缘关系和无亲缘的进程之间.
+远程过程调用(Remote Procedure Call,简称RPC),它是从一个系统(客户主机)上某个程序调用另一个系统(服务器主机)上某个函数的一种方法.
+
+同步,因为像共享内存区这样的较新式的通信需要某种形式的同步参与运作.
+早期某种同步形式
+记录上锁
+System V信号量在System V消息队列出现时伴随System V共享内存区加入的.
+Posix信号量也是在Posix共享内存区出现时加入的.
+互斥锁和条件变量是由Posix线程标准定义的两种同步形式.尽管用于线程间的同步,也能提供不同进程间的同步.
+读写锁
+
+
+Unix进程间共享信息的三种方式
+两个进程共享存留于文件系统中某个文件上的某些信息.
+两个进程共享驻留于内核的某些信息.管道,System V消息队列和System V信号量采用如此方式.现在访问共享信息的每次操作涉及对内核的一次系统调用.
+两个进程有一个双方都能访问的共享内存区.每个进程一旦设置好该共享内存区,就能根本不涉及内核而访问其中的数据.共享该内存区的进程需要某种形式的同步.
+
+
+一个给定进程内的所有线程共享同样的全局变量(模型来之于上述第三条),只是这里是内在的.
+
+各种类型IPC对象的持续性
+		  IPC类型					持续性
+管道										随进程
+FIFO									随进程
+Posix互斥锁        			随进程
+Posix条件变量						随进程
+Posix读写锁							随进程
+fcntl记录上锁						随进程
+Posix消息队列						随内核
+Posix有名信号量					随内核
+Posix基于内存的信号量		随进程
+Posix共享内存区					随内核
+System V消息队列				随内核
+System V信号量					随内核
+System V共享内存区			随内核
+TCP套接字								随进程
+UDP套接字								随进程
+Unix域套接字						随进程
+
+
+互斥锁指代相互排斥,它是最基本的同步形式.互斥锁用于保护临界区,以保证任何时刻只有一个线程(进程)在执行其中的代码(假设互斥锁由多个线程(进程)共享).保护一个临界区的代码的通常轮廓大体如下:
+	lock_the_mutex(...);
+	临界区
+	unlock_the_mutex(...);
+
+Posix互斥锁被声明为具有pthread_mutex_t数据类型的变量.
+如果互斥锁变量是静态分配的,那么我们可以把它初始化成常值PTHREAD_MUTEX_INITIALIZER,例如:
+	static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+如果互斥锁是动态分配的(例如通过调用malloc),或者分配在共享内存区中,那么我们必须在运行之时通过调用pthread_mutex_init函数来初始化它
+
+下列三个函数给一个互斥锁上锁和解锁:
+#include <pthread.h>
+
+int pthread_mutex_lock(pthread_mutex_t *mptr);
+int pthread_mutex_trylock(pthread_mutex_t *mptr);
+int pthread_mutex_unlock(pthread_mutex_t *mptr);
+
+成功返回0,出错则为正的Exxx值
+
+如果尝试给一个已由另外某个线程锁住的互斥锁上锁,那么pthread_mutex_lock将阻塞到该互斥锁解锁为止.
+pthread_mutex_trylock是对应的非阻塞函数,如果该互斥锁已锁住,它就返回一个EBUSY错误.
+
+尽管我们说互斥锁保护的是临界区,实际上保护的是在临界区中被操纵的数据(data).也就是说,互斥锁通常用于保护由多个线程或多个进程分享的共享数据
+互斥锁是协作性锁.就是说,如果共享数据是一个链表,那么操纵该链表的所有线程都必须在实际操纵前获取该互斥锁.但是也没有办法防止某个线程不首先获取该互斥锁就操纵该链表.
+
+当我们用Posix消息队列或System V消息队列作为生产者和消费者间的IPC形式,那么内核仍然会处理同步.此种类型的同步都是隐式的,就是说生产者和消费者甚至不知道内核在执行同步.
+然而当共享区用作生产者和消费者之间的IPC形式,生产者和消费者必须执行某种类型的显式同步.我们将使用互斥锁展示显式同步.
+
+

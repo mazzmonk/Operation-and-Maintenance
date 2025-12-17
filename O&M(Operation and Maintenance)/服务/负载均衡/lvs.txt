@@ -1,0 +1,53 @@
+10.224.210.77、10.136.172.112、10.224.214.140
+
+vip
+10.224.214.157/255.255.255.224
+
+LVS tunnel模式
+
+DRSERVER 
+
+Note: Linux kernel > 2.6.9 build with IPVS, not need to recompile kernel !
+
+ifconfig enp0s8:0 192.168.10.200 netmask 255.255.255.255 broadcast 192.168.10.200 up
+
+ipvsadm -A -t 192.168.10.200:80 -s rr
+ipvsadm -a -t 192.168.10.200:80 -r 192.168.10.11:80 -i
+ipvsadm -a -t 192.168.10.200:80 -r 192.168.10.12:80 -i
+
+
+REALSERVER
+
+ifconfig tunl0 192.168.10.200 netmask 255.255.255.255 broadcast 192.168.10.200 up
+echo 1 > /proc/sys/net/ipv4/ip_forward
+echo 1 > /proc/sys/net/ipv4/conf/tunl0/arp_ignore
+echo 2 > /proc/sys/net/ipv4/conf/tunl0/arp_announce 
+echo 1 > /proc/sys/net/ipv4/conf/all/arp_ignore 
+echo 2 > /proc/sys/net/ipv4/conf/all/arp_announce
+
+echo 0 >/proc/sys/net/ipv4/conf/all/rp_filter 
+echo 0 >/proc/sys/net/ipv4/conf/enp0s8/rp_filter 
+echo 0 >/proc/sys/net/ipv4/conf/tunl0/rp_filter 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

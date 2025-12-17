@@ -1,0 +1,92 @@
+通过protoc生成对应的.h和.cc文件
+$ protoc -I ../../protos --grpc_out=. --plugin=protoc-gen-grpc=`which grpc_cpp_plugin` ../../protos/route_guide.proto   //生成.grpc.pb.h/.cc
+$ protoc -I ../../protos --cpp_out=. ../../protos/route_guide.proto	//生成.pb.h/.cc
+
+protoc --proto_path=IMPORT_PATH --cpp_out=DST_DIR --java_out=DST_DIR --python_out=DST_DIR --go_out=DST_DIR --ruby_out=DST_DIR --objc_out=DST_DIR --csharp_out=DST_DIR path/to/file.proto
+
+
+IMPORT_PATH指定.proto解析import指令时要在其中查找文件的目录.如果省略,则使用当前目录.可以通过--proto_path多次传递选项来指定多个导入目录.将按顺序搜索它们. 可以用作的简写形式. -I=IMPORT_PATH--proto_path
+您可以提供一个或多个输出指令:
+--cpp_out在中生成C ++代码DST_DIR.有关更多信息,请参见C ++生成的代码参考.
+--java_out在中生成Java代码DST_DIR.有关更多信息,请参见Java生成的代码参考.
+--python_out在中生成Python代码DST_DIR.有关更多信息,请参见Python生成的代码参考.
+--go_out在中生成Go代码DST_DIR.有关更多信息,请参见Go生成的代码参考.
+--ruby_out在中生成Ruby代码DST_DIR.Ruby生成的代码参考即将推出！
+--objc_out在中生成Objective-C代码DST_DIR.有关更多信息,请参见Objective-C生成的代码参考.
+--csharp_out在中生成C＃代码DST_DIR.有关更多信息,请参见C＃生成的代码参考.
+--php_out在中生成PHP代码DST_DIR.有关更多信息,请参见PHP生成的代码参考.
+为了更加方便,如果DST_DIR结尾为.zip 或.jar,编译器会将输出写入具有给定名称的单个ZIP格式的存档文件. .jar根据Java JAR规范的要求,还将为输出提供清单文件.请注意,如果输出存档已经存在,它将被覆盖；编译器不够智能,无法将文件添加到现有存档中.
+您必须提供一个或多个.proto文件作为输入..proto可以一次指定多个文件.尽管这些文件是相对于当前目录命名的,但是每个文件都必须位于IMPORT_PATHs 之一中,以便编译器可以确定其规范名称.
+
+
+
+在.proto文件中定义的
+package -> namespace
+service -> class
+
+rpc ListFeature(Point) returns (Feature) {}
+
+在class中rpc在server端的类中对应返回值为grpc::Status类型
+在client中可能对应void
+
+message类会生成x.pb.h及x.pb.cc的文件
+service类会生成x.grpc.pb.h及x.grpc.pb.cc的文件
+
+注意GOOGLE_PROTOBUF_VERIFY_VERSION宏.优良作法-尽管并非绝对必要-在使用C ++协议缓冲区库之前执行此宏.它验证您是否没有意外地链接到与您使用其编译的标头版本不兼容的库版本.如果检测到版本不匹配,程序将中止.请注意,每个.pb.cc文件在启动时都会自动调用此宏.
+
+
+service Foo {
+  rpc Bar(FooRequest) returns(FooResponse);
+}
+
+对应的虚函数
+
+virtual void Bar(RpcController* controller, const FooRequest* request,
+                 FooResponse* response, Closure* done);
+
+
+
+4种类型的服务方法
+service RouteGuide {
+//简单的RPC,当client端用stub发送一个请求到服务器,并且等待响应返回,就像一个标准的函数调用
+  rpc GetFeature(Point) returns (Feature) {}
+
+//服务端流式RPC,当client段发送一个请求到服务器,服务端提供一个用于消息返回的流,client读取这个流,直到没有消息
+  rpc ListFeatures(Rectangle) returns (stream Feature) {}
+
+//客户端流式RPC,client端使用流方式写一个消息的序列,发送到服务端,当client完成写消息,等待服务器读取并返回响应
+  rpc RecordRoute(stream Point) returns (RouteSummary) {}
+
+//双向流式RPC,两端发送消息用的读-写流,两个流的操作相互独立,因此,客户端和服务器可以按照自己喜欢的顺序进行读写:例如,服务器可以在写入响应之前等待接收所有客户端消息,或者可以交替读取一条消息然后写入一条消息,或者以其他方式组合读取 并写.每个流中的消息顺序都会保留.
+  rpc RouteChat(stream RouteNote) returns (stream RouteNote) {}
+
+这里有.proto文件中的service与.cc中类对应
+https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.service
+
+对应的函数
+Status GetFeature(ServerContext* context, const Point* point,
+                    Feature* feature) override {}
+
+ Status ListFeatures(ServerContext* context,
+                      const routeguide::Rectangle* rectangle,
+                      ServerWriter<Feature>* writer) override {}
+
+Status RecordRoute(ServerContext* context, ServerReader<Point>* reader,
+                     RouteSummary* summary) override {}
+
+
+Status RouteChat(ServerContext* context,
+                   ServerReaderWriter<RouteNote, RouteNote>* stream) override {}
+
+
+
+
+
+
+
+
+
+
+
+
+

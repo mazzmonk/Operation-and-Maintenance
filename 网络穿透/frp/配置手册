@@ -1,0 +1,45 @@
+项目地址:
+https://github.com/fatedier/frp/blob/master/README_zh.md
+
+比 nps 更强悍的工具,有如下几个特点:
+1. 同一个配置文件中可以多个端口
+2. 同时配置选项的-c工作完整
+3. 同时可以支持多个客户端,即使用一个服务端,在多个机器上安装客户端使用
+
+在具有公网IP的服务器上使用服务端,配置文件为frps.ini
+内网上的机器使用客户端,配置文件为frpc.ini
+
+启动:
+服务端
+./frps -c frps.ini
+
+客户端
+./frpc -c frpc.ini
+
+# frpc.ini #
+[common]
+server_addr = x.x.x.x
+server_port = 7000
+
+[range:custom_tcp]
+type = tcp
+local_ip = 127.0.0.1
+local_port = 8080,8888,22
+remote_port = 58080,58888,50022
+
+#########################################
+server_addr		公网服务器地址
+server_port		公网服务器的端口,用于隧道通讯
+local_port			本地服务的地址
+remote_port		在公网服务器上连接使用的端口,这里是多个端口,和local_port上对应,公网服务器上这些端口必须不能被占用
+
+# frps.ini #
+[common]
+bind_port = 7000
+
+##########################################
+bind_port			用于与内网的客户端通讯用的端口,客户端连接到此端口通讯
+
+
+
+

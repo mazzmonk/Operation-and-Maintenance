@@ -1,0 +1,2249 @@
+索引:
+----------------------------------------------------------------------------------------------------------------
+第三部分(3/16)
+
+# 监控、日志和调试
+
+## 集群故障排查 - 针对集群管理员以及 Kubernetes 集群表现异常的用户.
+* 列举集群节点
+调试的第一步是查看所有的节点是否都已正确注册.
+
+运行以下命令: 
+$ kubectl get nodes
+
+验证你所希望看见的所有节点都能够显示出来,并且都处于 Ready 状态.
+为了了解你的集群的总体健康状况详情,你可以运行: 
+$ kubectl cluster-info dump
+
+** 示例: 调试关闭/无法访问的节点
+有时在调试时查看节点的状态很有用 —— 例如,因为你注意到在节点上运行的 Pod 的奇怪行为,或者找出为什么 Pod 不会调度到节点上.与 Pod 一样,你可以使用 kubectl describe node 和 kubectl get node -o yaml 来检索有关节点的详细信息.例如,如果节点关闭(与网络断开连接,或者 kubelet 进程挂起并且不会重新启动等),你将看到以下内容.请注意显示节点为 NotReady 的事件,并注意 Pod 不再运行(它们在 NotReady 状态五分钟后被驱逐).
+$ kubectl get nodes
+...
+$ kubectl get node kube-worker-1 -o yaml
+...
+
+* 查看日志
+目前,深入挖掘集群需要登录相关机器.以下是相关日志文件的位置.在基于 systemd 的系统上,你可能需要使用 journalctl 而不是检查日志文件.
+
+** 控制平面节点
+. /var/log/kube-apiserver.log —— API 服务器,负责提供 API 服务
+. /var/log/kube-scheduler.log —— 调度器,负责制定调度决策
+. /var/log/kube-controller-manager.log —— 运行大多数 Kubernetes 内置控制器的组件,除了调度(kube-scheduler 处理调度).
+
+** 工作节点
+. /var/log/kubelet.log —— 负责在节点运行容器的 kubelet 所产生的日志
+. /var/log/kube-proxy.log —— 负责将流量转发到服务端点的 kube-proxy 所产生的日志
+
+* 集群故障模式
+这是可能出错的事情的不完整列表,以及如何调整集群设置以缓解问题.
+
+** 故障原因
+. 虚拟机关闭
+. 集群内或集群与用户之间的网络分区
+. Kubernetes 软件崩溃
+. 持久存储(例如 GCE PD 或 AWS EBS 卷)的数据丢失或不可用
+. 操作员错误,例如配置错误的 Kubernetes 软件或应用程序软件
+
+** 具体情况
+. API 服务器所在的 VM 关机或者 API 服务器崩溃
+  . 结果
+    . 不能停止、更新或者启动新的 Pod、服务或副本控制器
+    . 现有的 Pod 和服务在不依赖 Kubernetes API 的情况下应该能继续正常工作
+. API 服务器的后端存储丢失
+  . 结果
+    . kube-apiserver 组件未能成功启动并变健康
+    . kubelet 将不能访问 API 服务器,但是能够继续运行之前的 Pod 和提供相同的服务代理
+    . 在 API 服务器重启之前,需要手动恢复或者重建 API 服务器的状态
+. Kubernetes 服务组件(节点控制器、副本控制器管理器、调度器等)所在的 VM 关机或者崩溃
+  . 当前,这些控制器是和 API 服务器在一起运行的,它们不可用的现象是与 API 服务器类似的
+  . 将来,这些控制器也会复制为多份,并且可能不在运行于同一节点上
+  . 它们没有自己的持久状态
+. 单个节点(VM 或者物理机)关机
+  . 结果
+    . 此节点上的所有 Pod 都停止运行
+. 网络分裂
+  . 结果
+    . 分区 A 认为分区 B 中所有的节点都已宕机；分区 B 认为 API 服务器宕机 (假定主控节点所在的 VM 位于分区 A 内).
+. kubelet 软件故障
+  . 结果
+    . 崩溃的 kubelet 就不能在其所在的节点上启动新的 Pod
+    . kubelet 可能删掉 Pod 或者不删
+    . 节点被标识为非健康态
+    . 副本控制器会在其它的节点上启动新的 Pod
+. 集群操作错误
+  . 结果
+    . 丢失 Pod 或服务等等
+    . 丢失 API 服务器的后端存储
+    . 用户无法读取 API
+    . 等等
+
+** 缓解措施
+. 措施: 对于 IaaS 上的 VM,使用 IaaS 的自动 VM 重启功能
+  . 缓解: API 服务器 VM 关机或 API 服务器崩溃
+  . 缓解: Kubernetes 服务组件所在的 VM 关机或崩溃
+. 措施: 对于运行 API 服务器和 etcd 的 VM,使用 IaaS 提供的可靠的存储(例如 GCE PD 或者 AWS EBS 卷)
+  . 缓解: API 服务器后端存储的丢失
+. 措施: 使用高可用性的配置
+  . 缓解: 主控节点 VM 关机或者主控节点组件(调度器、API 服务器、控制器管理器)崩溃
+    . 将容许一个或多个节点或组件同时出现故障
+  . 缓解: API 服务器后端存储(例如 etcd 的数据目录)丢失
+    . 假定你使用了高可用的 etcd 配置
+. 措施: 定期对 API 服务器的 PD 或 EBS 卷执行快照操作
+  . 缓解: API 服务器后端存储丢失
+  . 缓解: 一些操作错误的场景
+  . 缓解: 一些 Kubernetes 软件本身故障的场景
+. 措施: 在 Pod 的前面使用副本控制器或服务
+  . 缓解: 节点关机
+  . 缓解: kubelet 软件故障
+. 措施: 应用(容器)设计成容许异常重启
+  . 缓解: 节点关机
+  . 缓解: kubelet 软件故障
+
+### kubectl 故障排查
+本文讲述研判和诊断 kubectl 相关的问题.如果你在访问 kubectl 或连接到集群时遇到问题,本文概述了各种常见的情况和可能的解决方案,以帮助确定和解决可能的原因.
+
+* 验证 kubectl 设置
+确保你已在本机上正确安装和配置了 kubectl.检查 kubectl 版本以确保其是最新的,并与你的集群兼容.
+
+检查 kubectl 版本: 
+$ kubectl version
+
+你将看到类似的输出: 
+Client Version: version.Info{Major:"1",Minor:"27",GitVersion:"v1.27.4",GitCommit:"fa3d7990104d7c1f16943a67f11b154b71f6a132",GitTreeState:"clean",BuildDate:"2023-07-19T12:20:54Z",GoVersion:"go1.20.6",Compiler:"gc",Platform:"linux/amd64"}
+Kustomize Version: v5.0.1
+Server Version: version.Info{Major:"1",Minor:"27",GitVersion:"v1.27.3",GitCommit:"25b4e43193bcda6c7328a6d147b1fb73a33f1598",GitTreeState:"clean",BuildDate:"2023-06-14T09:47:40Z",GoVersion:"go1.20.5",Compiler:"gc",Platform:"linux/amd64"}
+
+如果你看到 Unable to connect to the server: dial tcp <server-ip>:8443: i/o timeout,而不是 Server Version,则需要解决 kubectl 与你集群的连接问题.
+
+* 检查 kubeconfig
+kubectl 需要一个 kubeconfig 文件来连接到 Kubernetes 集群.kubeconfig 文件通常位于 ~/.kube/config 目录下.确保你有一个有效的 kubeconfig 文件.如果你没有 kubeconfig 文件,可以从 Kubernetes 管理员那里获取,或者可以从 Kubernetes 控制平面的 /etc/kubernetes/admin.conf 目录复制这个文件.如果你在云平台上部署了 Kubernetes 集群并且丢失了你的 kubeconfig 文件,则可以使用云厂商的工具重新生成它.参考云厂商的文档以重新生成 kubeconfig 文件.
+
+检查 $KUBECONFIG 环境变量是否配置正确.你可以设置 $KUBECONFIG 环境变量,或者在 kubectl 中使用 --kubeconfig 参数来指定 kubeconfig 文件的目录.
+
+* 检查 VPN 连接
+如果你正在使用虚拟专用网络(VPN)访问 Kubernetes 集群,请确保你的 VPN 连接是可用且稳定的.有时,VPN 断开连接可能会导致与集群的连接问题.重新连接到 VPN,并尝试再次访问集群.
+
+* 身份认证和鉴权 
+如果你正在使用基于令牌的身份认证,并且 kubectl 返回有关身份认证令牌或身份认证服务器地址的错误,校验 Kubernetes 身份认证令牌和身份认证服务器地址是否被配置正确.
+
+如果 kubectl 返回有关鉴权的错误,确保你正在使用有效的用户凭据,并且你具有访问所请求资源的权限.
+
+* 验证上下文
+Kubernetes 支持多个集群和上下文.确保你正在使用正确的上下文与集群进行交互.
+
+列出可用的上下文: 
+$ kubectl config get-contexts
+
+切换到合适的上下文: 
+$ kubectl config use-context <context-name>
+
+* API 服务器和负载均衡器
+kube-apiserver 服务器是 Kubernetes 集群的核心组件.如果 API 服务器或运行在 API 服务器前面的负载均衡器不可达或没有响应,你将无法与集群进行交互.
+
+通过使用 ping 命令检查 API 服务器的主机是否可达.检查集群的网络连接和防火墙.如果你使用云厂商部署集群,请检查云厂商对集群的 API 服务器的健康检查状态.
+
+验证负载均衡器(如果使用)的状态,确保其健康且转发流量到 API 服务器.
+
+* TLS 问题
+需要额外的工具 - base64 和 openssl v3.0 或更高版本.
+Kubernetes API 服务器默认只为 HTTPS 请求提供服务.在这种情况下,TLS 问题可能会因各种原因而出现,例如证书过期或信任链有效性.
+
+你可以在 kubeconfig 文件中找到 TLS 证书,此文件位于 ~/.kube/config 目录下.certificate-authority 属性包含 CA 证书,而 client-certificate 属性则包含客户端证书.
+
+验证这些证书的到期时间: 
+$ kubectl config view --flatten --output 'jsonpath={.clusters[0].cluster.certificate-authority-data}' | base64 -d | openssl x509 -noout -dates
+
+输出为: 
+notBefore=Feb 13 05:57:47 2024 GMT
+notAfter=Feb 10 06:02:47 2034 GMT
+
+$ kubectl config view --flatten --output 'jsonpath={.users[0].user.client-certificate-data}'| base64 -d | openssl x509 -noout -dates
+
+输出为: 
+notBefore=Feb 13 05:57:47 2024 GMT
+notAfter=Feb 12 06:02:50 2025 GMT
+
+* 验证 kubectl 助手
+某些 kubectl 身份认证助手提供了便捷访问 Kubernetes 集群的方式.如果你使用了这些助手并且遇到连接问题,确保必要的配置仍然存在.
+
+查看 kubectl 配置以了解身份认证细节: 
+$ kubectl config view
+
+如果你之前使用了辅助工具(例如 kubectl-oidc-login),确保它仍然安装和配置正确.
+
+### 资源监控工具
+要扩展应用程序并提供可靠的服务,你需要了解应用程序在部署时的行为.你可以通过检测容器、Pod、 Service 和整个集群的特征来检查 Kubernetes 集群中应用程序的性能.Kubernetes 在每个级别上提供有关应用程序资源使用情况的详细信息.此信息使你可以评估应用程序的性能,以及在何处可以消除瓶颈以提高整体性能.
+
+在 Kubernetes 中,应用程序监控不依赖单个监控解决方案.在新集群上,你可以使用资源度量或完整度量管道来收集监视统计信息.
+
+* 资源度量管道
+资源指标管道提供了一组与集群组件,例如 Horizontal Pod Autoscaler 控制器以及 kubectl top 实用程序相关的有限度量.这些指标是由轻量级的、短期、内存存储的 metrics-server 收集,并通过 metrics.k8s.io 公开.
+
+metrics-server 发现集群中的所有节点,并且查询每个节点的 kubelet 以获取 CPU 和内存使用情况.kubelet 充当 Kubernetes 主节点与节点之间的桥梁,管理机器上运行的 Pod 和容器.kubelet 将每个 Pod 转换为其组成的容器,并通过容器运行时接口从容器运行时获取各个容器使用情况统计信息.如果某个容器运行时使用 Linux cgroups 和名字空间来实现容器.并且这一容器运行时不发布资源用量统计信息,那么 kubelet 可以直接查找这些统计信息(使用来自 cAdvisor 的代码).无论这些统计信息如何到达,kubelet 都会通过 metrics-server Resource Metrics API 公开聚合的 Pod 资源用量统计信息.该 API 在 kubelet 的经过身份验证和只读的端口上的 /metrics/resource/v1beta1 中提供.
+
+* 完整度量管道 - 非常重要,提供了关于监控指标工具选取的仓库 CNCF(https://landscape.cncf.io/?group=projects-and-products&view-mode=card#observability-and-analysis--monitoring)
+一个完整度量管道可以让你访问更丰富的度量.Kubernetes 还可以根据集群的当前状态,使用 Pod 水平自动扩缩器等机制,通过自动调用扩展或调整集群来响应这些度量.监控管道从 kubelet 获取度量值,然后通过适配器将它们公开给 Kubernetes,方法是实现 custom.metrics.k8s.io 或 external.metrics.k8s.io API.
+
+Kubernetes 在设计上保证能够与 OpenMetrics(https://github.com/OpenObservability/OpenMetrics/blob/main/specification/OpenMetrics.md) 一同使用,OpenMetrics 是 CNCF(https://landscape.cncf.io/?group=projects-and-products&view-mode=card#observability-and-analysis--monitoring) 可观测性和分析 - 监控项目之一,它构建于 Prometheus 暴露格式之上,并对其进行了扩展,这些扩展几乎 100% 向后兼容.
+
+如果你浏览 CNCF Landscape,你可以看到许多监控项目,它们可以用在 Kubernetes 上,抓取指标数据并利用这些数据来观测你的集群,选择哪种工具或哪些工具可以满足你的需求,这完全取决于你自己.CNCF 的可观测性和分析景观包括了各种开源软件、付费的软件即服务(SaaS)以及其他混合商业产品.
+
+当你设计和实现一个完整的指标监控数据管道时,你可以将监控数据反馈给 Kubernetes.例如,HorizontalPodAutoscaler 可以使用处理过的指标数据来计算出你的工作负载组件运行了多少个 Pod.
+
+将完整的指标管道集成到 Kubernetes 实现中超出了 Kubernetes 文档的范围,因为可能的解决方案具有非常广泛的范围.
+
+监控平台的选择在很大程度上取决于你的需求、预算和技术资源.Kubernetes 不推荐任何特定的指标管道； 可使用许多选项.你的监控系统应能够处理 OpenMetrics 指标传输标准,并且需要选择最适合基础设施平台的整体设计和部署.
+
+### 资源指标管道 - 重要: 描述了如何通过 kubectl,curl 来使用 metric server 的指标,以及度量单位
+对于 Kubernetes,Metrics API 提供了一组基本的指标,以支持自动伸缩和类似的用例.该 API 提供有关节点和 Pod 的资源使用情况的信息,包括 CPU 和内存的指标.如果将 Metrics API 部署到集群中,那么 Kubernetes API 的客户端就可以查询这些信息,并且可以使用 Kubernetes 的访问控制机制来管理权限.
+
+HorizontalPodAutoscaler (HPA) 和 VerticalPodAutoscaler (VPA) 使用 metrics API 中的数据调整工作负载副本和资源,以满足客户需求.
+
+你也可以通过 kubectl top 命令来查看资源指标.
+
+说明: 
+Metrics API 及其启用的指标管道仅提供最少的 CPU 和内存指标,以启用使用 HPA 和/或 VPA 的自动扩展.如果你想提供更完整的指标集,你可以通过部署使用 Custom Metrics API 的第二个指标管道来作为简单的 Metrics API 的补充.
+
+参考:
+资源指标管道
+https://kubernetes.io/zh-cn/docs/tasks/debug/debug-cluster/resource-metrics-pipeline/
+
+* Metrics API
+特性状态:  Kubernetes 1.8 [beta]
+metrics-server 实现了 Metrics API.此 API 允许你访问集群中节点和 Pod 的 CPU 和内存使用情况.它的主要作用是将资源使用指标提供给 K8s 自动缩放器组件.
+
+下面是一个 minikube 节点的 Metrics API 请求示例,通过 jq 管道处理以便于阅读: 
+$ kubectl get --raw "/apis/metrics.k8s.io/v1beta1/nodes/k8s01" | jq '.'
+
+这是使用 curl 来执行的相同 API 调用: 
+$ kubectl proxy
+
+# 在另外一个终端执行
+$ curl http://localhost:8001/apis/metrics.k8s.io/v1beta1/nodes/k8s01
+
+响应示例: 
+{
+  "kind": "NodeMetrics",
+  "apiVersion": "metrics.k8s.io/v1beta1",
+  "metadata": {
+    "name": "k8s01",
+    "creationTimestamp": "2024-08-26T09:17:03Z",
+    "labels": {
+      "beta.kubernetes.io/arch": "amd64",
+      "beta.kubernetes.io/os": "linux",
+      "kubernetes.io/arch": "amd64",
+      "kubernetes.io/hostname": "k8s01",
+      "kubernetes.io/os": "linux",
+      "node-role.kubernetes.io/control-plane": "",
+      "node.kubernetes.io/exclude-from-external-load-balancers": ""
+    }
+  },
+  "timestamp": "2024-08-26T09:16:51Z",
+  "window": "10.032s",
+  "usage": {
+    "cpu": "227671451n",
+    "memory": "1623192Ki"
+  }
+}
+
+下面是一个 kube-system 命名空间中的 kube-scheduler-minikube Pod 的 Metrics API 请求示例,通过 jq 管道处理以便于阅读: 
+$ kubectl get --raw "/apis/metrics.k8s.io/v1beta1/namespaces/kube-system/pods/kube-scheduler-k8s01" | jq '.'
+
+这是使用 curl 来完成的相同 API 调用: 
+$ curl http://localhost:8001/apis/metrics.k8s.io/v1beta1/namespaces/kube-system/pods/kube-scheduler-k8s01
+
+响应示例: 
+{
+  "kind": "PodMetrics",
+  "apiVersion": "metrics.k8s.io/v1beta1",
+  "metadata": {
+    "name": "kube-scheduler-k8s01",
+    "namespace": "kube-system",
+    "creationTimestamp": "2024-08-26T09:21:26Z",
+    "labels": {
+      "component": "kube-scheduler",
+      "tier": "control-plane"
+    }
+  },
+  "timestamp": "2024-08-26T09:21:11Z",
+  "window": "17.532s",
+  "containers": [
+    {
+      "name": "kube-scheduler",
+      "usage": {
+        "cpu": "6256046n",
+        "memory": "38844Ki"
+      }
+    }
+  ]
+}
+
+Metrics API 在 k8s.io/metrics 代码库中定义.你必须启用 API 聚合层并为 metrics.k8s.io API 注册一个 APIService.
+
+说明: 
+你必须部署提供 Metrics API 服务的 metrics-server 或其他适配器才能访问它.
+
+* 度量资源用量
+** CPU
+CPU 报告为以 cpu 为单位测量的平均核心使用率.在 Kubernetes 中,一个 cpu 相当于云提供商的 1 个 vCPU/Core,以及裸机 Intel 处理器上的 1 个超线程.
+
+该值是通过对内核提供的累积 CPU 计数器(在 Linux 和 Windows 内核中)取一个速率得出的.用于计算 CPU 的时间窗口显示在 Metrics API 的窗口字段下.
+
+** 内存
+内存报告为在收集度量标准的那一刻的工作集大小,以字节为单位.
+
+在理想情况下,“工作集”是在内存压力下无法释放的正在使用的内存量.然而,工作集的计算因主机操作系统而异,并且通常大量使用启发式算法来产生估计.
+
+Kubernetes 模型中,容器工作集是由容器运行时计算的与相关容器关联的匿名内存.工作集指标通常还包括一些缓存(文件支持)内存,因为主机操作系统不能总是回收页面.
+
+* Metrics 服务器
+metrics-server 从 kubelet 中获取资源指标,并通过 Metrics API 在 Kubernetes API 服务器中公开它们,以供 HPA 和 VPA 使用.你还可以使用 kubectl top 命令查看这些指标.
+
+metrics-server 使用 Kubernetes API 来跟踪集群中的节点和 Pod.metrics-server 服务器通过 HTTP 查询每个节点以获取指标.metrics-server 还构建了 Pod 元数据的内部视图,并维护 Pod 健康状况的缓存.缓存的 Pod 健康信息可通过 metrics-server 提供的扩展 API 获得.
+
+例如,对于 HPA 查询,metrics-server 需要确定哪些 Pod 满足 Deployment 中的标签选择器.
+
+metrics-server 调用 kubelet API 从每个节点收集指标.根据它使用的 metrics-server 版本: 
+. 版本 v0.6.0+ 中,使用指标资源端点 /metrics/resource
+. 旧版本中使用 Summary API 端点 /stats/summary
+
+### 节点健康监测 - 重要: 通过 DeamonSet 来启动检测器,检测系统日志,系统健康检查等等内容,同时可以通过自定义插件的方式,建立自定义的检测
+节点问题检测器(Node Problem Detector) 是一个守护程序,用于监视和报告节点的健康状况.你可以将节点问题探测器以 DaemonSet 或独立守护程序运行.节点问题检测器从各种守护进程收集节点问题,并以节点 Condition 和 Event 的形式报告给 API 服务器.
+
+节点问题探测器项目文档.
+参考:
+https://github.com/kubernetes/node-problem-detector
+
+* 局限性
+节点问题检测器使用内核日志格式来报告内核问题.
+
+* 启用节点问题检测器
+一些云供应商将节点问题检测器以插件形式启用.你还可以使用 kubectl 或创建插件 DaemonSet 来启用节点问题探测器.
+
+** 使用 kubectl 启用节点问题检测器
+kubectl 提供了节点问题探测器最灵活的管理.你可以覆盖默认配置使其适合你的环境或检测自定义节点问题.例如: 
+
+1. 优先下载 node-problem-detector 镜像,目前所用的版本为:
+registry.k8s.io/node-problem-detector/node-problem-detector:v0.8.19
+
+创建类似于 node-strought-detector.yaml 的节点问题检测器配置: 
+---------------------------------------
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-problem-detector-v0.1
+  namespace: kube-system
+  labels:
+    k8s-app: node-problem-detector
+    version: v0.1
+    kubernetes.io/cluster-service: "true"
+spec:
+  selector:
+    matchLabels:
+      k8s-app: node-problem-detector  
+      version: v0.1
+      kubernetes.io/cluster-service: "true"
+  template:
+    metadata:
+      labels:
+        k8s-app: node-problem-detector
+        version: v0.1
+        kubernetes.io/cluster-service: "true"
+    spec:
+      hostNetwork: true
+      containers:
+      - name: node-problem-detector
+        image: registry.k8s.io/node-problem-detector/node-problem-detector:v0.8.19
+        securityContext:
+          privileged: true
+        resources:
+          limits:
+            cpu: "200m"
+            memory: "100Mi"
+          requests:
+            cpu: "20m"
+            memory: "20Mi"
+        volumeMounts:
+        - name: log
+          mountPath: /log
+          readOnly: true
+      volumes:
+      - name: log
+        hostPath:
+          path: /var/log/
+----------------------------------------------
+
+说明: 
+你应该检查系统日志目录是否适用于操作系统发行版本.
+
+2. 使用 kubectl 启动节点问题检测器: 
+$ kubectl apply -f node-problem-detector.yaml
+
+** 使用插件 Pod 启用节点问题检测器 
+如果你使用的是自定义集群引导解决方案,不需要覆盖默认配置,可以利用插件 Pod 进一步自动化部署.
+
+创建 node-strick-detector.yaml,并在控制平面节点上保存配置到插件 Pod 的目录 /etc/kubernetes/addons/node-problem-detector.
+
+* 覆盖配置文件
+构建节点问题检测器的 docker 镜像时,会嵌入 默认配置(https://github.com/kubernetes/node-problem-detector/tree/v0.8.12/config).
+
+不过,你可以像下面这样使用 ConfigMap 将其覆盖: 
+1. 更改 config/ 中的配置文件
+2. 创建 ConfigMap node-strick-detector-config: 
+# 这里的 config 目录来之 https://github.com/kubernetes/node-problem-detector/tree/v0.8.19/config
+# 需要预先下载下来
+$ kubectl create configmap node-problem-detector-config --from-file=config/
+3. 更改 node-problem-detector.yaml 以使用 ConfigMap: 
+
+node-problem-detector-configmap.yaml
+----------------------------------------------------
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-problem-detector-v0.1
+#  namespace: kube-system           # 这里注意,官方的例子是运行在 kube-system 的命名空间,
+  labels:                           # 但是,上述的 configmap 确实建立在默认的命名空间,是无法运行成功的
+    k8s-app: node-problem-detector
+    version: v0.1
+    kubernetes.io/cluster-service: "true"
+spec:
+  selector:
+    matchLabels:
+      k8s-app: node-problem-detector  
+      version: v0.1
+      kubernetes.io/cluster-service: "true"
+  template:
+    metadata:
+      labels:
+        k8s-app: node-problem-detector
+        version: v0.1
+        kubernetes.io/cluster-service: "true"
+    spec:
+      hostNetwork: true
+      containers:
+      - name: node-problem-detector
+        image: registry.k8s.io/node-problem-detector:v0.1
+        securityContext:
+          privileged: true
+        resources:
+          limits:
+            cpu: "200m"
+            memory: "100Mi"
+          requests:
+            cpu: "20m"
+            memory: "20Mi"
+        volumeMounts:
+        - name: log
+          mountPath: /log
+          readOnly: true
+        - name: config # Overwrite the config/ directory with ConfigMap volume
+          mountPath: /config
+          readOnly: true
+      volumes:
+      - name: log
+        hostPath:
+          path: /var/log/
+      - name: config # Define ConfigMap volume
+        configMap:
+          name: node-problem-detector-config
+-------------------------------------------------------------
+
+4. 使用新的配置文件重新创建节点问题检测器: 
+# 如果你正在运行节点问题检测器,请先删除,然后再重新创建
+$ kubectl delete -f node-problem-detector.yaml
+$ kubectl apply -f node-problem-detector-configmap.yaml
+
+说明: 
+此方法仅适用于通过 kubectl 启动的节点问题检测器.
+如果节点问题检测器作为集群插件运行,则不支持覆盖配置.插件管理器不支持 ConfigMap.
+
+* 问题守护程序 
+问题守护程序是节点问题检测器的子守护程序.它监视特定类型的节点问题并报告给节点问题检测器.支持下面几种类型的问题守护程序.
+. SystemLogMonitor 类型的守护程序根据预定义的规则监视系统日志并报告问题和指标.你可以针对不同的日志源自定义配置如 filelog、 kmsg、 kernel、 abrt 和 systemd.
+. SystemStatsMonitor 类型的守护程序收集各种与健康相关的系统统计数据作为指标.你可以通过更新其配置文件来自定义其行为.
+. CustomPluginMonitor 类型的守护程序通过运行用户定义的脚本来调用和检查各种节点问题.你可以使用不同的自定义插件监视器来监视不同的问题,并通过更新 配置文件 来定制守护程序行为.
+. HealthChecker 类型的守护程序检查节点上的 kubelet 和容器运行时的健康状况.
+
+说明: 
+上述守护程序需要的配置文件都来之 https://github.com/kubernetes/node-problem-detector/tree/v0.8.19/config,就是项目所在的页面的默认配置文件路径
+
+** 增加对其他日志格式的支持 -- 二次开发需要
+系统日志监视器目前支持基于文件的日志、journald 和 kmsg.可以通过实现一个新的 log watcher(https://github.com/kubernetes/node-problem-detector/blob/v0.8.19/pkg/systemlogmonitor/logwatchers/types/log_watcher.go) 来添加额外的日志源.
+
+** 添加自定义插件监视器 -- 二次开发需要
+你可以通过开发自定义插件来扩展节点问题检测器,以执行以任何语言编写的任何监控脚本.监控脚本必须符合退出码和标准输出的插件协议.有关更多信息,请参阅 插件接口提案(https://docs.google.com/document/d/1jK_5YloSYtboj-DtfjmYKxfNnUxCAvohLnsH5aGCAYQ/edit#heading=h.tplmhav3arf5).
+
+* 导出器
+导出器(Exporter)向特定后端报告节点问题和/或指标.支持下列导出器: 
+. Kubernetes exporter: 此导出器向 Kubernetes API 服务器报告节点问题.临时问题报告为事件,永久性问题报告为节点状况.
+. Prometheus exporter: 此导出器在本地将节点问题和指标报告为 Prometheus(或 OpenMetrics)指标.你可以使用命令行参数指定导出器的 IP 地址和端口.
+. Stackdriver exporter: 此导出器向 Stackdriver Monitoring API 报告节点问题和指标.可以使用配置文件(https://github.com/kubernetes/node-problem-detector/blob/v0.8.19/config/exporter/stackdriver-exporter.json)自定义导出行为.
+
+* 建议和限制
+建议在集群中运行节点问题检测器以监控节点运行状况.运行节点问题检测器时,你可以预期每个节点上的额外资源开销.通常这是可接受的,因为: 
+. 内核日志增长相对缓慢.
+. 已经为节点问题检测器设置了资源限制.
+. 即使在高负载下,资源使用也是可接受的.有关更多信息,请参阅节点问题检测器基准结果(https://github.com/kubernetes/node-problem-detector/issues/2.suecomment-220255629).
+
+### 使用 crictl 对 Kubernetes 节点进行调试
+特性状态:  Kubernetes v1.11 [stable]
+crictl 是 CRI 兼容的容器运行时命令行接口.你可以使用它来检查和调试 Kubernetes 节点上的容器运行时和应用程序.crictl 和它的源代码在 cri-tools 代码库.
+
+* 安装 crictl
+你可以从 cri-tools 发布页面 下载一个压缩的 crictl 归档文件,用于几种不同的架构.下载与你的 kubernetes 版本相对应的版本.提取它并将其移动到系统路径上的某个位置,例如 /usr/local/bin/.
+
+* 一般用法
+crictl 命令有几个子命令和运行时参数.有关详细信息,请使用 crictl help 或 crictl <subcommand> help 获取帮助信息.
+
+你可以用以下方法之一来为 crictl 设置端点: 
+. 设置参数 --runtime-endpoint 和 --image-endpoint.
+. 设置环境变量 CONTAINER_RUNTIME_ENDPOINT 和 IMAGE_SERVICE_ENDPOINT.
+. 在配置文件 --config=/etc/crictl.yaml 中设置端点.要设置不同的文件,可以在运行 crictl 时使用 --config=PATH_TO_FILE 标志.
+
+说明: 
+如果你不设置端点,crictl 将尝试连接到已知端点的列表,这可能会影响性能.
+
+你还可以在连接到服务器并启用或禁用调试时指定超时值,方法是在配置文件中指定 timeout 或 debug 值,或者使用 --timeout 和 --debug 命令行参数.
+
+要查看或编辑当前配置,请查看或编辑 /etc/crictl.yaml 的内容.例如,使用 containerd 容器运行时的配置会类似于这样: 
+runtime-endpoint: unix:///var/run/containerd/containerd.sock
+image-endpoint: unix:///var/run/containerd/containerd.sock
+timeout: 10
+debug: true
+
+* crictl 命令示例
+警告: 
+如果使用 crictl 在正在运行的 Kubernetes 集群上创建 Pod 沙盒或容器,kubelet 最终将删除它们.crictl 不是一个通用的工作流工具,而是一个对调试有用的工具.
+
+** 打印所有 Pod 的清单: 
+$ crictl pods        # 这里输出的有可能有相同的 pod 的不同状态,比如:
+
+abc5d22977164       About an hour ago   Ready               coredns-7db6d8ff4d-4dfgn           kube-system         2                   (default)
+72ddda820bb34       24 hours ago        NotReady            coredns-7db6d8ff4d-4dfgn           kube-system         1                   (default)
+
+输出类似于: 
+POD ID              CREATED              STATE               NAME                         NAMESPACE           ATTEMPT
+926f1b5a1d33a       About a minute ago   Ready               sh-84d7dcf559-4r2gq          default             0
+4dccb216c4adb       About a minute ago   Ready               nginx-65899c769f-wv2gp       default             0
+a86316e96fa89       17 hours ago         Ready               kube-proxy-gblk4             kube-system         0
+919630b8f81f1       17 hours ago         Ready               nvidia-device-plugin-zgbbv   kube-system         0
+
+根据名称打印 Pod 清单:     # 这里就可能出现上述的那种情况,多次相同的 pod
+$ crictl pods --name nginx-65899c769f-wv2gp 
+
+输出类似于这样: 
+POD ID              CREATED             STATE               NAME                     NAMESPACE           ATTEMPT
+4dccb216c4adb       2 minutes ago       Ready               nginx-65899c769f-wv2gp   default             0
+
+根据标签打印 Pod 清单: 
+$ crictl pods --label run=nginx
+
+输出类似于这样: 
+POD ID              CREATED             STATE               NAME                     NAMESPACE           ATTEMPT
+4dccb216c4adb       2 minutes ago       Ready               nginx-65899c769f-wv2gp   default             0
+
+** 打印镜像清单
+打印所有镜像清单: 
+$ crictl images
+
+输出类似于这样: 
+IMAGE                                     TAG                 IMAGE ID            SIZE
+busybox                                   latest              8c811b4aec35f       1.15MB
+k8s-gcrio.azureedge.net/hyperkube-amd64   v1.10.3             e179bbfe5d238       665MB
+k8s-gcrio.azureedge.net/pause-amd64       3.1                 da86e6ba6ca19       742kB
+nginx                                     latest              cd5239a0906a6       109MB
+
+根据仓库打印镜像清单: 
+$ crictl images nginx
+
+输出类似于这样: 
+IMAGE               TAG                 IMAGE ID            SIZE
+nginx               latest              cd5239a0906a6       109MB
+
+只打印镜像 ID: 
+$ crictl images -q
+
+输出类似于这样: 
+sha256:8c811b4aec35f259572d0f79207bc0678df4c736eeec50bc9fec37ed936a472a
+sha256:e179bbfe5d238de6069f3b03fccbecc3fb4f2019af741bfff1233c4d7b2970c5
+sha256:da86e6ba6ca197bf6bc5e9d900febd906b133eaa4750e6bed647b0fbe50ed43e
+sha256:cd5239a0906a6ccf0562354852fae04bc5b52d72a2aff9a871ddb6bd57553569
+
+** 打印容器清单
+打印所有容器清单: 
+$ crictl ps -a
+
+输出类似于这样: 
+CONTAINER ID        IMAGE                                                                                                             CREATED             STATE               NAME                       ATTEMPT
+1f73f2d81bf98       busybox@sha256:141c253bc4c3fd0a201d32dc1f493bcf3fff003b6df416dea4f41046e0f37d47                                   7 minutes ago       Running             sh                         1
+9c5951df22c78       busybox@sha256:141c253bc4c3fd0a201d32dc1f493bcf3fff003b6df416dea4f41046e0f37d47                                   8 minutes ago       Exited              sh                         0
+
+打印正在运行的容器清单: 
+$ crictl ps
+
+输出类似于这样: 
+CONTAINER ID        IMAGE                                                                                                             CREATED             STATE               NAME                       ATTEMPT
+1f73f2d81bf98       busybox@sha256:141c253bc4c3fd0a201d32dc1f493bcf3fff003b6df416dea4f41046e0f37d47                                   6 minutes ago       Running             sh                         1
+87d3992f84f74       nginx@sha256:d0a8828cccb73397acb0073bf34f4d7d8aa315263f1e7806bf8c55d8ac139d5f                                     7 minutes ago       Running             nginx                      0
+1941fb4da154f       k8s-gcrio.azureedge.net
+
+** 在正在运行的容器上执行命令
+$ crictl exec -i -t 1f73f2d81bf98 ls
+
+输出类似于这样: 
+bin   dev   etc   home  proc  root  sys   tmp   usr   var
+
+** 获取容器日志
+获取容器的所有日志: 
+$ crictl logs 87d3992f84f74
+
+输出类似于这样: 
+10.240.0.96 - - [06/Jun/2018:02:45:49 +0000] "GET / HTTP/1.1" 200 612 "-" "curl/7.47.0" "-"
+10.240.0.96 - - [06/Jun/2018:02:45:50 +0000] "GET / HTTP/1.1" 200 612 "-" "curl/7.47.0" "-"
+10.240.0.96 - - [06/Jun/2018:02:45:51 +0000] "GET / HTTP/1.1" 200 612 "-" "curl/7.47.0" "-"
+
+获取最近的 N 行日志: 
+$ crictl logs --tail=1 87d3992f84f74
+
+输出类似于这样: 
+10.240.0.96 - - [06/Jun/2018:02:45:51 +0000] "GET / HTTP/1.1" 200 612 "-" "curl/7.47.0" "-"
+
+** 运行 Pod 沙盒 - 不能直接产生沙盒,有 calico 的报错
+用 crictl 运行 Pod 沙盒对容器运行时排错很有帮助.在运行的 Kubernetes 集群中,沙盒会随机地被 kubelet 停止和删除.
+
+1. 编写下面的 JSON 文件: 
+{
+  "metadata": {
+    "name": "nginx-sandbox",
+    "namespace": "default",
+    "attempt": 1,
+    "uid": "hdishd83djaidwnduwk28bcsb"
+  },
+  "log_directory": "/tmp",
+  "linux": {
+  }
+}
+
+2. 使用 crictl runp 命令应用 JSON 文件并运行沙盒.
+$ crictl runp pod-config.json
+
+返回了沙盒的 ID.
+
+** 创建容器 - ?未知,需要配合上一节内容使用
+用 crictl 创建容器对容器运行时排错很有帮助.在运行的 Kubernetes 集群中,容器最终将被 kubelet 停止和删除.
+
+1. 拉取 busybox 镜像
+$ crictl pull busybox
+Image is up to date for busybox@sha256:141c253bc4c3fd0a201d32dc1f493bcf3fff003b6df416dea4f41046e0f37d47
+
+2. 创建 Pod 和容器的配置: 
+Pod 配置: 
+{
+  "metadata": {
+    "name": "busybox-sandbox",
+    "namespace": "default",
+    "attempt": 1,
+    "uid": "aewi4aeThua7ooShohbo1phoj"
+  },
+  "log_directory": "/tmp",
+  "linux": {
+  }
+}
+
+容器配置: 
+{
+  "metadata": {
+    "name": "busybox"
+  },
+  "image":{
+    "image": "busybox"
+  },
+  "command": [
+    "top"
+  ],
+  "log_path":"busybox.log",
+  "linux": {
+  }
+}
+
+3. 创建容器,传递先前创建的 Pod 的 ID、容器配置文件和 Pod 配置文件.返回容器的 ID.
+$ crictl create f84dd361f8dc51518ed291fbadd6db537b0496536c1d2d6c05ff943ce8c9a54f container-config.json pod-config.json
+
+4. 查询所有容器并确认新创建的容器状态为 Created.
+$ crictl ps -a
+
+输出类似于这样: 
+CONTAINER ID        IMAGE               CREATED             STATE               NAME                ATTEMPT
+3e025dd50a72d       busybox             32 seconds ago      Created             busybox             0
+
+** 启动容器
+要启动容器,要将容器 ID 传给 crictl start: 
+$ crictl start 3e025dd50a72d956c4f14881fbb5b1080c9275674e95fb67f965f6478a957d60
+
+输出类似于这样: 
+3e025dd50a72d956c4f14881fbb5b1080c9275674e95fb67f965f6478a957d60
+
+确认容器的状态为 Running.
+$ crictl ps
+
+输出类似于这样: 
+CONTAINER ID   IMAGE    CREATED              STATE    NAME     ATTEMPT
+3e025dd50a72d  busybox  About a minute ago   Running  busybox  0
+
+
+### 使用 telepresence 在本地开发和调试服务
+Kubernetes 应用程序通常由多个独立的服务组成,每个服务都在自己的容器中运行.在远端的 Kubernetes 集群上开发和调试这些服务可能很麻烦,需要在运行的容器上打开 Shell,以运行调试工具.
+
+telepresence 是一个工具,用于简化本地开发和调试服务的过程,同时可以将服务代理到远程 Kubernetes 集群.telepresence 允许你使用自定义工具(例如调试器和 IDE)调试本地服务,并能够让此服务完全访问 ConfigMap、Secret 和远程集群上运行的服务.
+
+下载及安装参考:
+https://www.telepresence.io/docs/latest/quick-start/
+^^^^^^^^^^^^^^^^^^^^
+1. 下载
+$ curl -fL https://app.getambassador.io/download/tel2oss/releases/download/v2.17.0/telepresence-linux-amd64 -o /usr/local/bin/telepresence
+
+2. 设置权限
+$ chmod a+x /usr/local/bin/telepresence
+
+3. 安装 traffic manager 
+使用在集群中配置 deployment 方式配置,需要先下载镜像
+docker.io/datawire/tel2:2.18.0
+$ telepresence helm install 
+
+命令会建立新的 namespace ambassador 并且启动类似如下的 pod
+ NAME                               READY   STATUS    RESTARTS        AGE
+traffic-manager-54d6c8d747-mjwq2   1/1     Running   1 (5m22s ago)   8m33s
+vvvvvvvvvvvvvvvvvvvv
+
+* 从本机连接到远程 Kubernetes 集群
+安装 telepresence 后,运行 telepresence connect 来启动它的守护进程并将本地工作站连接到远程 Kubernetes 集群.
+$ telepresence connect
+ 
+Launching Telepresence Daemon
+...
+Connected to context default (https://<cluster public IP>)
+你可以通过 curl 使用 Kubernetes 语法访问服务,例如: curl -ik https://kubernetes.default
+
+* 开发和调试现有的服务
+在 Kubernetes 上开发应用程序时,通常对单个服务进行编程或调试.服务可能需要访问其他服务以进行测试和调试.一种选择是使用连续部署流水线,但即使最快的部署流水线也会在程序或调试周期中引入延迟.
+
+使用 telepresence intercept $SERVICE_NAME --port $LOCAL_PORT:$REMOTE_PORT 命令创建一个 "拦截器" 用于重新路由远程服务流量.
+
+环境变量: 
+. $SERVICE_NAME 是本地服务名称
+. $LOCAL_PORT 是服务在本地工作站上运行的端口
+. $REMOTE_PORT 是服务在集群中侦听的端口
+
+运行此命令会告诉 Telepresence 将远程流量发送到本地服务,而不是远程 Kubernetes 集群中的服务中.在本地编辑保存服务源代码,并在访问远程应用时查看相应变更会立即生效.还可以使用调试器或任何其他本地开发工具运行本地服务.
+
+* Telepresence 是如何工作的?
+Telepresence 会在远程集群中运行的现有应用程序容器旁边安装流量代理 Sidecar.当它捕获进入 Pod 的所有流量请求时,不是将其转发到远程集群中的应用程序,而是路由所有流量(当创建全局拦截器时) 或流量的一个子集(当创建自定义拦截器时) 到本地开发环境.
+
+### 用 Kubectl 调试 Kubernetes 节点 - 非常重要,通过 pod 来调试 pod 所在节点
+本章展示如何使用 kubectl debug 命令调试在 Kubernetes 集群上运行的节点.
+
+* 使用 kubectl debug node 调试节点
+使用 kubectl debug node 命令将 Pod 部署到要排查故障的节点上.此命令在你无法使用 SSH 连接节点时比较有用.当 Pod 被创建时,Pod 会在节点上打开一个交互的 Shell.要在名为 “mynode” 的节点上创建一个交互式 Shell,运行: 
+$ kubectl debug node/mynode -it --image=ubuntu
+
+说明: 
+这些调试命令会因调试 Pod 所使用的镜像不同而有些差别,并且这些命令可能需要被安装.
+
+用于调试的 Pod 可以访问节点的根文件系统,该文件系统挂载在 Pod 中的 /host 路径.如果你在 filesystem 名字空间中运行 kubelet,则正调试的 Pod 将看到此名字空间的根,而不是整个节点的根.对于典型的 Linux 节点,你可以查看以下路径找到一些重要的日志: 
+/host/var/log/kubelet.log
+负责在节点上运行容器的 kubelet 所产生的日志.
+
+/host/var/log/kube-proxy.log
+负责将流量导向到 Service 端点的 kube-proxy 所产生的日志.
+
+/host/var/log/containerd.log
+在节点上运行的 containerd 进程所产生的日志.
+
+/host/var/log/syslog
+显示常规消息以及系统相关信息.
+
+/host/var/log/kern.log
+显示内核日志.
+
+当在节点上创建一个调试会话时,需谨记: 
+. kubectl debug 根据节点的名称自动生成新 Pod 的名称.
+. 节点的根文件系统将被挂载在 /host.
+. 尽管容器运行在主机 IPC、Network 和 PID 名字空间中,但 Pod 没有特权.这意味着读取某些进程信息可能会失败,这是因为访问这些信息仅限于超级用户 (superuser).例如,chroot /host 将失败.如果你需要一个有特权的 Pod,请手动创建或使用 --profile=sysadmin 标志.
+. 通过应用调试配置,你可以为调试 Pod 设置特定的属性,例如 securityContext.
+
+* 清理现场
+当你使用正调试的 Pod 完成时,将其删除: 
+$ kubectl get pods
+NAME                          READY   STATUS       RESTARTS   AGE
+node-debugger-mynode-pdx84    0/1     Completed    0          8m1s
+
+# 相应更改 Pod 名称
+$ kubectl delete pod node-debugger-mynode-pdx84 --now
+pod "node-debugger-mynode-pdx84" deleted
+
+说明: 
+如果节点停机(网络断开或 kubelet 宕机且无法启动等),则 kubectl debug node 命令将不起作用.
+
+## 应用排错 - 针对部署代码到 Kubernetes 并想知道代码为什么不能正常运行的用户.
+
+### 调试 Pod
+本指南帮助用户调试那些部署到 Kubernetes 上后没有正常运行的应用.
+
+* 诊断问题
+故障排查的第一步是先给问题分类.问题是什么?是关于 Pod、Replication Controller 还是 Service?
+. 调试 Pod
+. 调试 Replication Controller
+. 调试 Service
+
+** 调试 Pod
+调试 Pod 的第一步是查看 Pod 信息.用如下命令查看 Pod 的当前状态和最近的事件: 
+$ kubectl describe pods ${POD_NAME}
+
+查看一下 Pod 中的容器所处的状态.这些容器的状态都是 Running 吗?最近有没有重启过?
+后面的调试都是要依靠 Pod 的状态的.
+
+*** Pod 停滞在 Pending 状态
+如果一个 Pod 停滞在 Pending 状态,表示 Pod 没有被调度到节点上.通常这是因为某种类型的资源不足导致无法调度.查看上面的 kubectl describe ... 命令的输出,其中应该显示了为什么没被调度的原因.常见原因如下: 
+. 资源不足:  你可能耗尽了集群上所有的 CPU 或内存.此时,你需要删除 Pod、调整资源请求或者为集群添加节点.
+. 使用了 hostPort:  如果绑定 Pod 到 hostPort,那么能够运行该 Pod 的节点就有限了.多数情况下,hostPort 是非必要的,而应该采用 Service 对象来暴露 Pod.如果确实需要使用 hostPort,那么集群中节点的个数就是所能创建的 Pod 的数量上限.
+
+*** Pod 停滞在 Waiting 状态
+如果 Pod 停滞在 Waiting 状态,则表示 Pod 已经被调度到某工作节点,但是无法在该节点上运行.同样,kubectl describe ... 命令的输出可能很有用.Waiting 状态的最常见原因是拉取镜像失败.要检查的有三个方面: 
+. 确保镜像名字拼写正确.
+. 确保镜像已被推送到镜像仓库.
+. 尝试手动是否能拉取镜像.例如,如果你在你的 PC 上使用 Docker,请运行 docker pull <镜像>.
+
+*** Pod 停滞在 terminating 状态
+如果 Pod 停滞在 Terminating 状态,表示已发出删除 Pod 的请求,但控制平面无法删除该 Pod 对象.
+如果 Pod 拥有 Finalizer 并且集群中安装了准入 Webhook,可能会导致控制平面无法移除 Finalizer,从而导致 Pod 出现此问题.
+
+要确认这种情况,请检查你的集群中是否有 ValidatingWebhookConfiguration 或 MutatingWebhookConfiguration 处理 pods 资源的 UPDATE 操作.
+
+如果 Webhook 是由第三方提供的: 
+. 确保你使用的是最新版.
+. 禁用处理 UPDATE 操作的 Webhook.
+. 向相关供应商报告问题.
+
+如果你是 Webhook 的作者: 
+. 对于变更性质的 Webhook,请确保在处理 UPDATE 操作时不要更改不可变字段.例如,一般不允许更改 containers.
+. 对于验证性质的 Webhook,请确保你的验证策略仅被应用于新的更改之上.换句话说,你应该允许存在违规的现有 Pod 通过验证.这样可以确保在安装验证性质的 Webhook 之前创建的 Pod 可以继续运行.
+
+*** Pod 处于 Crashing 或别的不健康状态
+一旦 Pod 被调度,就可以采用调试运行中的 Pod 中的方法来进一步调试.
+
+*** Pod 处于 Running 态但是没有正常工作 -- 重要: kubectl apply --validate 参数可以参看详细的创建信息
+如果 Pod 行为不符合预期,很可能 Pod 描述(例如你本地机器上的 mypod.yaml)中有问题,并且该错误在创建 Pod 时被忽略掉,没有报错.通常,Pod 的定义中节区嵌套关系错误、字段名字拼错的情况都会引起对应内容被忽略掉.例如,如果你误将 command 写成 commnd,Pod 虽然可以创建,但它不会执行你期望它执行的命令行.
+
+可以做的第一件事是删除你的 Pod,并尝试带有 --validate 选项重新创建.例如,运行 kubectl apply --validate -f mypod.yaml.如果 command 被误拼成 commnd,你将会看到下面的错误信息: 
+
+I0805 10:43:25.129850   46757 schema.go:126] unknown field: commnd
+I0805 10:43:25.129973   46757 schema.go:129] this may be a false alarm,see https://github.com/kubernetes/kubernetes/issues/6842
+pods/mypod
+
+接下来就要检查的是 API 服务器上的 Pod 与你所期望创建的是否匹配 (例如,你原本使用本机上的一个 YAML 文件来创建 Pod).例如,运行 kubectl get pods/mypod -o yaml > mypod-on-apiserver.yaml,之后手动比较 mypod.yaml 与从 API 服务器取回的 Pod 描述.从 API 服务器处获得的 YAML 通常包含一些创建 Pod 所用的 YAML 中不存在的行,这是正常的.不过,如果如果源文件中有些行在 API 服务器版本中不存在,则意味着 Pod 规约是有问题的.
+
+** 调试副本控制器 
+副本控制器相对比较简单直接.它们要么能创建 Pod,要么不能.如果不能创建 Pod,请参阅上述说明调试 Pod.
+
+你也可以使用 kubectl describe rc ${CONTROLLER_NAME} 命令来检视副本控制器相关的事件.
+
+** 调试 Service
+服务支持在多个 Pod 间负载均衡.有一些常见的问题可以造成服务无法正常工作.以下说明将有助于调试服务的问题.
+
+首先,验证服务是否有端点.对于每一个 Service 对象,API 服务器为其提供对应的 endpoints 资源.
+
+通过如下命令可以查看 endpoints 资源: 
+$ kubectl get endpoints ${SERVICE_NAME}
+
+确保 Endpoints 与服务成员 Pod 个数一致.例如,如果你的 Service 用来运行 3 个副本的 nginx 容器,你应该会在 Service 的 Endpoints 中看到 3 个不同的 IP 地址.
+
+*** 服务缺少 Endpoints
+如果没有 Endpoints,请尝试使用 Service 所使用的标签列出 Pod.假定你的服务包含如下标签选择算符: 
+...
+spec:
+  - selector:
+     name: nginx
+     type: frontend
+
+你可以使用如下命令列出与选择算符相匹配的 Pod,并验证这些 Pod 是否归属于创建的服务: 
+$ kubectl get pods --selector=name=nginx,type=frontend
+
+验证 Pod 的 containerPort 与服务的 targetPort 是否匹配.
+
+网络流量未被转发
+请参阅调试 Service 了解更多信息.
+
+### 调试 Service
+对于新安装的 Kubernetes,经常出现的问题是 Service 无法正常运行.你已经通过 Deployment(或其他工作负载控制器)运行了 Pod,并创建 Service ,但是当你尝试访问它时,没有任何响应.此文档有望对你有所帮助并找出问题所在.
+
+* 在 Pod 中运行命令
+对于这里的许多步骤,你可能希望知道运行在集群中的 Pod 看起来是什么样的.最简单的方法是运行一个交互式的 busybox Pod: 
+$ kubectl run -it --rm --restart=Never busybox --image=gcr.io/google-containers/busybox sh
+
+说明: 
+如果没有看到命令提示符,请按回车.
+
+如果你已经有了你想使用的正在运行的 Pod,则可以运行以下命令去进入: 
+$ kubectl exec <POD-NAME> -c <CONTAINER-NAME> -- <COMMAND>
+
+* 设置
+为了完成本次实践的任务,我们先运行几个 Pod.由于你可能正在调试自己的 Service,所以,你可以使用自己的信息进行替换,或者你也可以跟着教程并开始下面的步骤来获得第二个数据点.
+$ kubectl create deployment hostnames --image=registry.k8s.io/serve_hostname
+deployment.apps/hostnames created
+
+kubectl 命令将打印创建或变更的资源的类型和名称,它们可以在后续命令中使用.让我们将这个 deployment 的副本数扩至 3.
+$ kubectl scale deployment hostnames --replicas=3
+deployment.apps/hostnames scaled
+
+请注意这与你使用以下 YAML 方式启动 Deployment 类似: 
+-----------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: hostnames
+  name: hostnames
+spec:
+  selector:
+    matchLabels:
+      app: hostnames
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: hostnames
+    spec:
+      containers:
+      - name: hostnames
+        image: registry.k8s.io/serve_hostname
+------------------------------------------------------
+"app" 标签是 kubectl create deployment 根据 Deployment 名称自动设置的.
+
+确认你的 Pod 是运行状态:
+$ kubectl get pods -l app=hostnames
+NAME                        READY     STATUS    RESTARTS   AGE
+hostnames-632524106-bbpiw   1/1       Running   0          2m
+hostnames-632524106-ly40y   1/1       Running   0          2m
+hostnames-632524106-tlaok   1/1       Running   0          2m
+你还可以确认你的 Pod 是否正在提供服务.你可以获取 Pod IP 地址列表并直接对其进行测试.
+
+kubectl get pods -l app=hostnames \
+    -o go-template='{{range .items}}{{.status.podIP}}{{"\n"}}{{end}}'
+
+10.244.236.150
+10.244.235.140
+10.244.235.141
+
+用于本教程的示例容器通过 HTTP 在端口 9376 上提供其自己的主机名,但是如果要调试自己的应用程序,则需要使用你的 Pod 正在侦听的端口号.
+
+在 Pod 内运行: 
+$ for ep in 10.244.0.5:9376 10.244.0.6:9376 10.244.0.7:9376; do
+    wget -qO- $ep
+done
+
+输出类似这样: 
+hostnames-585b56596f-pszpx
+hostnames-585b56596f-pszpx
+hostnames-585b56596f-pszpx
+
+如果此时你没有收到期望的响应,则你的 Pod 状态可能不健康,或者可能没有在你认为正确的端口上进行监听.你可能会发现 kubectl logs 命令对于查看正在发生的事情很有用,或者你可能需要通过kubectl exec 直接进入 Pod 中并从那里进行调试.
+
+假设到目前为止一切都已按计划进行,那么你可以开始调查为何你的 Service 无法正常工作.
+
+* Service 是否存在?
+细心的读者会注意到我们实际上尚未创建 Service —— 这是有意而为之.这一步有时会被遗忘,这是首先要检查的步骤.
+
+那么,如果我尝试访问不存在的 Service 会怎样? 假设你有另一个 Pod 通过名称匹配到 Service,你将得到类似结果: 
+$ wget -O- hostnames
+
+Resolving hostnames (hostnames)... failed: Name or service not known.
+wget: unable to resolve host address 'hostnames'
+
+首先要检查的是该 Service 是否真实存在: 
+$ kubectl get svc hostnames
+
+No resources found.
+Error from server (NotFound): services "hostnames" not found
+
+让我们创建 Service.和以前一样,在这次实践中 —— 你可以在此处使用自己的 Service 的内容.
+$ kubectl expose deployment hostnames --port=80 --target-port=9376
+service/hostnames exposed
+
+重新运行查询命令: 
+$ kubectl get svc hostnames
+NAME        TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)   AGE
+hostnames   ClusterIP   10.0.1.175   <none>        80/TCP    5s
+
+现在你知道了 Service 确实存在.
+
+同前,此步骤效果与通过 YAML 方式启动 Service 一样: 
+------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: hostnames
+  name: hostnames
+spec:
+  selector:
+    app: hostnames
+  ports:
+  - name: default
+    protocol: TCP
+    port: 80
+    targetPort: 9376
+-----------------------------------
+为了突出配置范围的完整性,你在此处创建的 Service 使用的端口号与 Pods 不同.对于许多真实的 Service,这些值可以是相同的.
+
+* Service 是否可通过 DNS 名字访问?
+通常客户端通过 DNS 名称来匹配到 Service.
+
+从相同命名空间下的 Pod 中运行以下命令: 
+$ nslookup hostnames
+
+Address 1: 10.0.0.10 kube-dns.kube-system.svc.cluster.local
+
+Name:      hostnames
+Address 1: 10.0.1.175 hostnames.default.svc.cluster.local
+
+如果失败,那么你的 Pod 和 Service 可能位于不同的命名空间中,请尝试使用限定命名空间的名称(同样在 Pod 内运行): 
+$ nslookup hostnames.default
+
+Address 1: 10.0.0.10 kube-dns.kube-system.svc.cluster.local
+
+Name:      hostnames.default
+Address 1: 10.0.1.175 hostnames.default.svc.cluster.local
+
+如果成功,那么需要调整你的应用,使用跨命名空间的名称去访问它,或者在相同的命名空间中运行应用和 Service.如果仍然失败,请尝试一个完全限定的名称: 
+$ nslookup hostnames.default.svc.cluster.local
+Address 1: 10.0.0.10 kube-dns.kube-system.svc.cluster.local
+
+Name:      hostnames.default.svc.cluster.local
+Address 1: 10.0.1.175 hostnames.default.svc.cluster.local
+
+注意这里的后缀: "default.svc.cluster.local"."default" 是我们正在操作的命名空间."svc" 表示这是一个 Service."cluster.local" 是你的集群域,在你自己的集群中可能会有所不同.
+
+你也可以在集群中的节点上尝试此操作: 
+
+说明: 
+10.0.0.10 是集群的 DNS 服务 IP,你的可能有所不同.
+
+$ nslookup hostnames.default.svc.cluster.local 10.0.0.10
+
+Server:         10.0.0.10
+Address:        10.0.0.10#53
+
+Name:   hostnames.default.svc.cluster.local
+Address: 10.0.1.175
+
+如果你能够使用完全限定的名称查找,但不能使用相对名称,则需要检查你 Pod 中的 /etc/resolv.conf 文件是否正确.在 Pod 中运行以下命令: 
+$ cat /etc/resolv.conf
+
+你应该可以看到类似这样的输出: 
+nameserver 10.0.0.10
+search default.svc.cluster.local svc.cluster.local cluster.local example.com
+options ndots:5
+
+nameserver 行必须指示你的集群的 DNS Service,它是通过 --cluster-dns 标志传递到 kubelet 的.
+
+search 行必须包含一个适当的后缀,以便查找 Service 名称.在本例中,它查找本地命名空间(default.svc.cluster.local)中的服务和所有命名空间(svc.cluster.local)中的服务,最后在集群(cluster.local)中查找服务的名称.根据你自己的安装情况,可能会有额外的记录(最多 6 条).集群后缀是通过 --cluster-domain 标志传递给 kubelet 的.本文中,我们假定后缀是 “cluster.local”.你的集群配置可能不同,这种情况下,你应该在上面的所有命令中更改它.
+
+options 行必须设置足够高的 ndots,以便 DNS 客户端库考虑搜索路径.在默认情况下,Kubernetes 将这个值设置为 5,这个值足够高,足以覆盖它生成的所有 DNS 名称.
+
+** 是否存在 Service 能通过 DNS 名称访问？
+如果上面的方式仍然失败,DNS 查找不到你需要的 Service ,你可以后退一步,看看还有什么其它东西没有正常工作.Kubernetes 主 Service 应该一直是工作的.在 Pod 中运行如下命令: 
+
+nslookup kubernetes.default
+Server:    10.0.0.10
+Address 1: 10.0.0.10 kube-dns.kube-system.svc.cluster.local
+
+Name:      kubernetes.default
+Address 1: 10.0.0.1 kubernetes.default.svc.cluster.local
+
+如果失败,你可能需要转到本文的 kube-proxy 节,或者甚至回到文档的顶部重新开始,但不是调试你自己的 Service ,而是调试 DNS Service.
+
+** Service 能够通过 IP 访问么？
+假设你已经确认 DNS 工作正常,那么接下来要测试的是你的 Service 能否通过它的 IP 正常访问.从集群中的一个 Pod,尝试访问 Service 的 IP(从上面的 kubectl get 命令获取).
+
+for i in $(seq 1 3); do 
+    wget -qO- 10.0.1.175:80
+done
+
+输出应该类似这样: 
+hostnames-632524106-bbpiw
+hostnames-632524106-ly40y
+hostnames-632524106-tlaok
+
+如果 Service 状态是正常的,你应该得到正确的响应.如果没有,有很多可能出错的地方,请继续阅读.
+
+* Service 的配置是否正确？ 
+这听起来可能很愚蠢,但你应该两次甚至三次检查你的 Service 配置是否正确,并且与你的 Pod 匹配.查看你的 Service 配置并验证它: 
+$ kubectl get service hostnames -o json
+
+. 你想要访问的 Service 端口是否在 spec.ports[] 中列出？
+. targetPort 对你的 Pod 来说正确吗(许多 Pod 使用与 Service 不同的端口)？
+. 如果你想使用数值型端口,那么它的类型是一个数值(9376)还是字符串 “9376”？
+. 如果你想使用名称型端口,那么你的 Pod 是否暴露了一个同名端口？
+. 端口的 protocol 和 Pod 的是否对应？
+
+* Service 有 Endpoints 吗？
+如果你已经走到了这一步,你已经确认你的 Service 被正确定义,并能通过 DNS 解析.现在,让我们检查一下,你运行的 Pod 确实是被 Service 选中的.
+
+早些时候,我们已经看到 Pod 是运行状态.我们可以再检查一下: 
+$ kubectl get pods -l app=hostnames
+NAME                        READY     STATUS    RESTARTS   AGE
+hostnames-632524106-bbpiw   1/1       Running   0          1h
+hostnames-632524106-ly40y   1/1       Running   0          1h
+hostnames-632524106-tlaok   1/1       Running   0          1h
+
+-l app=hostnames 参数是在 Service 上配置的标签选择器.
+“AGE” 列表明这些 Pod 已经启动一个小时了,这意味着它们运行良好,而未崩溃.
+"RESTARTS" 列表明 Pod 没有经常崩溃或重启.经常性崩溃可能导致间歇性连接问题.如果重启次数过大,通过调试 Pod 了解相关技术.
+
+在 Kubernetes 系统中有一个控制回路,它评估每个 Service 的选择算符,并将结果保存到 Endpoints 对象中.
+$ kubectl get endpoints hostnames
+
+NAME        ENDPOINTS
+hostnames   10.244.0.5:9376,10.244.0.6:9376,10.244.0.7:9376
+
+这证实 Endpoints 控制器已经为你的 Service 找到了正确的 Pods.如果 ENDPOINTS 列的值为 <none>,则应检查 Service 的 spec.selector 字段,以及你实际想选择的 Pod 的 metadata.labels 的值.常见的错误是输入错误或其他错误,例如 Service 想选择 app=hostnames,但是 Deployment 指定的是 run=hostnames.在 1.18之前的版本中 kubectl run 也可以被用来创建 Deployment.
+
+* Pod 工作正常吗？
+至此,你知道你的 Service 已存在,并且已匹配到你的Pod.在本实验的开始,你已经检查了 Pod 本身.让我们再次检查 Pod 是否确实在工作 - 你可以绕过 Service 机制并直接转到 Pod,如上面的 Endpoints 所示.
+
+说明: 
+这些命令使用的是 Pod 端口(9376),而不是 Service 端口(80).
+
+在 Pod 中运行: 
+$ for ep in 10.244.0.5:9376 10.244.0.6:9376 10.244.0.7:9376; do
+    wget -qO- $ep
+done
+
+输出应该类似这样: 
+hostnames-632524106-bbpiw
+hostnames-632524106-ly40y
+hostnames-632524106-tlaok
+
+你希望 Endpoint 列表中的每个 Pod 都返回自己的主机名.如果情况并非如此(或你自己的 Pod 的正确行为是什么),你应调查发生了什么事情.
+
+* kube-proxy 正常工作吗？
+如果你到达这里,则说明你的 Service 正在运行,拥有 Endpoints,Pod 真正在提供服务.此时,整个 Service 代理机制是可疑的.让我们一步一步地确认它没问题.
+
+Service 的默认实现(在大多数集群上应用的)是 kube-proxy.这是一个在每个节点上运行的程序,负责配置用于提供 Service 抽象的机制之一.如果你的集群不使用 kube-proxy,则以下各节将不适用,你将必须检查你正在使用的 Service 的实现方式.
+
+** kube-proxy 正常运行吗？ {#is-kube-proxy working}
+确认 kube-proxy 正在节点上运行.在节点上直接运行,你将会得到类似以下的输出: 
+$ ps auxw | grep kube-proxy
+
+root        1300  0.0  0.8 1283996 51104 ?       Ssl  08:05   0:01 /usr/local/bin/kube-proxy --config=/var/lib/kube-proxy/config.conf --hostname-override=k8s01
+
+下一步,确认它并没有出现明显的失败,比如连接主节点失败.要做到这一点,你必须查看日志.访问日志的方式取决于你节点的操作系统.在某些操作系统上日志是一个文件,如 /var/log/messages kube-proxy.log,而其他操作系统使用 journalctl 访问日志.你应该看到输出类似于: 
+
+I1027 22:14:53.995134    5063 server.go:200] Running in resource-only container "/kube-proxy"
+I1027 22:14:53.998163    5063 server.go:247] Using iptables Proxier.
+I1027 22:14:54.038140    5063 proxier.go:352] Setting endpoints for "kube-system/kube-dns:dns-tcp" to [10.244.1.3:53]
+I1027 22:14:54.038164    5063 proxier.go:352] Setting endpoints for "kube-system/kube-dns:dns" to [10.244.1.3:53]
+I1027 22:14:54.038209    5063 proxier.go:352] Setting endpoints for "default/kubernetes:https" to [10.240.0.2:443]
+I1027 22:14:54.038238    5063 proxier.go:429] Not syncing iptables until Services and Endpoints have been received from master
+I1027 22:14:54.040048    5063 proxier.go:294] Adding new service "default/kubernetes:https" at 10.0.0.1:443/TCP
+I1027 22:14:54.040154    5063 proxier.go:294] Adding new service "kube-system/kube-dns:dns" at 10.0.0.10:53/UDP
+I1027 22:14:54.040223    5063 proxier.go:294] Adding new service "kube-system/kube-dns:dns-tcp" at 10.0.0.10:53/TCP
+
+如果你看到有关无法连接主节点的错误消息,则应再次检查节点配置和安装步骤.
+
+kube-proxy 无法正确运行的可能原因之一是找不到所需的 conntrack 二进制文件.在一些 Linux 系统上,这也是可能发生的,这取决于你如何安装集群,例如,你是手动开始一步步安装 Kubernetes.如果是这样的话,你需要手动安装 conntrack 包(例如,在 Ubuntu 上使用 sudo apt install conntrack),然后重试.
+
+Kube-proxy 可以以若干模式之一运行.在上述日志中,Using iptables Proxier 行表示 kube-proxy 在 "iptables" 模式下运行.最常见的另一种模式是 "ipvs".
+
+*** Iptables 模式
+在 "iptables" 模式中,你应该可以在节点上看到如下输出:
+$ iptables-save | grep hostnames
+
+-A KUBE-SEP-57KPRZ3JQVENLNBR -s 10.244.3.6/32 -m comment --comment "default/hostnames:" -j MARK --set-xmark 0x00004000/0x00004000
+-A KUBE-SEP-57KPRZ3JQVENLNBR -p tcp -m comment --comment "default/hostnames:" -m tcp -j DNAT --to-destination 10.244.3.6:9376
+-A KUBE-SEP-WNBA2IHDGP2BOBGZ -s 10.244.1.7/32 -m comment --comment "default/hostnames:" -j MARK --set-xmark 0x00004000/0x00004000
+-A KUBE-SEP-WNBA2IHDGP2BOBGZ -p tcp -m comment --comment "default/hostnames:" -m tcp -j DNAT --to-destination 10.244.1.7:9376
+-A KUBE-SEP-X3P2623AGDH6CDF3 -s 10.244.2.3/32 -m comment --comment "default/hostnames:" -j MARK --set-xmark 0x00004000/0x00004000
+-A KUBE-SEP-X3P2623AGDH6CDF3 -p tcp -m comment --comment "default/hostnames:" -m tcp -j DNAT --to-destination 10.244.2.3:9376
+-A KUBE-SERVICES -d 10.0.1.175/32 -p tcp -m comment --comment "default/hostnames: cluster IP" -m tcp --dport 80 -j KUBE-SVC-NWV5X2332I4OT4T3
+-A KUBE-SVC-NWV5X2332I4OT4T3 -m comment --comment "default/hostnames:" -m statistic --mode random --probability 0.33332999982 -j KUBE-SEP-WNBA2IHDGP2BOBGZ
+-A KUBE-SVC-NWV5X2332I4OT4T3 -m comment --comment "default/hostnames:" -m statistic --mode random --probability 0.50000000000 -j KUBE-SEP-X3P2623AGDH6CDF3
+-A KUBE-SVC-NWV5X2332I4OT4T3 -m comment --comment "default/hostnames:" -j KUBE-SEP-57KPRZ3JQVENLNBR
+
+对于每个 Service 的每个端口,应有 1 条 KUBE-SERVICES 规则、一个 KUBE-SVC-<hash> 链.对于每个 Pod 末端,在那个 KUBE-SVC-<hash> 链中应该有一些规则与之对应,还应该 有一个 KUBE-SEP-<hash> 链与之对应,其中包含为数不多的几条规则.实际的规则数量可能会根据你实际的配置(包括 NodePort 和 LoadBalancer 服务)有所不同.
+
+比如:
+$ iptables-save |grep hostnames |grep 10.244.235.149
+-A KUBE-SEP-BDJ57P5RWOK4LWVD -s 10.244.235.149/32 -m comment --comment "default/hostnames" -j KUBE-MARK-MASQ
+-A KUBE-SEP-BDJ57P5RWOK4LWVD -p tcp -m comment --comment "default/hostnames" -m tcp -j DNAT --to-destination 10.244.235.149:9376
+-A KUBE-SVC-YN5D6RYVEVZOH44Q -m comment --comment "default/hostnames -> 10.244.235.149:9376" -m statistic --mode random --probability 0.33333333349 -j KUBE-SEP-BDJ57P5RWOK4LWVD
+
+
+*** IPVS 模式
+在 "ipvs" 模式中,你应该在节点下看到如下输出: 
+$ ipvsadm -ln
+
+Prot LocalAddress:Port Scheduler Flags
+  -> RemoteAddress:Port           Forward Weight ActiveConn InActConn
+...
+TCP  10.0.1.175:80 rr
+  -> 10.244.0.5:9376               Masq    1      0          0
+  -> 10.244.0.6:9376               Masq    1      0          0
+  -> 10.244.0.7:9376               Masq    1      0          0
+...
+
+对于每个 Service 的每个端口,还有 NodePort,External IP 和 LoadBalancer 类型服务 的 IP,kube-proxy 将创建一个虚拟服务器.对于每个 Pod 末端,它将创建相应的真实服务器.在此示例中,服务主机名(10.0.1.175:80)拥有 3 个末端(10.244.0.5:9376、 10.244.0.6:9376 和 10.244.0.7:9376).
+
+** kube-proxy 是否在执行代理操作?
+假设你确实遇到上述情况之一,请重试从节点上通过 IP 访问你的 Service : 
+$ curl 10.0.1.175:80
+
+hostnames-632524106-bbpiw       # 这里可能是 3 个 pod 中的任意一个
+
+如果这步操作仍然失败,请查看 kube-proxy 日志中的特定行,如: 
+Setting endpoints for default/hostnames:default to [10.244.0.5:9376 10.244.0.6:9376 10.244.0.7:9376]
+
+如果你没有看到这些,请尝试将 -v 标志设置为 4 并重新启动 kube-proxy,然后再查看日志.
+
+/usr/local/bin/kubelet --enable-debugging-handlers=true --config=/etc/kubernetes/manifests --allow-privileged=True --v=4 --cluster-dns=10.0.0.10 --cluster-domain=cluster.local --configure-cbr0=true --cgroup-root=/ --system-cgroups=/system --hairpin-mode=promiscuous-bridge --runtime-cgroups=/docker-daemon --kubelet-cgroups=/kubelet --babysit-daemons=true --max-pods=110 --serialize-image-pulls=false --outofdisk-transition-frequency=0
+
+** 边缘案例: Pod 无法通过 Service IP 连接到它本身 - 观察目前使用的网络设置没有碰到此种关于 Hairpin 的配置内容,而 Hairpin 用于路由上路由回源的上下文.
+如果网络没有为“发夹模式(Hairpin)”流量生成正确配置,通常当 kube-proxy 以 iptables 模式运行,并且 Pod 与桥接网络连接时,就会发生这种情况.
+参考:
+https://kubernetes.io/zh-cn/docs/tasks/debug/debug-application/debug-service/#a-pod-fails-to-reach-itself-via-the-service-ip
+
+### 调试 StatefulSet - 重要: StatefullSet 用于有状态应用的场景,同时有 pv/pvc 的绑定,比如数据库 mysql 等等,同时手动删除 pv 的绑定
+StatefulSet 运行一组 Pod,并为每个 Pod 保留一个稳定的标识.这可用于管理需要持久化存储或稳定、唯一网络标识的应用.
+StatefulSet 是用来管理有状态应用的工作负载 API 对象.
+StatefulSet 管理基于相同容器规约的一组 Pod.但和 Deployment 不同的是,StatefulSet 为它们的每个 Pod 维护了一个有粘性的 ID.这些 Pod 是基于相同的规约来创建的,但是不能相互替换: 无论怎么调度,每个 Pod 都有一个永久不变的 ID.
+
+如果希望使用存储卷为工作负载提供持久存储,可以使用 StatefulSet 作为解决方案的一部分.尽管 StatefulSet 中的单个 Pod 仍可能出现故障,但持久的 Pod 标识符使得将现有卷与替换已失败 Pod 的新 Pod 相匹配变得更加容易.
+
+StatefulSet 用来管理某 Pod 集合的部署和扩缩,并为这些 Pod 提供持久存储和持久标识符.
+
+* 准备开始
+你应该有一个运行中的 StatefulSet,以便用于调试.
+
+优先配置一个 pv
+
+pv.yaml
+--------------------------
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-volume
+  labels:
+    type: local
+spec:
+  storageClassName: my-pv
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/mnt/data"
+-----------------------------------
+
+$ kubectl apply -f pv.yaml
+
+
+statufulset-example.yaml
+------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx
+  labels:
+    app: nginx
+spec:
+  ports:
+  - port: 80
+    name: web
+  clusterIP: None
+  selector:
+    app: nginx
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: web
+spec:
+  selector:
+    matchLabels:
+      app: nginx # 必须匹配 .spec.template.metadata.labels
+  serviceName: "nginx"
+  replicas: 3 # 默认值是 1
+  minReadySeconds: 10 # 默认值是 0
+  template:
+    metadata:
+      labels:
+        app: nginx # 必须匹配 .spec.selector.matchLabels
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+      - name: nginx
+        image: nginx
+        ports:
+        - containerPort: 80
+          name: web
+        volumeMounts:
+        - name: www
+          mountPath: /usr/share/nginx/html
+  volumeClaimTemplates:                     # 这里开始,这段内容不能用于标准的 StatefulSet
+  - metadata:                               # volumeClaimTemplates 的用处是创建一个 pvc
+      name: www                             # 这个 StatefulSet 则是创建 3 个副本,这里这部分则是相当于要创建 3 个绑定
+    spec:                                   # 并且绑定到同一个 pv,根据官方的描述,pv 和 pvc 是一对一,只有 1 个绑定才能
+      accessModes: [ "ReadWriteOnce" ]      # 成功,其他的都会 pending
+      storageClassName: "my-pv"             # 这里有个有趣的现象,当有多个 pvc 的时候,如果他们用的 storageClassName 都相同
+      resources:                            # 比如都使用 my-pv 这个名字,如果 pv 中只有一个 storageClassName 为 my-pv,则只
+        requests:                           # 有第一个 pvc 能绑定,如果有多个 storageClassName 为 my-pv 的 pv,则形成一对一
+          storage: 1Gi                      # 的绑定关系.比如:左下描述
+-----------------------------------------
+
+$ kubectl get pv
+NAME         CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM               STORAGECLASS   VOLUMEATTRIBUTESCLASS   REASON   AGE
+pv-volume    10Gi       RWO            Retain           Bound    default/pv1-claim   my-pv          <unset>                          23h
+pv2-volume   10Gi       RWO            Retain           Bound    default/pv2-claim   my-pv          <unset>                          13m
+
+$ kubectl get pvc
+NAME        STATUS   VOLUME       CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+pv1-claim   Bound    pv-volume    10Gi       RWO            my-pv          <unset>                 34m
+pv2-claim   Bound    pv2-volume   10Gi       RWO            my-pv          <unset>                 8m
+
+上述的的 pv 都使用的 STORAGECLASS 都叫 my-pv,2 个 pvc 则是分别绑定了 2 个 pv,因为在 pvc 的定义文件中并不会制定绑定到那个 pv,只会制定 STORAGECLASS 名称,因此,具体会绑定到那个 pv 是有 k8s 来管理,这个叫动态制备,参考:
+https://kubernetes.io/zh-cn/docs/concepts/storage/persistent-volumes/#lifecycle-of-a-volume-and-claim
+
+关键的地方是 STORAGECLASS 名称.
+
+
+修改 statufulset-example.yaml 内容为
+---------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx
+  labels:
+    app: nginx
+spec:
+  ports:
+  - port: 80
+    name: web
+  clusterIP: None
+  selector:
+    app: nginx
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: web
+spec:
+  selector:
+    matchLabels:
+      app: nginx # has to match .spec.template.metadata.labels
+  serviceName: "nginx"
+  replicas: 2 # by default is 1
+  minReadySeconds: 10 # by default is 0
+  template:
+    metadata:
+      labels:
+        app: nginx # has to match .spec.selector.matchLabels
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+      - name: nginx
+        image: nginx
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 80
+          name: web
+        volumeMounts:
+        - name: www
+          mountPath: /usr/share/nginx/html
+      volumes:                # 这里指定 pvc,则所有的 pod 都会使用相同的 pv
+      - name: www
+        persistentVolumeClaim:
+          claimName: pv1-claim
+          readOnly: false
+---------------------
+
+pv/pvc 的排错
+^^^^^^^^^^^^^^^^^^^^
+由于刚开始,配置 statefullset 的时候,预先准备的 pv 的 storageClassName 和 statefullset 中的名字不一致,出现了 pod pending的情况,查看了日志,发现了上述的不一致,因此需要删除 pvc,删除以后,出现如下的现象:
+
+$ kubectl get pv
+NAME             CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM               STORAGECLASS   VOLUMEATTRIBUTESCLASS   REASON   AGE
+pv-volume        10Gi       RWO            Retain           Available                       my-pv          <unset>                          21h
+task-pv-volume   10Gi       RWO            Retain           Available   default/www-web-0   manual         <unset>                          22h
+
+对比的 task-pv-volume 和 pv-colume 这两个 pvc 的 STATUS,CLAIM 两列显示 task-pv-volume 仍然是不可用的状态,正常的应该是 pv-volume 的状态,通过 
+$ kubectl get pv pv-volume -o yaml
+$ kubectl get pv task-pv-volume -o yaml
+
+发现 task-pv-volume 多如下的一部分,说明处于绑定的状态.
+...
+  claimRef:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    name: www-web-0
+    namespace: default
+    resourceVersion: "62201"
+    uid: 067f69af-8d54-46c7-8635-bfbccbf18317
+...
+
+需要完全的释放掉这个绑定设置
+# 开始使用如下的命令,只是释放了部分参数
+$ kubectl patch pv task-pv-volume -p '{"spec":{"claimRef":{"uid":""}}}'
+
+# 如下的命令则可以完全的释放掉这个绑定
+$ kubectl patch pv task-pv-volume -p '{"spec":{"claimRef": null}}'
+
+vvvvvvvvvvvvvvvvvvvv
+
+* 调试 StatefulSet
+StatefulSet 在创建 Pod 时为其设置了 app.kubernetes.io/name=MyApp 标签,列出仅属于某 StatefulSet 的所有 Pod 时,可以使用以下命令: 
+$ kubectl get pods -l app.kubernetes.io/name=MyApp
+
+如果你发现列出的任何 Pod 长时间处于 Unknown 或 Terminating 状态,请参阅 删除 StatefulSet Pod(https://kubernetes.io/zh-cn/docs/tasks/run-application/delete-stateful-set/) 了解如何处理它们的说明.你可以参考调试 Pod 来调试 StatefulSet 中的各个 Pod.
+
+### 确定 Pod 失败的原因 - 重要: 介绍如何编写和读取容器的终止消息,同时关于日志处理的建议及策略
+终止消息为容器提供了一种方法,可以将有关致命事件的信息写入某个位置,在该位置可以通过仪表板和监控软件等工具轻松检索和显示致命事件.在大多数情况下,你放入终止消息中的信息也应该写入 常规 Kubernetes 日志(https://kubernetes.io/zh-cn/docs/concepts/cluster-administration/logging/).
+
+* 读写终止消息
+在本练习中,你将创建运行一个容器的 Pod.配置文件指定在容器启动时要运行的命令.
+
+termination.yaml
+------------------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: termination-demo
+spec:
+  containers:
+  - name: termination-demo-container
+    image: debian
+    command: ["/bin/sh"]
+    args: ["-c","sleep 10 && echo Sleep expired > /dev/termination-log"] 
+------------------------------------------------
+1. 基于 YAML 配置文件创建 Pod: 
+$ kubectl apply -f termination.yaml   
+
+YAML 文件中,在 command 和 args 字段,你可以看到容器休眠 10 秒然后将 "Sleep expired" 写入 /dev/termination-log 文件.容器写完 "Sleep expired" 消息后就终止了.
+
+2. 显示 Pod 的信息: 
+$ kubectl get pod termination-demo
+
+重复前面的命令直到 Pod 不再运行.
+
+3. 显示 Pod 的详细信息: 
+$ kubectl get pod termination-demo --output=yaml
+
+输出结果包含 "Sleep expired" 消息: 
+apiVersion: v1
+kind: Pod
+...
+    lastState:
+      terminated:
+        containerID: ...
+        exitCode: 0
+        finishedAt: ...
+        message: |
+          Sleep expired          
+        ...
+
+4. 使用 Go 模板过滤输出结果,使其只含有终止消息: 
+$ kubectl get pod termination-demo -o go-template="{{range .status.containerStatuses}}{{.lastState.terminated.message}}{{end}}"
+
+如果你正在运行多容器 Pod,则可以使用 Go 模板来包含容器的名称.这样,你可以发现哪些容器出现故障: 
+$ kubectl get pod multi-container-pod -o go-template='{{range .status.containerStatuses}}{{printf "%s:\n%s\n\n" .name .lastState.terminated.message}}{{end}}'
+
+* 定制终止消息 - 重要: 当容器失败的时候,退出消息为空的时候,定制一段输出消息
+Kubernetes 从容器的 terminationMessagePath 字段中指定的终止消息文件中检索终止消息,默认值为 /dev/termination-log.通过定制这个字段,你可以告诉 Kubernetes 使用不同的文件.Kubernetes 使用指定文件中的内容在成功和失败时填充容器的状态消息.
+
+终止消息旨在简要说明最终状态,例如断言失败消息.kubelet 会截断长度超过 4096 字节的消息.
+
+所有容器的总消息长度限制为 12KiB,将会在每个容器之间平均分配.例如,如果有 12 个容器(initContainers 或 containers),每个容器都有 1024 字节的可用终止消息空间.
+
+默认的终止消息路径是 /dev/termination-log.Pod 启动后不能设置终止消息路径.
+
+在下例中,容器将终止消息写入 /tmp/my-log 给 Kubernetes 来检索: 
+-----------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: msg-path-demo
+spec:
+  containers:
+  - name: msg-path-demo-container
+    image: debian
+    terminationMessagePath: "/tmp/my-log"
+-----------------------------------------------
+
+此外,用户可以设置容器的 terminationMessagePolicy 字段,以便进一步自定义.此字段默认为 "File",这意味着仅从终止消息文件中检索终止消息.通过将 terminationMessagePolicy 设置为 "FallbackToLogsOnError",你就可以告诉 Kubernetes,在容器因错误退出时,如果终止消息文件为空,则使用容器日志输出的最后一块作为终止消息.日志输出限制为 2048 字节或 80 行,以较小者为准.
+
+### 调试 Init 容器 - 重要: 如何核查与 Init 容器执行相关的问题
+此页显示如何核查与 Init 容器执行相关的问题.下面的示例命令行将 Pod 称为 <pod-name>,而 Init 容器称为 <init-container-1> 和 <init-container-2>.
+
+* 检查 Init 容器的状态
+显示你的 Pod 的状态: 
+$ kubectl get pod <pod-name>
+
+例如,状态 Init:1/2 表明两个 Init 容器中的一个已经成功完成: 
+NAME         READY     STATUS     RESTARTS   AGE
+<pod-name>   0/1       Init:1/2   0          7s
+
+* 获取 Init 容器详情
+查看 Init 容器运行的更多详情: 
+$ kubectl describe pod <pod-name>
+
+例如,对于包含两个 Init 容器的 Pod 可能显示如下信息: 
+Init Containers:
+  <init-container-1>:
+    Container ID:    ...
+    ...
+    State:           Terminated
+      Reason:        Completed
+      Exit Code:     0
+      Started:       ...
+      Finished:      ...
+    Ready:           True
+    Restart Count:   0
+    ...
+  <init-container-2>:
+    Container ID:    ...
+    ...
+    State:           Waiting
+      Reason:        CrashLoopBackOff
+    Last State:      Terminated
+      Reason:        Error
+      Exit Code:     1
+      Started:       ...
+      Finished:      ...
+    Ready:           False
+    Restart Count:   3
+    ...
+
+你还可以通过编程方式读取 Pod Spec 上的 status.initContainerStatuses 字段,了解 Init 容器的状态: 
+$ kubectl get pod nginx --template '{{.status.initContainerStatuses}}'
+
+此命令将返回与原始 JSON 中相同的信息.
+
+* 通过 Init 容器访问日志
+与 Pod 名称一起传递 Init 容器名称,以访问容器的日志.
+$ kubectl logs <pod-name> -c <init-container-2>
+
+运行 Shell 脚本的 Init 容器在执行 Shell 脚本时输出命令本身.例如,你可以在 Bash 中通过在脚本的开头运行 set -x 来实现.
+
+* 理解 Pod 的状态
+以 Init: 开头的 Pod 状态汇总了 Init 容器执行的状态.下表介绍调试 Init 容器时可能看到的一些状态值示例.
+
+状态	                                                                    含义
+Init:N/M	                  Pod 包含 M 个 Init 容器,其中 N 个已经运行完成.
+Init:Error	                Init 容器已执行失败.
+Init:CrashLoopBackOff	      Init 容器执行总是失败.
+Pending	                    Pod 还没有开始执行 Init 容器.
+PodInitializing or Running	Pod 已经完成执行 Init 容器.
+
+### 调试运行中的 Pod - 重要: 如何在节点上调试运行中(或崩溃)的 Pod.
+本页解释如何在节点上调试运行中(或崩溃)的 Pod.
+
+* 使用 kubectl describe pod 命令获取 Pod 详情
+与之前的例子类似,我们使用一个 Deployment 来创建两个 Pod.
+
+nginx-with-request.yaml
+------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+spec:
+  selector:
+    matchLabels:
+      app: nginx
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx
+        resources:
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+        ports:
+        - containerPort: 80
+------------------------------------
+
+使用如下命令创建 Deployment: 
+$ kubectl apply -f nginx-with-request.yaml
+
+deployment.apps/nginx-deployment created
+
+使用如下命令查看 Pod 状态: 
+$ kubectl get pod
+NAME                               READY   STATUS    RESTARTS   AGE
+nginx-deployment-cdf545448-6rs2n   1/1     Running   0          37s
+nginx-deployment-cdf545448-f79r9   1/1     Running   0          37s
+
+我们可以使用 kubectl describe pod 命令来查询每个 Pod 的更多信息,比如: 
+$ kubectl describe pod nginx-deployment-cdf545448-6rs2n
+--------------------------------------------------------------
+Name:             nginx-deployment-cdf545448-6rs2n
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             k8s02/192.168.1.12
+Start Time:       Thu,05 Sep 2024 08:59:19 +0000
+Labels:           app=nginx
+                  pod-template-hash=cdf545448
+Annotations:      cni.projectcalico.org/containerID: 700e58b120b98f9e573c607b54cc0704298aec4e4dca37368e438c5529280194
+                  cni.projectcalico.org/podIP: 10.244.236.191/32
+                  cni.projectcalico.org/podIPs: 10.244.236.191/32
+Status:           Running
+IP:               10.244.236.191
+IPs:
+  IP:           10.244.236.191
+Controlled By:  ReplicaSet/nginx-deployment-cdf545448
+Containers:
+  nginx:
+    Container ID:   containerd://d2dbece8a84b4dcec694abe9de66c1816c62d59a9d77afb08c02f56155de68cb
+    Image:          nginx
+    Image ID:       sha256:4f67c83422ec747235357c04556616234e66fc3fa39cb4f40b2d4441ddd8f100
+    Port:           80/TCP
+    Host Port:      0/TCP
+    State:          Running
+      Started:      Thu,05 Sep 2024 08:59:20 +0000
+    Ready:          True
+    Restart Count:  0
+    Limits:
+      cpu:     500m
+      memory:  128Mi
+    Requests:
+      cpu:        500m
+      memory:     128Mi
+    Environment:  <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-p4kv6 (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       True 
+  ContainersReady             True 
+  PodScheduled                True 
+Volumes:
+  kube-api-access-p4kv6:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    ConfigMapOptional:       <nil>
+    DownwardAPI:             true
+QoS Class:                   Guaranteed
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type    Reason     Age   From               Message
+  ----    ------     ----  ----               -------
+  Normal  Scheduled  87s   default-scheduler  Successfully assigned default/nginx-deployment-cdf545448-6rs2n to k8s02
+  Normal  Pulled     86s   kubelet            Container image "nginx" already present on machine
+  Normal  Created    86s   kubelet            Created container nginx
+  Normal  Started    86s   kubelet            Started container nginx
+kubectl describe pod nginx-deployment-cdf545448-6rs2n
+Name:             nginx-deployment-cdf545448-6rs2n
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             k8s02/192.168.1.12
+Start Time:       Thu,05 Sep 2024 08:59:19 +0000
+Labels:           app=nginx
+                  pod-template-hash=cdf545448
+Annotations:      cni.projectcalico.org/containerID: 700e58b120b98f9e573c607b54cc0704298aec4e4dca37368e438c5529280194
+                  cni.projectcalico.org/podIP: 10.244.236.191/32
+                  cni.projectcalico.org/podIPs: 10.244.236.191/32
+Status:           Running
+IP:               10.244.236.191
+IPs:
+  IP:           10.244.236.191
+Controlled By:  ReplicaSet/nginx-deployment-cdf545448
+Containers:
+  nginx:
+    Container ID:   containerd://d2dbece8a84b4dcec694abe9de66c1816c62d59a9d77afb08c02f56155de68cb
+    Image:          nginx
+    Image ID:       sha256:4f67c83422ec747235357c04556616234e66fc3fa39cb4f40b2d4441ddd8f100
+    Port:           80/TCP
+    Host Port:      0/TCP
+    State:          Running
+      Started:      Thu,05 Sep 2024 08:59:20 +0000
+    Ready:          True
+    Restart Count:  0
+    Limits:
+      cpu:     500m
+      memory:  128Mi
+    Requests:
+      cpu:        500m
+      memory:     128Mi
+    Environment:  <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-p4kv6 (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       True 
+  ContainersReady             True 
+  PodScheduled                True 
+Volumes:
+  kube-api-access-p4kv6:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    ConfigMapOptional:       <nil>
+    DownwardAPI:             true
+QoS Class:                   Guaranteed
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type    Reason     Age   From               Message
+  ----    ------     ----  ----               -------
+  Normal  Scheduled  87s   default-scheduler  Successfully assigned default/nginx-deployment-cdf545448-6rs2n to k8s02
+  Normal  Pulled     86s   kubelet            Container image "nginx" already present on machine
+  Normal  Created    86s   kubelet            Created container nginx
+  Normal  Started    86s   kubelet            Started container nginx
+-------------------------------------------------------------------------
+
+在这里,你可以看到有关容器和 Pod 的配置信息(标签、资源需求等),以及有关容器和 Pod 的状态信息(状态、就绪、重启计数、事件等).
+
+容器状态是 Waiting、Running 和 Terminated 之一.根据状态的不同,还有对应的额外的信息 —— 在这里你可以看到,对于处于运行状态的容器,系统会告诉你容器的启动时间.
+Ready 指示是否通过了最后一个就绪态探测.(在本例中,容器没有配置就绪态探测；如果没有配置就绪态探测,则假定容器已经就绪.)
+Restart Count 告诉你容器已重启的次数； 这些信息对于定位配置了 “Always” 重启策略的容器持续崩溃问题非常有用.
+目前,唯一与 Pod 有关的状态是 Ready 状况,该状况表明 Pod 能够为请求提供服务,并且应该添加到相应服务的负载均衡池中.
+最后,你还可以看到与 Pod 相关的近期事件.“From” 标明记录事件的组件,“Reason” 和 “Message” 告诉你发生了什么.
+
+* 例子: 调试 Pending 状态的 Pod
+可以使用事件来调试的一个常见的场景是,你创建 Pod 无法被调度到任何节点.比如,Pod 请求的资源比较多,没有任何一个节点能够满足,或者它指定了一个标签,没有节点可匹配.假定我们创建之前的 Deployment 时指定副本数是 5(不再是 2),并且请求 600 毫核(不再是 500),对于一个 4 个节点的集群,若每个节点只有 1 个 CPU,这时至少有一个 Pod 不能被调度.(需要注意的是,其他集群插件 Pod,比如 fluentd、skydns 等等会在每个节点上运行,如果我们需求 1000 毫核,将不会有 Pod 会被调度.)
+
+$ kubectl get pods
+NAME                                READY     STATUS    RESTARTS   AGE
+nginx-deployment-1006230814-6winp   1/1       Running   0          7m
+nginx-deployment-1006230814-fmgu3   1/1       Running   0          7m
+nginx-deployment-1370807587-6ekbw   1/1       Running   0          1m
+nginx-deployment-1370807587-fg172   0/1       Pending   0          1m
+nginx-deployment-1370807587-fz9sd   0/1       Pending   0          1m
+
+为了查找 Pod nginx-deployment-1370807587-fz9sd 没有运行的原因,我们可以使用 kubectl describe pod 命令描述 Pod,查看其事件: 
+$ kubectl describe pod nginx-deployment-1370807587-fz9sd
+
+  Name:		nginx-deployment-1370807587-fz9sd
+  Namespace:	default
+  Node:		/
+  Labels:		app=nginx,pod-template-hash=1370807587
+  Status:		Pending
+  IP:
+  Controllers:	ReplicaSet/nginx-deployment-1370807587
+  Containers:
+    nginx:
+      Image:	nginx
+      Port:	80/TCP
+      QoS Tier:
+        memory:	Guaranteed
+        cpu:	Guaranteed
+      Limits:
+        cpu:	1
+        memory:	128Mi
+      Requests:
+        cpu:	1
+        memory:	128Mi
+      Environment Variables:
+  Volumes:
+    default-token-4bcbi:
+      Type:	Secret (a volume populated by a Secret)
+      SecretName:	default-token-4bcbi
+  Events:
+    FirstSeen	LastSeen	Count	From			        SubobjectPath	Type		Reason			    Message
+    ---------	--------	-----	----			        -------------	--------	------			    -------
+    1m		    48s		    7	    {default-scheduler }			        Warning		FailedScheduling	pod (nginx-deployment-1370807587-fz9sd) failed to fit in any node
+  fit failure on node (kubernetes-node-6ta5): Node didn't have enough resource: CPU,requested: 1000,used: 1420,capacity: 2000
+  fit failure on node (kubernetes-node-wul5): Node didn't have enough resource: CPU,requested: 1000,used: 1100,capacity: 2000
+
+这里你可以看到由调度器记录的事件,它表明了 Pod 不能被调度的原因是 FailedScheduling(也可能是其他值).其 message 部分表明没有任何节点拥有足够多的资源.
+
+要纠正这种情况,可以使用 kubectl scale 更新 Deployment,以指定 4 个或更少的副本.(或者你可以让 Pod 继续保持这个状态,这是无害的.)
+
+你在 kubectl describe pod 结尾处看到的事件都保存在 etcd 中,并提供关于集群中正在发生的事情的高级信息.如果需要列出所有事件,可使用命令: 
+$ kubectl get events
+
+但是,需要注意的是,事件是区分名字空间的.如果你对某些名字空间域的对象(比如 my-namespace 名字下的 Pod)的事件感兴趣,你需要显式地在命令行中指定名字空间: 
+$ kubectl get events --namespace=my-namespace
+查看所有 namespace 的事件,可使用 --all-namespaces 参数.
+
+除了 kubectl describe pod 以外,另一种获取 Pod 额外信息(除了 kubectl get pod)的方法 是给 kubectl get pod 增加 -o yaml 输出格式参数.该命令将以 YAML 格式为你提供比 kubectl describe pod 更多的信息 —— 实际上是系统拥有的关于 Pod 的所有信息.在这里,你将看到注解(没有标签限制的键值元数据,由 Kubernetes 系统组件在内部使用)、 重启策略、端口和卷等.
+$ kubectl get pod nginx-deployment-1006230814-6winp -o yaml
+
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: "2022-02-17T21:51:01Z"
+  generateName: nginx-deployment-67d4bdd6f5-
+  labels:
+    app: nginx
+    pod-template-hash: 67d4bdd6f5
+  name: nginx-deployment-67d4bdd6f5-w6kd7
+  namespace: default
+  ownerReferences:
+  - apiVersion: apps/v1
+    blockOwnerDeletion: true
+    controller: true
+    kind: ReplicaSet
+    name: nginx-deployment-67d4bdd6f5
+    uid: 7d41dfd4-84c0-4be4-88ab-cedbe626ad82
+  resourceVersion: "1364"
+  uid: a6501da1-0447-4262-98eb-c03d4002222e
+spec:
+  containers:
+  - image: nginx
+    imagePullPolicy: Always
+    name: nginx
+    ports:
+    - containerPort: 80
+      protocol: TCP
+    resources:
+      limits:
+        cpu: 500m
+        memory: 128Mi
+      requests:
+        cpu: 500m
+        memory: 128Mi
+    terminationMessagePath: /dev/termination-log
+    terminationMessagePolicy: File
+    volumeMounts:
+    - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+      name: kube-api-access-bgsgp
+      readOnly: true
+  dnsPolicy: ClusterFirst
+  enableServiceLinks: true
+  nodeName: kube-worker-1
+  preemptionPolicy: PreemptLowerPriority
+  priority: 0
+  restartPolicy: Always
+  schedulerName: default-scheduler
+  securityContext: {}
+  serviceAccount: default
+  serviceAccountName: default
+  terminationGracePeriodSeconds: 30
+  tolerations:
+  - effect: NoExecute
+    key: node.kubernetes.io/not-ready
+    operator: Exists
+    tolerationSeconds: 300
+  - effect: NoExecute
+    key: node.kubernetes.io/unreachable
+    operator: Exists
+    tolerationSeconds: 300
+  volumes:
+  - name: kube-api-access-bgsgp
+    projected:
+      defaultMode: 420
+      sources:
+      - serviceAccountToken:
+          expirationSeconds: 3607
+          path: token
+      - configMap:
+          items:
+          - key: ca.crt
+            path: ca.crt
+          name: kube-root-ca.crt
+      - downwardAPI:
+          items:
+          - fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+            path: namespace
+status:
+  conditions:
+  - lastProbeTime: null
+    lastTransitionTime: "2022-02-17T21:51:01Z"
+    status: "True"
+    type: Initialized
+  - lastProbeTime: null
+    lastTransitionTime: "2022-02-17T21:51:06Z"
+    status: "True"
+    type: Ready
+  - lastProbeTime: null
+    lastTransitionTime: "2022-02-17T21:51:06Z"
+    status: "True"
+    type: ContainersReady
+  - lastProbeTime: null
+    lastTransitionTime: "2022-02-17T21:51:01Z"
+    status: "True"
+    type: PodScheduled
+  containerStatuses:
+  - containerID: containerd://5403af59a2b46ee5a23fb0ae4b1e077f7ca5c5fb7af16e1ab21c00e0e616462a
+    image: docker.io/library/nginx:latest
+    imageID: docker.io/library/nginx@sha256:2834dc507516af02784808c5f48b7cbe38b8ed5d0f4837f16e78d00deb7e7767
+    lastState: {}
+    name: nginx
+    ready: true
+    restartCount: 0
+    started: true
+    state:
+      running:
+        startedAt: "2022-02-17T21:51:05Z"
+  hostIP: 192.168.0.113
+  phase: Running
+  podIP: 10.88.0.3
+  podIPs:
+  - ip: 10.88.0.3
+  - ip: 2001:db8::1
+  qosClass: Guaranteed
+  startTime: "2022-02-17T21:51:01Z"
+
+* 检查 Pod 的日志 - 重要: 可以查看容器崩溃之前的日志
+首先,查看受到影响的容器的日志: 
+$ kubectl logs ${POD_NAME} ${CONTAINER_NAME}
+
+如果你的容器之前崩溃过,你可以通过下面命令访问之前容器的崩溃日志: 
+$ kubectl logs --previous ${POD_NAME} ${CONTAINER_NAME}
+
+* 使用容器 exec 进行调试 - 重要: 当 pod 中包含多个容器,使用的方式
+如果 容器镜像 包含调试程序,比如从 Linux 和 Windows 操作系统基础镜像构建的镜像,你可以使用 kubectl exec 命令 在特定的容器中运行一些命令: 
+$ kubectl exec ${POD_NAME} -c ${CONTAINER_NAME} -- ${CMD} ${ARG1} ${ARG2} ... ${ARGN}
+说明: 
+-c ${CONTAINER_NAME} 是可选择的.如果 Pod 中仅包含一个容器,就可以忽略它.
+
+例如,要查看正在运行的 Cassandra Pod 中的日志,可以运行: 
+$ kubectl exec cassandra -- cat /var/log/cassandra/system.log
+
+你可以在 kubectl exec 命令后面加上 -i 和 -t 来运行一个连接到你的终端的 Shell,比如: 
+$ kubectl exec -it cassandra -- sh
+
+* 使用临时调试容器来进行调试 - 重要: 当容器无法执行 kubectl exec 时使用
+特性状态:  Kubernetes v1.25 [stable]
+当由于容器崩溃或容器镜像不包含调试程序(例如无发行版镜像等) 而导致 kubectl exec 无法运行时,临时容器对于排除交互式故障很有用.
+
+* 使用临时容器来调试的例子 - 使用共享命名空间的模式来调试
+你可以使用 kubectl debug 命令来给正在运行中的 Pod 增加一个临时容器.首先,像示例一样创建一个 pod: 
+$ kubectl run ephemeral-demo --image=registry.k8s.io/pause:3.9 --restart=Never
+
+本节示例中使用 pause 容器镜像,因为它不包含调试程序,但是这个方法适用于所有容器镜像.
+
+如果你尝试使用 kubectl exec 来创建一个 shell,你将会看到一个错误,因为这个容器镜像中没有 shell.
+$ kubectl exec -it ephemeral-demo -- sh
+
+OCI runtime exec failed: exec failed: container_linux.go:346: starting container process caused "exec: \"sh\": executable file not found in $PATH": unknown
+
+你可以改为使用 kubectl debug 添加调试容器.如果你指定 -i 或者 --interactive 参数,kubectl 将自动挂接到临时容器的控制台.
+$ kubectl debug -it ephemeral-demo --image=busybox --target=ephemeral-demo
+
+Defaulting debug container name to debugger-8xzrl.
+If you don't see a command prompt,try pressing enter.
+/ #
+
+此命令添加一个新的 busybox 容器并将其挂接到该容器.--target 参数指定另一个容器的进程命名空间.这个指定进程命名空间的操作是必需的,因为 kubectl run 不能在它创建的 Pod 中启用共享进程命名空间.
+
+说明: 
+容器运行时必须支持 --target 参数.如果不支持,则临时容器可能不会启动,或者可能使用隔离的进程命名空间启动,导致 ps 不显示其他容器内的进程.
+另外 --target 指定的是在这个 pod 中的具体的容器名称,比如有 1 个 pod 有 2 个容器,则此参数用于指定具体的容器名称,比如:
+--------------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginxs
+spec:
+  containers:
+  - name: nginx1
+    image: nginx
+    imagePullPolicy: Never
+  - name: nginx2
+    image: nginx
+    imagePullPolicy: Never
+---------------------------------
+
+$ kubectl get pod
+NAME        READY   STATUS             RESTARTS      AGE
+nginxs      1/2     CrashLoopBackOff   7 (84s ago)   12m
+
+说明: 上述的 pod 包含 2 个容器,运行时有 1 个失败了
+
+$ kubectl describe pod nginxs
+----------------------------------------
+Events:
+  Type     Reason     Age                    From               Message
+  ----     ------     ----                   ----               -------
+  Normal   Scheduled  14m                    default-scheduler  Successfully assigned default/nginxs to k8s03
+  Normal   Pulled     13m                    kubelet            Container image "nginx" already present on machine
+  Normal   Created    13m                    kubelet            Created container nginx1
+  Normal   Started    13m                    kubelet            Started container nginx1
+  Normal   Pulled     12m (x5 over 13m)      kubelet            Container image "nginx" already present on machine
+  Normal   Created    12m (x5 over 13m)      kubelet            Created container nginx2
+  Normal   Started    12m (x5 over 13m)      kubelet            Started container nginx2
+  Warning  BackOff    8m55s (x23 over 13m)   kubelet            Back-off restarting failed container nginx2 in pod nginxs_default(c18ac45e-8b06-4b8d-86e9-d81f9fa4d9cb)
+--------------------------------------------
+
+显示 nginx2 失败了,如果需要调试,使用如下的命令
+$ kubectl debug -it nginxs --image=busybox --target=nginx2
+
+说明: 尝试附 1 个 busybox 容器到 nginx2 这个容器中去调试.这个参数在有多个容器的时候,用于区分具体的某一个容器.
+
+另外在调试容器中对正在运行的容器进行操作,参看本文档的第二部分的 "在 Pod 中的容器之间共享进程命名空间",此章节描述了如何在共享命名空间中操作容器.
+
+你可以使用 kubectl describe 查看新创建的临时容器的状态: 
+$ kubectl describe pod ephemeral-demo
+...
+Ephemeral Containers:
+  debugger-8xzrl:
+    Container ID:   docker://b888f9adfd15bd5739fefaa39e1df4dd3c617b9902082b1cfdc29c4028ffb2eb
+    Image:          busybox
+    Image ID:       docker-pullable://busybox@sha256:1828edd60c5efd34b2bf5dd3282ec0cc04d47b2ff9caa0b6d4f07a21d1c08084
+    Port:           <none>
+    Host Port:      <none>
+    State:          Running
+      Started:      Wed,12 Feb 2020 14:25:42 +0100
+    Ready:          False
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:         <none>
+...
+
+使用 kubectl delete 来移除已经结束掉的 Pod: 
+$ kubectl delete pod ephemeral-demo
+
+* 通过 Pod 副本调试
+有些时候 Pod 的配置参数使得在某些情况下很难执行故障排查.例如,在容器镜像中不包含 shell 或者你的应用程序在启动时崩溃的情况下,就不能通过运行 kubectl exec 来排查容器故障.在这些情况下,你可以使用 kubectl debug 来创建 Pod 的副本,通过更改配置帮助调试.
+
+** 在添加新的容器时创建 Pod 副本 
+当应用程序正在运行但其表现不符合预期时,你会希望在 Pod 中添加额外的调试工具,这时添加新容器是很有用的.
+
+例如,应用的容器镜像是建立在 busybox 的基础上,但是你需要 busybox 中并不包含的调试工具.你可以使用 kubectl run 模拟这个场景:
+$ kubectl run myapp --image=busybox --restart=Never -- sleep 1d
+
+通过运行以下命令,建立 myapp 的一个名为 myapp-debug 的副本,新增了一个用于调试的 Ubuntu 容器,
+$ kubectl debug myapp -it --image=ubuntu --share-processes --copy-to=myapp-debug
+
+# 此命令的逻辑是启动一个 pod 名字为 myapp-debug,为 myapp 这个 pod 的副本,使用 ubuntu 作为调试用的容器附在这个副本上.
+
+Defaulting debug container name to debugger-w7xmf.
+If you don't see a command prompt,try pressing enter.
+root@myapp-debug:/#
+
+说明: 
+. 如果你没有使用 --container 指定新的容器名,kubectl debug 会自动生成的.
+. 默认情况下,-i 标志使 kubectl debug 附加到新容器上.你可以通过指定 --attach=false 来防止这种情况.如果你的会话断开连接,你可以使用 kubectl attach 重新连接.
+. --share-processes 允许在此 Pod 中的其他容器中查看该容器的进程.参阅在 Pod 中的容器之间共享进程命名空间 获取更多信息.
+
+另外在调试容器中对正在运行的容器进行操作,参看本文档的第二部分的 "在 Pod 中的容器之间共享进程命名空间",此章节描述了如何在共享命名空间中操作容器.
+
+不要忘了清理调试 Pod: 
+$ kubectl delete pod myapp myapp-debug
+
+** 在改变 Pod 命令时创建 Pod 副本 
+有时更改容器的命令很有用,例如添加调试标志或因为应用崩溃.
+
+为了模拟应用崩溃的场景,使用 kubectl run 命令创建一个立即退出的容器: 
+$ kubectl run --image=busybox myapp -- false
+
+使用 kubectl describe pod myapp 命令,你可以看到容器崩溃了: 
+Containers:
+  myapp:
+    Image:         busybox
+    ...
+    Args:
+      false
+    State:          Waiting
+      Reason:       CrashLoopBackOff
+    Last State:     Terminated
+      Reason:       Error
+      Exit Code:    1
+
+你可以使用 kubectl debug 命令创建该 Pod 的一个副本,在该副本中命令改变为交互式 shell: 
+$ kubectl debug myapp -it --copy-to=myapp-debug --container=myapp -- sh
+
+If you don't see a command prompt,try pressing enter.
+/ #
+现在你有了一个可以执行类似检查文件系统路径或者手动运行容器命令的交互式 shell.
+
+说明: 
+. 要更改指定容器的命令,你必须用 --container 命令指定容器的名字,否则 kubectl debug 将建立一个新的容器运行你指定的命令.
+. 默认情况下,标志 -i 使 kubectl debug 附加到容器.你可通过指定 --attach=false 来防止这种情况.如果你的断开连接,可以使用 kubectl attach 重新连接.
+
+另外在调试容器中对正在运行的容器进行操作,参看本文档的第二部分的 "在 Pod 中的容器之间共享进程命名空间",此章节描述了如何在共享命名空间中操作容器.
+
+不要忘了清理调试 Pod: 
+$ kubectl delete pod myapp myapp-debug
+
+** 在更改容器镜像时拷贝 Pod
+在某些情况下,你可能想要改动一个行为异常的 Pod,即从其正常的生产容器镜像更改为包含调试构建程序或其他实用程序的镜像.
+
+下面的例子,用 kubectl run 创建一个 Pod: 
+$ kubectl run myapp --image=busybox:1.28 --restart=Never -- sleep 1d
+
+现在可以使用 kubectl debug 创建一个拷贝并将其容器镜像更改为 ubuntu: 
+$ kubectl debug myapp --copy-to=myapp-debug --set-image=*=ubuntu
+
+--set-image 与 container_name=image 使用相同的 kubectl set image 语法.*=ubuntu 表示把所有容器的镜像改为 ubuntu.
+
+另外在调试容器中对正在运行的容器进行操作,参看本文档的第二部分的 "在 Pod 中的容器之间共享进程命名空间",此章节描述了如何在共享命名空间中操作容器.
+
+$ kubectl delete pod myapp myapp-debug
+
+* 在节点上通过 shell 来进行调试
+如果这些方法都不起作用,你可以找到运行 Pod 的节点,然后创建一个 Pod 运行在该节点上.你可以通过 kubectl debug 在节点上创建一个交互式 Shell: 
+$ kubectl debug node/mynode -it --image=ubuntu
+
+Creating debugging pod node-debugger-mynode-pdx84 with container debugger on node mynode.
+If you don't see a command prompt,try pressing enter.
+root@ek8s:/#
+
+当在节点上创建调试会话,注意以下要点: 
+. kubectl debug 基于节点的名字自动生成新的 Pod 的名字.
+. 节点的根文件系统会被挂载在 /host.
+. 新的调试容器运行在主机 IPC 名字空间、主机网络名字空间以及主机 PID 名字空间内,Pod 没有特权,因此读取某些进程信息可能会失败,并且 chroot /host 也可能会失败.
+. 如果你需要一个特权 Pod,需要手动创建或使用 --profile=sysadmin 标志.
+
+另外在调试容器中对正在运行的容器进行操作,参看本文档的第二部分的 "在 Pod 中的容器之间共享进程命名空间",此章节描述了如何在共享命名空间中操作容器.
+
+当你完成节点调试时,不要忘记清理调试 Pod: 
+$ kubectl delete pod node-debugger-mynode-pdx84
+
+* 调试配置 
+使用 kubectl debug 通过调试 Pod 来调试节点、通过临时容器来调试 Pod 或者调试复制的 Pod 时,你可以使用 --profile 标志为其应用调试配置(Debugging Profile).通过应用配置,可以设置特定的属性(如 securityContext),以适应各种场景.
+
+可用的配置如下: 
+配置	                      描述
+legacy	    一组与 1.22 行为向后兼容的属性
+general	    一组对大多数调试过程而言均合理的通用属性
+baseline	  一组与 PodSecurityStandard Baseline 策略兼容的属性
+restricted	一组与 PodSecurityStandard Restricted 策略兼容的属性
+netadmin	  一组包含网络管理员特权的属性
+sysadmin	  一组包含系统管理员(root)特权的属性
+
+说明: 
+如果你不指定 --profile,legacy 配置被默认使用,但此配置计划在不久的将来弃用.因此建议使用 general 等其他配置.
+
+假设你要创建一个 Pod 并进行调试.先创建一个名为 myapp 的 Pod 作为示例: 
+$ kubectl run myapp --image=busybox:1.28 --restart=Never -- sleep 1d
+
+然后,使用临时容器调试 Pod.如果临时容器需要具有特权,你可以使用 sysadmin 配置: 
+$ kubectl debug -it myapp --image=busybox:1.28 --target=myapp --profile=sysadmin
+
+Targeting container "myapp". If you don't see processes from this container it may be because the container runtime doesn't support this feature.
+Defaulting debug container name to debugger-6kg4x.
+If you don't see a command prompt,try pressing enter.
+/ #
+
+通过在容器内运行以下命令检查临时容器进程的权能: 
+/ # grep Cap /proc/$$/status
+...
+CapPrm:	000001ffffffffff
+CapEff:	000001ffffffffff
+...
+
+这意味着通过应用 sysadmin 配置,容器进程被授予了作为特权容器的全部权能.更多细节参见权能.
+
+你还可以检查临时容器是否被创建为特权容器: 
+$ kubectl get pod myapp -o jsonpath='{.spec.ephemeralContainers[0].securityContext}'
+{"privileged":true}
+
+你在完成上述操作后,可运行以下命令清理 Pod: 
+$ kubectl delete pod myapp
+
+### 获取正在运行容器的 Shell
+本章介绍怎样使用 kubectl exec 命令获取正在运行容器的 Shell.
+
+* 获取容器的 Shell 
+创建包含一个容器的 Pod.容器运行 nginx 镜像.下面是 Pod 的配置文件:
+
+shell-demo.yaml
+---------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: shell-demo
+spec:
+  volumes:
+  - name: shared-data
+    emptyDir: {}
+  containers:
+  - name: nginx
+    image: nginx
+    volumeMounts:
+    - name: shared-data
+      mountPath: /usr/share/nginx/html
+  hostNetwork: true
+  dnsPolicy: Default
+--------------------------------------
+
+创建 Pod:
+$ kubectl apply -f shell-demo.yaml
+
+检查容器是否运行正常:
+$ kubectl get pod shell-demo
+
+获取正在运行容器的 Shell:
+$ kubectl exec --stdin --tty shell-demo -- /bin/bash
+
+说明:
+双破折号 "--" 用于将要传递给命令的参数与 kubectl 的参数分开.
+
+在 shell 中,打印根目录:
+
+# 在容器内运行如下命令
+ls /
+
+在 shell 中,实验其他命令.下面是一些示例:
+
+# 你可以在容器中运行这些示例命令
+ls /
+cat /proc/mounts
+cat /proc/1/maps
+apt-get update
+apt-get install -y tcpdump
+tcpdump
+apt-get install -y lsof
+lsof
+apt-get install -y procps
+ps aux
+ps aux | grep nginx
+
+* 编写 nginx 的根页面
+再看一下 Pod 的配置文件.该 Pod 有个 emptyDir 卷,容器将该卷挂载到了 /usr/share/nginx/html.
+
+在 shell 中,在 /usr/share/nginx/html 目录创建一个 index.html 文件:
+
+# 在容器内运行如下命令
+echo 'Hello shell demo' > /usr/share/nginx/html/index.html
+
+在 shell 中,向 nginx 服务器发送 GET 请求:
+
+# 在容器内运行如下命令
+apt-get update
+apt-get install curl
+curl http://localhost/
+
+输出结果显示了你在 index.html 中写入的文本.
+Hello shell demo
+
+当用完 shell 后,输入 exit 退出.
+
+exit # 快速退出容器内的 Shell
+
+* 在容器中运行单个命令
+在普通的命令窗口(而不是 shell)中,打印环境运行容器中的变量:
+$ kubectl exec shell-demo -- env
+
+实验运行其他命令.下面是一些示例:
+
+kubectl exec shell-demo -- ps aux
+kubectl exec shell-demo -- ls /
+kubectl exec shell-demo -- cat /proc/1/mounts
+
+* 当 Pod 包含多个容器时打开 shell
+如果 Pod 有多个容器,--container 或者 -c 可以在 kubectl exec 命令中指定容器.例如,你有个名为 my-pod 的 Pod,该 Pod 有两个容器分别为 main-app 和 healper-app.下面的命令将会打开一个 shell 访问 main-app 容器.
+$ kubectl exec -i -t my-pod --container main-app -- /bin/bash
+
+说明:
+短的命令参数 -i 和 -t 与长的命令参数 --stdin 和 --tty 作用相同.
+

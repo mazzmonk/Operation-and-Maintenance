@@ -1,0 +1,71 @@
+centos安装boost
+
+oogle-perftools安装（非必须）
+安装
+输入命令：
+./configure 可安装全部google-perftools的组件，包括TCMalloc、heap-checker、heap-profiler和cpu-profiler共4个组件。
+但是我们这里只需要TCMalloc所以我们可以输入命令：
+./configure --prefix=/usr/local --disable-cpu-profiler --disable-heap-profiler --disable-heap-checker --disable-debugalloc --enable-minimal 只安装TCMalloc。
+--prefix=/usr/local是指定安装目录的，如果不指定则默认安装到/usr/local/lib/下面。
+
+
+boost-1.54需要glibc-2.14以上的库
+glibc-2.18的版本过高，影响整个系统的命令和程序
+
+tar zxvf glibc-2.14.tar.gz
+cd glibc-2.14
+mkdir build
+cd build
+../configure --prefix=/usr/local/glibc-2.14
+make -j4   
+make install  
+
+编译过程出现如下错误：
+checking LD_LIBRARY_PATH variable... contains current directory
+
+LD_LIBRARY_PATH不能以终结符作为开始和最后一个字符，不能有2个终结符连在一起，我的LD_LIBRARY_PATH为 :/usr/local/firefox:/usr/local/firefox,只要在前面加上一个路径，不让：出现在第一个字符就可以了 ”
+查看环境变量，真会出现上述错误，因此修改如下
+export LD_LIBRARY_PATH=/usr/local/mpc-1.0.1/lib:/usr/local/gmp-5.1.2/lib:/usr/local/mpfr-3.1.2/lib
+
+装完以后设置如下
+
+export LD_LIBRARY_PATH=/usr/local/mpc-1.0.1/lib:/usr/local/gmp-5.1.2/lib:/usr/local/mpfr-3.1.2/lib:/usr/local/glibc-2.14/lib
+
+boost-1.54安装
+1.解压后，进入boost_1_53_0目录，执行：./bootstrap.sh
+##3.(重点)修改  tools/build/v2/user-config.jam文件，在最后面加上一行“using mpi ;”(注意mpi后面有个空格，然后一个分号 )
+2. 执行： ./b2
+3. 执行：sudo ./b2  install
+
+
+msgfmt gettext 
+makeinfo texinfo
+
+gperftools-2.1版本
+在运行boost时候需要上述的malloc库，因此需要安装
+在安装gperftools需要libunwind
+因此先安装libunwind-1.1
+./configure --prefix=/usr/ && make && make install
+
+gperftools安装
+./configure --prefix=/usr && make && make install
+
+
+在/etc/ld.so.conf中添加
+/usr/lib
+/usr/lib64
+/lib
+/lib64
+/usr/local/lib
+
+
+
+/etc/security/limits.d/90-nproc.conf
+
+
+
+
+
+
+
+

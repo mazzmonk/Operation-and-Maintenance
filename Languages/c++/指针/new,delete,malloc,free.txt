@@ -1,0 +1,148 @@
+malloc,free是C语言中用通用的方法
+new,delete是c++中用的方式
+
+==========================================
+
+int *p = (int *) malloc(sizeof(int));
+*p = 200;
+printf("*p is %d", *p);
+free(p);
+
+==========================================
+
+int *p = new int;
+*p = 200;
+std::cout << "*p = " << *p << std::endl;
+delete p;
+
+==========================================
+数组
+
+int *pa = new int[16];
+for (int i = p; i < 6; i++) {
+	pa[i] = i + 100;
+	std::cout << "pa[" << i << "] =" << pa[i] << std::endl;
+}
+delete [] pa;
+
+二维数组
+
+int (*pa2)[3] = new int[2][3];
+for (int i = 0; i < 2; i++) {
+	for (int j = 0; j < 3; j++) {
+		pa[i][j] = 168;
+		std::cout << "pa2[" << i << "]" << "[" << j << "] = " << pa2[i][j] << std::endl;
+	}
+}
+delete [] pa2;
+
+
+new,delete构造结构和销毁结构
+
+#include <iostream>
+
+int main(int argc, char* argv[]) {
+  struct student {
+    char name[20];
+    int socre;
+  };
+  student st1 = { "Peter", 89 };        //这里注意,不用写关键字struct,这是C++中的用法
+  student *st2 = &st1;
+
+  std::cout << "Student name: " << st1.name << std::endl;
+  std::cout << "C++ score: " << st1.socre << std::endl << std::endl;
+  std::cout << "Student name: " << st2->name << std::endl;
+  std::cout << "C++ score: " << st2->socre << std::endl;
+
+  student *pst = new student;                    
+  std::cout << "Student name: ";
+  std::cin >> pst->name;
+  std::cout << "C++ score: ";
+  std::cin >> pst->socre;
+
+  std::cout << "Student name: " << pst->name << std::endl;
+  std::cout << "C++ score: " << pst->socre << std::endl;
+  delete pst;
+  
+  return 0;
+}
+
+
+
+#include <iostream>
+
+class Myfirst {
+ private:
+  static int objnumber;
+  int wnt;
+  char *firstname;
+  char *lastname;
+  double average, num1, num2, total;
+ public:
+  Myfirst();
+  void input();
+  void output();
+  void process();
+  void pass();
+  ~Myfirst();
+};
+
+int Myfirst::objnumber = 0;
+
+Myfirst::Myfirst() {
+  firstname = new char[20];
+  lastname = new char[20];
+  total = average = 0;
+}
+
+Myfirst::~Myfirst() {
+  delete[] firstname;
+  delete[] lastname;
+  std::cout << "destructor time " << objnumber-- << " memory" << std::endl;
+
+}
+
+void Myfirst::input() {
+  std::cout << "This is the " << ++objnumber << std::endl;
+  std::cout << "input firstname: ";
+  std::cin >> firstname;
+  std::cout << "input lastname: ";
+  std::cin >> lastname;
+  std::cout << std::endl << "input C++ score!" << std::endl;
+  std::cout << "first score: ";
+  std::cin >> num1;
+  std::cout << "second score: ";
+  std::cin >> num2;
+
+  process();
+  output();
+  pass();
+}
+
+void Myfirst::process() {
+  total = num1 + num2;
+  average = total / 2.;
+}
+
+void Myfirst::output() {
+  std::cout << std::endl << "total = " << total << std::endl;
+  std::cout << "average = " << average << std::endl;
+}
+
+void Myfirst::pass() {
+  if (average >= 60)
+    std::cout << "passed" << std::endl << std::endl;
+  else
+    std::cout << "failed" << std::endl << std::endl;
+}
+
+int main(int argc, char* argv[]) {
+  Myfirst *myobj = new Myfirst[3];
+  for (int i = 0; i < 3; i++)
+    myobj[i].input();
+  delete [] myobj;
+
+  return 0;
+}
+
+ 

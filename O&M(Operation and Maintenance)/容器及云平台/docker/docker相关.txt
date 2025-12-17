@@ -1,0 +1,80 @@
+Docker run参考(7) – Restart策略(–restart)
+
+运行容器时使用–restart参数可以指定一个restart策略，来指示在退出时容器应该如何重启或不应该重启。
+当容器启用restart策略时，将会在docker ps显示Up或者Restarting状态。也可以使用docker events命令来生效中的restart策略。
+docker支持如下restart策略：
+
+no – 容器退出时不要自动重启。这个是默认值。
+on-failure[:max-retries] – 只在容器以非0状态码退出时重启。可选的，可以退出docker daemon尝试重启容器的次数。
+always – 不管退出状态码是什么始终重启容器。当指定always时，docker daemon将无限次数地重启容器。容器也会在daemon启动时尝试重启，不管容器当时的状态如何。
+unless-stopped – 不管退出状态码是什么始终重启容器，不过当daemon启动时，如果容器之前已经为停止状态，不要尝试启动它。
+在每次重启容器之前，不断地增加重启延迟[上一次重启的双倍延迟，从100毫秒开始]来防止影响服务器。这意味着daemon将等待100ms,然后200 ms, 400, 800, 1600等等，直到超过on-failure限制，或执行docker stop或docker rm -f。
+如果容器重启成功[容器启动后并运行至少10秒]，然后delay重置为默认的100ms。
+你可以使用on-failure策略指定docker尝试重启容器的最大次数。默认下docker将无限次数重启容器。可以通过docker inspect来查看已经尝试重启容器了多少次。例如，获取容器“my-container”的重启次数:
+
+$ docker inspect -f "{{ .RestartCount }}" my-container
+# 2
+或者获取上一次容器重启时间：
+
+$ docker inspect -f "{{ .State.StartedAt }}" my-container
+# 2015-03-04T23:47:07.691840179Z
+示例
+$ docker run --restart=always redis
+这运行了一个restart策略为always的redis容器，以使得容器退出时,docker将重启它。
+
+$ docker run --restart=on-failure:10 redis
+这个运行了一个restart策略为on-failure,最大重启次数为10的redis容器。如果redis以非0状态退出连续退出超过10次，那么docker将中断尝试重启这个容器。只有on-failure策略支持设置最大重启次数限制。
+
+
+---
+$ kubectl describe pod/kubernetes-dashboard-7d75c474bb-jr9qv -n kube-system
+详细描述pod kubernetes-dashboard-7d75c474bb-jr9qv在命令空间kube-system
+
+
+---
+docker对应版本为18.09
+
+docker 代理設定 
+
+1.创建docker服务插件目录
+sudo mkdir -p /etc/systemd/system/docker.service.d
+2.创建一个名为http-proxy.conf的文件
+sudo touch /etc/systemd/system/docker.service.d/http-proxy.conf 
+3.编辑http-proxy.conf的文件
+sudo vim /etc/systemd/system/docker.service.d/http-proxy.conf 
+4.写入内容(将代理ip和代理端口修改成你自己的)
+[Service]
+Environment="HTTP_PROXY=socks5://代理ip:代理端口/"
+5.重新加载服务程序的配置文件
+sudo systemctl daemon-reload
+6.重启docker
+sudo systemctl restart docker
+7.验证是否配置成功
+systemctl show --property=Environment docker
+
+
+此方式可以以root用户登录
+docker exec -u 0 -it a9f495be369e /bin/bash
+
+
+/etc/docker/daemon.json
+{
+  "exec-opts": ["native.cgroupdriver=cgroupfs"],
+  "insecure-registries": ["172.20.20.1:28080"]
+}
+
+参数设置,例子
+{
+  "bip": "192.168.1.5/24",
+  "fixed-cidr": "192.168.1.5/25",
+  "fixed-cidr-v6": "2001:db8::/64",
+  "mtu": 1500,
+  "default-gateway": "10.20.1.1",
+  "default-gateway-v6": "2001:db8:abcd::89",
+  "dns": ["10.20.1.2","10.20.1.3"]
+}
+
+
+
+
+

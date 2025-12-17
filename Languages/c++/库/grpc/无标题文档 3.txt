@@ -1,0 +1,67 @@
+Person类
+
+ // name
+  inline bool has_name() const;
+  inline void clear_name();
+  inline const ::std::string& name() const;
+  inline void set_name(const ::std::string& value);
+  inline void set_name(const char* value);
+  inline ::std::string* mutable_name();
+
+  // id
+  inline bool has_id() const;
+  inline void clear_id();
+  inline int32_t id() const;
+  inline void set_id(int32_t value);
+
+  // email
+  inline bool has_email() const;
+  inline void clear_email();
+  inline const ::std::string& email() const;
+  inline void set_email(const ::std::string& value);
+  inline void set_email(const char* value);
+  inline ::std::string* mutable_email();
+
+  // phones
+  inline int phones_size() const;
+  inline void clear_phones();
+  inline const ::google::protobuf::RepeatedPtrField< ::tutorial::Person_PhoneNumber >& phones() const;
+  inline ::google::protobuf::RepeatedPtrField< ::tutorial::Person_PhoneNumber >* mutable_phones();
+  inline const ::tutorial::Person_PhoneNumber& phones(int index) const;
+  inline ::tutorial::Person_PhoneNumber* mutable_phones(int index);
+  inline ::tutorial::Person_PhoneNumber* add_phones();
+
+
+
+生成的代码包括一个PhoneType与您的.proto枚举相对应的枚举.您可以将这种类型称为,Person::PhoneType并将其值称为Person::MOBILE,Person::HOME和Person::WORK
+
+
+注意GOOGLE_PROTOBUF_VERIFY_VERSION宏.优良作法-尽管并非绝对必要-在使用C ++协议缓冲区库之前执行此宏.它验证您是否没有意外地链接到与您使用其编译的标头版本不兼容的库版本.如果检测到版本不匹配,程序将中止.请注意,每个.pb.cc文件在启动时都会自动调用此宏.
+
+
+service Foo {
+  rpc Bar(FooRequest) returns(FooResponse);
+}
+
+对应的虚函数
+
+virtual void Bar(RpcController* controller, const FooRequest* request,
+                 FooResponse* response, Closure* done);
+
+
+
+4种类型的服务方法
+service RouteGuide {
+//简单的RPC,当client端用stub发送一个请求到服务器,并且等待响应返回,就像一个标准的函数调用
+  rpc GetFeature(Point) returns (Feature) {}
+
+//服务端流式RPC,当client段发送一个请求到服务器,服务端提供一个用于消息返回的流,client读取这个流,直到没有消息
+  rpc ListFeatures(Rectangle) returns (stream Feature) {}
+
+//客户端流式RPC,client端使用流方式写一个消息的序列,发送到服务端,当client完成写消息,等待服务器读取并返回响应
+  rpc RecordRoute(stream Point) returns (RouteSummary) {}
+
+//双向流式RPC,两端发送消息用的读-写流,两个流的操作相互独立,因此,客户端和服务器可以按照自己喜欢的顺序进行读写:例如,服务器可以在写入响应之前等待接收所有客户端消息,或者可以交替读取一条消息然后写入一条消息,或者以其他方式组合读取 并写.每个流中的消息顺序都会保留.
+  rpc RouteChat(stream RouteNote) returns (stream RouteNote) {}
+}
+

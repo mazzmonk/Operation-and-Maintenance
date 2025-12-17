@@ -1,0 +1,19 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: txxy-mysql
+  labels:
+    name: txxy-mysql
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        name: txxy-mysql
+    spec:
+      containers:
+      - name: txxy-mysql
+        image: 192.168.6.83:5000/tyyx/mysql:latest
+        ports:
+        - containerPort: 3306
+

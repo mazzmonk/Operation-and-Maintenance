@@ -1,0 +1,336 @@
+docker命令参数
+
+docker run -i -t centos:6.6 /bin/bash
+前台新建容器，基于image centos6.6，同时连接到容器的操作系统，同时会使用dhcp动态分配一个与docker0一个网段的ip，实际上docker0的地址是容器的网关地址，由于是前台执行，如果退出系统，则容器地址全部失效，并且退出后，容器变为stop状态。
+当使用run后添加--rm参数，则在容器结束以后，就会立即删除。和-d参数互斥
+-i 标志保证容器中STDIN是开启的
+-t 它告诉docker为要创建的容器分配一个伪tty终端
+
+
+
+docker attach id     
+上述容器退出以后，分配的ip地址失效，因此通过容器中的ssh服务连接，不可能了，所以用此命令可以重新连接上，但是连接上以后，容器又重新分配了ip。
+某些时候，使用上述命令以后会提示You cannot attach to a stopped container, start it first
+此时先执行
+docker start id
+启动，然后在执行上述命令
+
+-h HOSTNAME or --hostname=HOSTNAME 
+設定容器的主機名，它會被寫到容器內的 /etc/hostname 和 /etc/hosts。但它在容器外部看不到，既不會在 docker ps 中顯示，也不會在其他的容器的 /etc/hosts 看到。
+
+当一个container再启动时，在/etc/hosts文件里面将会存在包括localhost在内的一些hostname信息。我们也可以使用--add-host这个参数来动态添加/etc/hosts里面的数据。
+$ /docker run -ti --add-host db-static:86.75.30.9 ubuntu cat /etc/hosts
+172.17.0.22     09d03f76bf2c
+fe00::0         ip6-localnet
+ff00::0         ip6-mcastprefix
+ff02::1         ip6-allnodes
+ff02::2         ip6-allrouters
+127.0.0.1       localhost
+::1             localhost ip6-localhost ip6-loopback
+86.75.30.9      db-static
+
+显示所有的容器，包括未启动，启动的等等
+docker ps -a 
+
+显示最后创建的容器，包括没有启动的
+docker ps -l
+
+只显示容器ID
+docker ps -q
+
+#在运行状态的容器里启动一个bash（进入正在运行的容器）
+docker exec -it 0aa5de804331 /bin/bash
+
+导出(Export)
+Export命令用于持久化容器（不是镜像）。所以，我们就需要通过以下方法得到容器ID：
+sudo docker ps -a
+接着执行导出：
+sudo docker export <CONTAINER ID> > /home/export.tar
+
+保存(Save)
+Save命令用于持久化镜像（不是容器）。所以，我们就需要通过以下方法得到镜像名称：
+sudo docker images	
+接着执行保存：
+sudo docker save busybox-1 > /home/save.tar
+
+提交容器为镜像
+$ docker commit 3a09b2588478 mynewimage   //mynewimage是镜像名称
+
+可以使用 docker import 来导入一个容器快照到本地镜像库
+使也可以用 docker load 来导入镜像存储文件到本地镜像库
+
+这两者的区别在于容器快照文件将丢弃所有的历史记录和元数据信息（即仅保存容器当时的快照状态），而镜像存储文件将保存完整记录，体积也要大。此外，从容器快照文件导入时可以重新指定标签等元数据信息。
+
+***********************************************************************************************************************
+export和save区别
+现在开始导入刚刚导出的容器：
+# 导入export.tar文件
+cat /home/export.tar | sudo docker import - busybox-1-export:latest
+
+# 查看镜像
+sudo docker images
+
+# 检查是否导入成功，就是启动一个新容器，检查里面是否存在/home/test目录（是存在的）
+sudo docker run busybox-1-export [ -d /home/test ] && echo 'Directory found' || echo 'Directory not found'
+
+使用类似的步骤导入镜像：
+# 导入save.tar文件
+docker load < /home/save.tar
+
+# 查看镜像
+sudo docker images
+
+# 检查是否导入成功，就是启动一个新容器，检查里面是否存在/home/test目录（是存在的）
+sudo docker run busybox-1 [ -d /home/test ] && echo 'Directory found' || echo 'Directory not found'
+那，它们之间到底存在什么不同呢？我们发现导出后的版本会比原来的版本稍微小一些。那是因为导出后，会丢失历史和元数据。执行下面的命令就知道了：
+
+# 显示镜像的所有层(layer)
+sudo docker images --tree
+执行命令，显示下面的内容。正你看到的，导出后再导入(exported-imported)的镜像会丢失所有的历史，而保存后再加载（saveed-loaded）的镜像没有丢失历史和层(layer)。这意味着使用导出后再导入的方式，你将无法回滚到之前的层(layer)，同时，使用保存后再加载的方式持久化整个镜像，就可以做到层回滚（可以执行docker tag <LAYER ID> <IMAGE NAME>来回滚之前的层）。
+
+    vagrant@ubuntu-13:~$ sudo docker images --tree
+    ├─f502877df6a1 Virtual Size: 2.489 MB Tags: busybox-1-export:latest
+    └─511136ea3c5a Virtual Size: 0 B
+      └─bf747efa0e2f Virtual Size: 0 B
+        └─48e5f45168b9 Virtual Size: 2.489 MB
+          └─769b9341d937 Virtual Size: 2.489 MB
+            └─227516d93162 Virtual Size: 2.489 MB Tags: busybox-1:latest
+
+***********************************************************************************************************************
+
+例子：
+从正运行的容器导出到镜像
+docker export 0aa5de804331 > centos6.6_apache2.4.4.tar     //0aa5de804331 容器ID
+
+从压缩文件中导入到镜像
+cat centos6.6_apache2.4.4.tar |docker import - centos6.6:apache2.4.4
+
+如下是导入后的镜像
+REPOSITORY          TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
+centos6.6           apache2.4.4         4d71baaa7731        12 minutes ago      1.998 GB
+
+然后从上述镜像运行成容器
+docker run -dit centos6.6:apache2.4.4 /bin/bash
+
+如此可以做迁移或者复制到新的容器
+
+docker run --name daemon_dave -d ubuntu /bin/bash -c "while true;do echo hello world;sleep 1;done"
+-d 参数，docker会将容器到后台运行
+
+docker logs daemon_dave 获取容器日志
+docker logs -f daemon_dave 查看日志与tail -f命令类似
+docker logs --tail 10 daemon_dave 获取日志的最后10行内容
+docker logs --tail 0 -f daemon_dave 获取最新日志，不必读取整个日志文件
+
+docker top daemonk_dave 查看容器内的所有进程
+
+Docker1.3之后，可以通过docker exec命令在容器内部额外启动新进程。
+docker exec -d daemon_dave touch /etc/new_config_file
+-d 标志表明需要运行一个后台进程，指定的是要在内部执行这个命令的容器的名字以及要执行的命令
+
+docker exec -t -i daemon_dave /bin/bash
+这里的-t和-i标志为我们执行的进程创建了TTY并捕获STDIN。接着我们指定了要在内部执行这个命令的容器的名字以及要执行的命令。
+上述命令会在daemon_dave容器内创建一个新的bash会话。
+
+docker run --restart=always --name daemon_dave -d ubuntu /bin/bash -c "while true; do echo hello world; sleep 1;done"
+--restart 标志，让docker自动重新启动该容器。默认行为是Docker不会重启容器。当设置为always。无论容器的退出代码是什么，Docker都会自动重启该
+容器。除此之外，我们还可以将这个标志设为on-failure,这样，只有当容器的退出代码为非0值的时候，才会自动重启。另外，on-failure还接受一个可选的重启次数参数，--restart=on-failure:5，当容器退出代码为非0,docker会尝试自动重启该容器，最多重启5次。--restart标志是docker1.2.0引入的选项。
+
+docker inspect来获取更多的容器信息。
+docker inspect daemon_dave
+-f或者--format标志来选定查看结果
+docker inspect --format='{{ .State.Running }}' daemon_dave
+docker inspect --format '{{ .NetworkSettings.IPAddress }}' daemon_dave
+docker inspect --format '{{.Name}} {{.State.Running}}' daemon_dave bob_the_container 同时指定多个容器，并显示每个容器的输出结果
+docker rm `docker ps -a -q` 删除全部容器
+
+
+Docker Hub上镜像操作及相关docker镜像库操作
+docker search puppet 查找所有Docker Hub上公共的可用镜像
+
+1.提交容器到镜像
+先使用exit命令从容器里退出，之后再运行docker commit命令
+docker commit 4aab3ce3cb76 jamtur01/apache2
+docker commit命令中，指定了要提交的修改过的容器ID，以及一个目标镜像仓库和镜像名，这里是jamtru01/apache2，docker commit提交的只是创建容器的镜像与容器的当前状态之间有差异的部分。
+
+docker commit -m="A new custom image" --author="James Turnbull" 4aab3ce3cb76 jamtur01/apache2:webserver
+-m 选项用来制定新创建的镜像的提交信息。
+--author 选项列出该镜像的作者信息。
+后边接容器ID
+最后的jamtur01/apache2指定镜像的用户名和仓库名，并为该镜像增加了一个webserver标签
+
+
+
+
+docker容器设置静态地址
+pipework是docker的一个网络增强插件，链接如下：
+https://github.com/jpetazzo/pipework
+
+因为docker容器默认启动时候使用的是DHCP获得动态ip，为了设置静态地址，使用上述项目。
+如下基础设置
+#brctl addbr br0
+#ip link set dev br0 up
+#ip addr add 10.100.80.1/24 dev br0
+#pipework br0 contain_id 10.100.80.2/24
+使用上述过程后，就在容器中添加一个网卡，并且配置了10.100.80.2/24地址
+
+这里先建一个网桥br0,配置地址给br0,使用pipework为docker添加ip地址
+但是必须注意，必须不能和原来有的网桥地址段相同，否则将造成混乱，经测试。就是说原有网桥docker0及flannel0等不能和br0同网段。
+
+
+
+在json文件中定义的image
+
+Setup some environment variables
+
+gcloud config set compute/zone <your-cluster-zone>
+gcloud config set container/cluster <your-cluster-name>
+GCP_PROJECT=<your-project>
+GCR_NAMESPACE=${GCP_PROJECT//-/_}
+Tag your image
+
+docker tag <your-image> gcr.io/${GCR_NAMESPACE}/<your-image>
+Push your image
+
+gcloud preview docker push gcr.io/${GCR_NAMESPACE}/<your-image>
+Create a pod manifest for your container: my-pod.yaml
+
+id: my-pod
+kind: Pod
+apiVersion: v1beta1
+desiredState:
+  manifest:
+    version: v1beta1
+    containers:
+    - name: <container-name>
+      image:  gcr.io/<gcr_namespace>/<your-image>:<version>
+    ...
+Schedule this pod
+
+gcloud preview container pods create --config-file my-pod.yaml
+Repeat from 4. for each pod you want to run.
+
+
+
+###### docker日常操作命令 ######
+
+REPOSITORY          TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
+centos6.7           init                a3fe087cad80        11 days ago         1.816 GB
+上述是镜像名称
+
+docker run --name="xx" -dit -p 8002:8002 centos6.7:init /bin/bash   //xx指容器名称 外部端口:内部端口 (将外部接口8002端口映射到容器的8002端口)
+
+本质是在防火墙上做了一个端口映射，如下：
+注意：当删除上述的容器以后，相应的防火墙策略也会消失
+
+[root@BJ-YZ-103R-81-97 ~]# iptables -nL
+Chain INPUT (policy ACCEPT)
+target     prot opt source               destination         
+
+Chain FORWARD (policy ACCEPT)
+target     prot opt source               destination         
+DOCKER     all  --  0.0.0.0/0            0.0.0.0/0           
+ACCEPT     all  --  0.0.0.0/0            0.0.0.0/0           ctstate RELATED,ESTABLISHED 
+ACCEPT     all  --  0.0.0.0/0            0.0.0.0/0           
+
+Chain OUTPUT (policy ACCEPT)
+target     prot opt source               destination         
+
+Chain DOCKER (1 references)
+target     prot opt source               destination         
+ACCEPT     tcp  --  0.0.0.0/0            192.168.78.7        tcp dpt:8002                       //这里添加的内容
+
+[root@BJ-YZ-103R-81-97 ~]# iptables -nL -t nat
+Chain PREROUTING (policy ACCEPT)
+target     prot opt source               destination         
+DOCKER     all  --  0.0.0.0/0            0.0.0.0/0           ADDRTYPE match dst-type LOCAL 
+
+Chain POSTROUTING (policy ACCEPT)
+target     prot opt source               destination         
+MASQUERADE  all  --  192.168.78.0/24      0.0.0.0/0           
+MASQUERADE  tcp  --  192.168.78.7         192.168.78.7        tcp dpt:8002                      //这里添加的内容
+
+Chain OUTPUT (policy ACCEPT)
+target     prot opt source               destination         
+DOCKER     all  --  0.0.0.0/0           !127.0.0.0/8         ADDRTYPE match dst-type LOCAL 
+
+Chain DOCKER (2 references)
+target     prot opt source               destination         
+DNAT       tcp  --  0.0.0.0/0            0.0.0.0/0           tcp dpt:8002 to:192.168.78.7:8002   //这里添加的内容
+ 
+
+删除以后
+
+[root@BJ-YZ-103R-81-97 ~]# iptables -nL
+Chain INPUT (policy ACCEPT)
+target     prot opt source               destination         
+
+Chain FORWARD (policy ACCEPT)
+target     prot opt source               destination         
+DOCKER     all  --  0.0.0.0/0            0.0.0.0/0           
+ACCEPT     all  --  0.0.0.0/0            0.0.0.0/0           ctstate RELATED,ESTABLISHED 
+ACCEPT     all  --  0.0.0.0/0            0.0.0.0/0           
+
+Chain OUTPUT (policy ACCEPT)
+target     prot opt source               destination         
+
+Chain DOCKER (1 references)
+target     prot opt source               destination     
+    
+[root@BJ-YZ-103R-81-97 ~]# iptables -nL -t nat
+Chain PREROUTING (policy ACCEPT)
+target     prot opt source               destination         
+DOCKER     all  --  0.0.0.0/0            0.0.0.0/0           ADDRTYPE match dst-type LOCAL 
+
+Chain POSTROUTING (policy ACCEPT)
+target     prot opt source               destination         
+MASQUERADE  all  --  192.168.78.0/24      0.0.0.0/0           
+
+Chain OUTPUT (policy ACCEPT)
+target     prot opt source               destination         
+DOCKER     all  --  0.0.0.0/0           !127.0.0.0/8         ADDRTYPE match dst-type LOCAL 
+
+Chain DOCKER (2 references)
+target     prot opt source               destination         
+
+
+这里之所以用端口映射的方式，是因为网络受到限制，在多台物理机之间自定义的网桥无法通讯，所以采用如此方式
+由于在多台物理机上使用同一个网段，每台机器上都使用DHCP,就可能出现ip冲突，因为每台物理都都是一个dhcp服务器，并且都分发同一个网段的地址
+
+最后使用每台机器一个独立网段的方式，如下：
+172.16.1.0/24
+172.16.2.0/24
+172.16.3.0/24 
+...
+如此
+
+*************************************************
+docker run --name="tomcat-cc" -dit -p 8002:8002 centos6.7:init /bin/bash
+docker run --name="tomcat-co" -dit -p 8012:8012 centos6.7:init /bin/bash
+docker run --name="tomcat-cv" -dit -p 8022:8022 centos6.7:init /bin/bash
+docker run --name="tomcat-itfc" -dit -p 8032:8032 centos6.7:init /bin/bash
+docker run --name="tomcat-shhebao" -dit -p 8042:8042 centos6.7:init /bin/bash
+docker run --name="wx_game_management" -dit -p 8052:8052 centos6.7:init /bin/bash
+docker run --name="wx_game_portal" -dit -p 8062:8062 centos6.7:init /bin/bash
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

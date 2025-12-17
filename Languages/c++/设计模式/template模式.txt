@@ -1,0 +1,91 @@
+/* template.h */
+class AbstractClass {
+ public:
+  virtual ~AbstractClass();
+  void TemplateMethod();
+
+ protected:
+  virtual void PrimitiveOperation1() = 0;
+  virtual void PrimitiveOperation2() = 0;
+  AbstractClass();
+};
+
+class ConcreteClass1 : public AbstractClass {
+ public:
+  ConcreteClass1();
+  ~ConcreteClass1();
+
+ protected:
+  void PrimitiveOperation1();
+  void PrimitiveOperation2();
+};
+
+class ConcreteClass2 : public AbstractClass {
+ public:
+  ConcreteClass2();
+  ~ConcreteClass2();
+
+ protected:
+  void PrimitiveOperation1();
+  void PrimitiveOperation2();
+};
+
+
+/* template.cc */
+#include "template.h"
+#include <iostream>
+
+AbstractClass::AbstractClass() {
+}
+
+AbstractClass::~AbstractClass() {
+}
+
+void AbstractClass::TemplateMethod() {
+  this->PrimitiveOperation1();
+  this->PrimitiveOperation2();
+}
+
+ConcreteClass1::ConcreteClass1() {
+}
+
+ConcreteClass1::~ConcreteClass1() {
+}
+
+void ConcreteClass1::PrimitiveOperation1() {
+  std::cout << "ConcreteClass1... PrimitiveOperation1" << std::endl;
+}
+
+void ConcreteClass1::PrimitiveOperation2() {
+  std::cout << "ConcreteClass1... PrimitiveOperation2" << std::endl;
+}
+
+ConcreteClass2::ConcreteClass2() {
+}
+
+ConcreteClass2::~ConcreteClass2() {
+}
+
+void ConcreteClass2::PrimitiveOperation1() {
+  std::cout << "ConcreteClass2... PrimitiveOperation1" << std::endl;
+}
+
+void ConcreteClass2::PrimitiveOperation2() {
+  std::cout << "ConcreteClass2... PrimitiveOperation2" << std::endl;
+}
+
+/* main.cc */
+#include "template.h"
+
+int main(int argc, char* argv[]) {
+  AbstractClass* p1 = new ConcreteClass1();
+  AbstractClass* p2 = new ConcreteClass2();
+  p1->TemplateMethod();
+  p2->TemplateMethod();
+  return 0;
+}
+
+这种用法比较奇特,接口在基类中,具体的实现在子类中,接口指针指向子类.
+Template是采用继承的方式实现算法的异构,其关键点就是将通用算法封装在抽象基类中,并将不同的算法细节放到子类中实现。
+Template 模式获得一种反向控制结构效果,这也是面向对象系统的分析和设计中一个原则 DIP(依赖倒置:Dependency Inversion Principles).其含义就是父类调用子类的操作(高层模块调用低层模块的操作),低层模块实现高层模块声明的接口。这样控制权在父类(高层模块),低层模块反而要依赖高层模块。
+

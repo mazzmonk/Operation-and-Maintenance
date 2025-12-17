@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: txxy-memcached
+  labels:
+    name: txxy-memcached
+spec:
+  ports:
+  - port: 11211
+    targetPort: 11211
+  selector:
+    name: txxy-memcached

@@ -1,0 +1,52 @@
+# FILENAME:GLOBAL-ENV
+# set Environment Variable to be used to k8s,etcd,flannel,docker 
+###################################################################
+
+# Be used to master and slave
+
+# HOME目录
+export HOME_PATH="/home/blue"
+
+# 本地地址,必须是有网关的地址
+export LOCAL_IPADDRESS="192.168.10.15"
+
+# kubernetes路径
+export KUBERNETES_PREFIX="$HOME_PATH/apps/kubernetes"
+
+# 证书,密钥文件路径 
+export CERTIFICATE_PATH="$KUBERNETES_PREFIX/certificate"
+ 
+# k8s master端地址
+export KUBE_MASTER_IP="192.168.10.15"
+
+# kube-dns地址,必须唯一
+export KUBE_DNS="192.168.10.15"
+
+# etcd节点1地址
+export ETCD_NODE01_IPADDRESS="192.168.10.15"
+
+# etcd节点2地址
+export ETCD_NODE02_IPADDRESS="192.168.10.51"
+
+# etcd节点3地址
+export ETCD_NODE03_IPADDRESS="192.168.10.52"
+
+# 集群用域名,用kube-dns解析,自定义
+export CLUSTER_DOMAIN="mycluster.net"
+
+# 进程用户
+export USERNAME="blue"
+
+# Only used to slave
+
+# 镜像私有库地址
+export REGISTRY_IPADDRESS="192.168.10.52"
+
+# Only used to etcd 
+
+# etcd节点名称,不用修改
+export ETCD_NODE01="etcd01"
+export ETCD_NODE02="etcd02"
+export ETCD_NODE03="etcd03"
+
+

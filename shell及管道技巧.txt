@@ -1,0 +1,214 @@
+* 记录shell活动
+使用 script 命令
+--------------------------------------------------------------------------------------
+$ script
+Script started, file is typescript
+... do whatever ...
+Ctrl-D
+$ col -bx <typescript >savefile
+$ vi savefile
+
+还可使用下面的方法:
+--------------------------------------------------------------------------------------
+$ bash -i 2>&1 | tee typescript
+
+
+* 分割大文件
+--------------------------------------------------------------------------------------
+$ split -b 650m file   # 将大文件分块成多个650MB的小文件
+$ cat x* >largefile    # 将所有小文件合并成一个大文件
+
+
+* 象 Bash 这种 Shell 也能够用来分析这种文件:
+--------------------------------------------------------------------------------------
+$ while read first last month year; do 
+echo $month
+done <DPL
+... 跟第一个 Awk 例子有相同的输出
+
+在这里,read 内建命令使用字符 $IFS (internal field separators 内部列分隔符)来将行分开为单词.
+如果你改变 IFS 为 ":",你能够用 shell 漂亮的分析 /etc/passwd:
+--------------------------------------------------------------------------------------
+$ oldIFS="$IFS"   # 保存旧值
+$ IFS=":"
+$ while read user password uid gid rest_of_line; do
+if [ "$user" === "osamu" ]; then 
+echo "$user's ID is $uid"
+fi
+done < /etc/passwd
+osamu's ID is 1001
+$ IFS="$oldIFS"   # 恢复旧值
+--------------------------------------------------------------------------------------
+(如果使用 Awk 作同样的事情,使用 FS=":" 来设置列分隔符.)
+
+shell 也使用 IFS 来分开参数扩展、命令替换和算术扩展的结果集. 但在被单引号或双引号引用的单词内,不会发生这种情况. 默认的 IFS 值是: <space>、 <tab> 和 <newline> .
+
+请小心使用这个 shell IFS 技巧. 当 shell 解释部分脚本作为它的输入时,奇怪的事情将会发生.
+--------------------------------------------------------------------------------------
+$ IFS=":,"                        # 使用 ":" 和 "," 作为 IFS
+$ echo IFS=$IFS,   IFS="$IFS"     # echo 是 Bash 内建的
+IFS==  , IFS=:,
+$ date -R                         # 只是一个命令输出
+Sat, 23 Aug 2003 08:30:15 +0200
+$ echo $(date -R)                 # 子 shell --> 输入到主 shell
+Sat  23 Aug 2003 08 30 36 +0200
+$ unset IFS                       # 重设 IFS 为默认的
+$ echo $(date -R)
+Sat, 23 Aug 2003 08:30:50 +0200
+
+精巧的管道命令辅助脚本
+* 下列脚本做为管道的一部分十分有用.
+--------------------------------------------------------------------------------------
+find /usr | egrep -v "/usr/var|/usr/tmp|/usr/local"
+# 查找 /usr 下的所有文件,排除某些文件
+xargs -n 1 command   # 将所有项作为标准输入来执行命令 - 非常强大,可以将前面的命令输出作为后一个command的参数,比如:awk -F":" '{print $1}' /etc/passwd |xargs -n 1 echo > /tmp/a.log  # 命令会将文件的里的用户名写入到a.log文件中
+xargs -n 1 echo |    # 将空格隔离的项分开为行
+xargs echo      |    # 合并所有的行到一行里面
+grep -e pattern|     # 提取含有 pattern 的行
+cut -d: -f3 -|
+# 提取用 : 分开的第 3 列(比如说 passwd 文件)
+awk '{ print $3 }' | # 提取用空格分开的第 3 列
+awk -F'\t' '{ print $3 }' |
+# 提取用 tab 分开的第 3 列
+col -bx |            # 删除退格键,扩展 tab 为空格
+expand -|            # 扩展 tab
+sort -u|             # 排序并删除重复行
+
+tr '\n' ' '|         # 将多行连接为一行
+tr '\r' ''|          # 删除 CR
+tr 'A-Z' 'a-z'|      # 转化大写字母为小写
+sed 's/^/# /'|       # 将每行变为注释
+sed 's/\.ext//g'|    # 删除 .ext
+sed  -n -e 2p|       # 显示第 2 行
+head -n 2 -|         # 显示头两行
+tail -n 2 -|         # 显示最后两行
+
+
+* find 和 xargs 结合:
+find . -type f -maxdepth 1 -name '*.ext' -print0 | \
+xargs -0 -n 1 command 
+
+加 -exec 选项的 find 和一个命令结合:
+find . -type f -maxdepth 1 -name '*.ext' \
+-exec command '{}' \;
+
+加 -exec 选项的 find 和一个短的 shell 脚本结合:
+find . -type f -maxdepth 1 -name '*.ext' \
+-exec sh -c "command '{}' && echo 'successful'" \;
+
+
+* 清空文件内容
+要清空某些文件如日志文件的内容,千万不要使用rm删除文件然后再创建一个新的空文件,因为在两次操作的间隔,系统可能需要访问该文件.下面是清空文件内容的安全方法:
+$ :>file-to-be-cleared 
+
+* rm /etc/passwd
+由于你的过失,丢失象 /etc/passwd 这样的重要文件,是一件非常痛苦的事.Ubuntu 系统周期性的将他们备份到 /var/backups/. 当你恢复这些文件的时候,你需要设置适当的权限.
+
+# cp /var/backups/passwd /etc/passwd
+# chmod 644 /etc/passwd
+
+* 使用 xargs ( 或 parallel).他们非常给力.注意到你可以控制每行参数个数(-L)和最大并行数(-P).如果你不确定它们是否会按你想的那样工作,先使用 xargs echo 查看一下.此外,使用 -I{} 会很方便.例如:
+
+find . -name '*.py' | xargs grep some_function
+cat hosts | xargs -I{} ssh root@{} hostname			# ssh到远程执行hostname命令
+
+* 使用 netstat -lntp 或 ss -plat 检查哪些进程在监听端口(默认是检查 TCP 端口; 添加参数 -u 则检查 UDP 端口)或者 lsof -iTCP -sTCP:LISTEN -P -n
+
+* 当变量和文件名中包含空格的时候要格外小心.Bash 变量要用引号括起来,比如 "$FOO".尽量使用 -0 或 -print0 选项以便用 NULL 来分隔文件名,例如 locate -0 pattern | xargs -0 ls -al 或 find / -print0 -type d | xargs -0 ls -al. 如果 for 循环中循环访问的文件名含有空字符(空格、tab 等字符),只需用 IFS=$'\n' 把内部字段分隔符设为换行符
+
+* 在 Bash 脚本中,使用 set -x 去调试输出(或者使用它的变体 set -v,它会记录原始输入,包括多余的参数和注释).尽可能地使用严格模式:使用 set -e 令脚本在发生错误时退出而不是继续运行；使用 set -u 来检查是否使用了未赋值的变量；试试 set -o pipefail,它可以监测管道中的错误.当牵扯到很多脚本时,使用 trap 来检测 ERR 和 EXIT.一个好的习惯是在脚本文件开头这样写,这会使它能够检测一些错误,并在错误发生时中断程序并输出信息:
+
+set -euo pipefail
+trap "echo 'error: Script failed: see failed command above'" ERR
+
+* 在 Bash 中,变量有许多的扩展方式.${name:?error message} 用于检查变量是否存在.此外,当 Bash 脚本只需要一个参数时,可以使用这样的代码 input_file=${1:?usage: $0 input_file}.在变量为空时使用默认值:${name:-default}.如果你要在之前的例子中再加一个(可选的)参数,可以使用类似这样的代码 output_file=${2:-logfile},如果省略了 $2,它的值就为空,于是 output_file 就会被设为 logfile.数学表达式:i=$(( (i + 1) % 5 )).序列:{1..10}.截断字符串:${var%suffix} 和 ${var#prefix}.例如,假设 var=foo.pdf,那么 echo ${var%.pdf}.txt 将输出 foo.txt.
+
+* 通过使用 <(some command) 可以将输出视为文件。例如，对比本地文件 /etc/hosts 和一个远程文件：
+diff /etc/hosts <(ssh somehost cat /etc/hosts)
+
+
+
+* 
+--------------------------------------------------------------------------------------
+expr：计算表达式或正则匹配
+m4：简单的宏处理器
+yes：多次打印字符串
+cal：漂亮的日历
+env：执行一个命令（脚本文件中很有用）
+printenv：打印环境变量（调试时或在写脚本文件时很有用）
+look：查找以特定字符串开头的单词或行
+cut，paste 和 join：数据修改
+fmt：格式化文本段落
+pr：将文本格式化成页／列形式
+fold：包裹文本中的几行
+column：将文本格式化成多个对齐、定宽的列或表格
+expand 和 unexpand：制表符与空格之间转换
+nl：添加行号
+seq：打印数字
+bc：计算器
+factor：分解因数
+gpg：加密并签名文件
+toe：terminfo 入口列表
+nc：网络调试及数据传输
+socat：套接字代理，与 netcat 类似
+slurm：网络流量可视化
+dd：文件或设备间传输数据
+file：确定文件类型
+tree：以树的形式显示路径和文件，类似于递归的 ls
+stat：文件信息
+time：执行命令，并计算执行时间
+timeout：在指定时长范围内执行命令，并在规定时间结束后停止进程
+lockfile：使文件只能通过 rm -f 移除
+logrotate： 切换、压缩以及发送日志文件
+watch：重复运行同一个命令，展示结果并／或高亮有更改的部分
+when-changed：当检测到文件更改时执行指定命令。参阅 inotifywait 和 entr。
+tac：反向输出文件
+shuf：文件中随机选取几行
+comm：一行一行的比较排序过的文件
+strings：从二进制文件中抽取文本
+tr：转换字母
+iconv 或 uconv：文本编码转换
+split 和 csplit：分割文件
+sponge：在写入前读取所有输入，在读取文件后再向同一文件写入时比较有用，例如 grep -v something some-file | sponge some-file
+units：将一种计量单位转换为另一种等效的计量单位（参阅 /usr/share/units/definitions.units）
+apg：随机生成密码
+xz：高比例的文件压缩
+ldd：动态库信息
+nm：提取 obj 文件中的符号
+ab 或 wrk：web 服务器性能分析
+strace：调试系统调用
+mtr：更好的网络调试跟踪工具
+cssh：可视化的并发 shell
+rsync：通过 ssh 或本地文件系统同步文件和文件夹
+wireshark 和 tshark：抓包和网络调试工具
+ngrep：网络层的 grep
+host 和 dig：DNS 查找
+lsof：列出当前系统打开文件的工具以及查看端口信息
+dstat：系统状态查看
+glances：高层次的多子系统总览
+iostat：硬盘使用状态
+mpstat： CPU 使用状态
+vmstat： 内存使用状态
+htop：top 的加强版
+last：登入记录
+w：查看处于登录状态的用户
+id：用户/组 ID 信息
+sar：系统历史数据
+iftop 或 nethogs：套接字及进程的网络利用情况
+ss：套接字数据
+dmesg：引导及系统错误信息
+sysctl： 在内核运行时动态地查看和修改内核的运行参数
+hdparm：SATA/ATA 磁盘更改及性能分析
+lsblk：列出块设备信息：以树形展示你的磁盘以及磁盘分区信息
+lshw，lscpu，lspci，lsusb 和 dmidecode：查看硬件信息，包括 CPU、BIOS、RAID、显卡、USB设备等
+lsmod 和 modinfo：列出内核模块，并显示其细节
+fortune，ddate 和 sl：额，这主要取决于你是否认为蒸汽火车和莫名其妙的名人名言是否“有用”
+-------------------------------------------------------------------------------------
+
+
+# 在/tmp目录下生成一个以tmp开头接5位随机字符的目录或者文件,比如:tmp.K7AdI
+# -d 表示目录,-t表示在/tmp目录,如果没有-t则在当前目录下生成目录和文件
+# 这个命令只是在最后一个段生成随机的目录或者名称
+mktemp -d -t tmp.XXXXX
+
+

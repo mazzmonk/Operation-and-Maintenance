@@ -1,0 +1,105 @@
+Kubernetes需要PKI进行以下操作：
+# Client certificates for the kubelet to authenticate to the API server
+* 到apiserver进行身份验证的kubelet的客户端证书 (用于在kubelet端,kubelet做为客户端)
+# Server certificate for the API server endpoint
+* apiserver端点的服务器证书						
+# Client certificates for administrators of the cluster to authenticate to the API server					
+* 群集管理员的客户端证书,以向apiserver进行身份验证	
+# Client certificates for the API server to talk to the kubelets
+* apiserver的客户端证书与kubelet通信(用于在apiserver端,apiserver做为客户端)
+# Client certificate for the API server to talk to etcd
+* 要与etcd通信的apiserver的客户端证书
+# Client certificate/kubeconfig for the controller manager to talk to the API server
+* 客户端 证书/kubeconfig文件,供controller manager与apiserver通信
+# Client certificate/kubeconfig for the scheduler to talk to the API server.
+* 客户端 证书/kubeconfig,供scheduler与apiserver通信
+# Client and server certificates for the front-proxy
+* 前端代理的客户端和服务器证书
+
+注意： front-proxy仅当您运行kube-proxy以支持扩展API服务器时才需要证书
+etcd还实现了相互TLS来验证客户端和对等端
+
+存储证书的地方
+如果使用kubeadm安装Kubernetes,则会存储证书/etc/kubernetes/pki
+
+如下是pki目录中的证书列表
+pki/
+├── apiserver-etcd-client.crt
+├── apiserver-etcd-client.key
+├── apiserver-kubelet-client.crt
+├── apiserver-kubelet-client.key
+├── apiserver.crt
+├── apiserver.key
+├── ca.crt
+├── ca.key
+├── etcd
+│   ├── ca.crt
+│   ├── ca.key
+│   ├── healthcheck-client.crt
+│   ├── healthcheck-client.key
+│   ├── peer.crt
+│   ├── peer.key
+│   ├── server.crt
+│   └── server.key
+├── front-proxy-ca.crt
+├── front-proxy-ca.key
+├── front-proxy-client.crt
+├── front-proxy-client.key
+├── sa.key
+└── sa.pub
+
+手动配置证书
+
+您可以创建由管理员控制的单个根CA. 然后,此根CA可以创建多个中间CA,并将所有进一步的创建委托给Kubernetes本身
+path									Default CN											description
+------------------------------------------------------------------------------------------------------------------------------------------------------------
+ca.crt,key							kubernetes-ca									Kubernetes general CA
+etcd/ca.crt,key					etcd-ca												For all etcd-related functions (适用于所有与etcd相关的功能)
+front-proxy-ca.crt,key		kubernetes-front-proxy-ca				For the front-end proxy
+------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+全部的证书
+Default CN													Parent CA											O (in Subject)			kind								hosts (SAN)
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+kube-etcd													etcd-ca																					server, client					localhost, 127.0.0.1
+kube-etcd-peer											etcd-ca																					server, client					<hostname>, <Host_IP>, localhost, 127.0.0.1
+kube-etcd-healthcheck-client				etcd-ca																					client	
+kube-apiserver-etcd-client						etcd-ca												system:masters		client	
+kube-apiserver											kubernetes-ca																		server								<hostname>, <Host_IP>, <advertise_IP>, [1]
+kube-apiserver-kubelet-client				kubernetes-ca									system:masters		client	
+front-proxy-client										kubernetes-front-proxy-ca													client	
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+[1]: kubernetes, kubernetes.default, kubernetes.default.svc, kubernetes.default.svc.cluster, kubernetes.default.svc.cluster.local
+
+证书路径
+Default CN										recommended(推荐) key path		recommended cert path				command					key argument					cert argument
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+etcd-ca																										etcd/ca.crt										kube-apiserver														–etcd-cafile
+etcd-client										apiserver-etcd-client.key				apiserver-etcd-client.crt				kube-apiserver			–etcd-keyfile						–etcd-certfile
+kubernetes-ca																							ca.crt												kube-apiserver														–client-ca-file
+kube-apiserver								apiserver.key									apiserver.crt									kube-apiserver			–tls-private-key-file			–tls-cert-file
+apiserver-kubelet-client																			apiserver-kubelet-client.crt		kube-apiserver														–kubelet-client-certificate
+front-proxy-ca																							front-proxy-ca.crt							kube-apiserver														–requestheader-client-ca-file
+front-proxy-client							front-proxy-client.key						front-proxy-client.crt					kube-apiserver			–proxy-client-key-file		–proxy-client-cert-file
+etcd-ca																										etcd/ca.crt										etcd																			–trusted-ca-file, –peer-trusted-ca-file
+kube-etcd										etcd/server.key									etcd/server.crt								etcd								–key-file								–cert-file
+kube-etcd-peer								etcd/peer.key									etcd/peer.crt									etcd								–peer-key-file					–peer-cert-file
+etcd-ca																										etcd/ca.crt										etcdctl[2]																–cacert
+kube-etcd-healthcheck-client	etcd/healthcheck-client.key			etcd/healthcheck-client.crt		etcdctl[2]					–key									–cert
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+[2]: For a liveness probe, if self-hosted
+
+管理员帐户及服务账户
+这些文件默认与pki目录同级
+
+filename									credential name							Default CN														O (in Subject)
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+admin.conf							default-admin								kubernetes-admin										system:masters
+kubelet.conf							default-auth									system:node:<nodeName> (see note)		system:nodes
+controller-manager.conf		default-controller-manager		system:kube-controller-manager	
+scheduler.conf						default-manager							system:kube-scheduler	
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+注意：<nodeName> for kubelet.conf的值必须与kubelet在向apiserver注册时提供的节点名称的值精确匹配
+
+
+

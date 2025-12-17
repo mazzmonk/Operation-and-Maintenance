@@ -1,0 +1,72 @@
+/* facade.h */
+
+class Subsystem1 {
+ public:
+  Subsystem1() {
+  }
+  ~Subsystem1() {
+  }
+  void Operation();
+};
+
+class Subsystem2 {
+ public:
+  Subsystem2() {
+  }
+  ~Subsystem2() {
+  }
+  void Operation();
+};
+
+class Facade {
+ public:
+  Facade();
+  ~Facade();
+  void OperationWrapper();
+
+ private:
+  Subsystem1* _subs1;
+  Subsystem2* _subs2;
+};
+
+
+/* facade.cc */
+
+#include "facade.h"
+#include <iostream>
+
+void Subsystem1::Operation() {
+  std::cout << "Subsystem1 operation..." << std::endl;
+}
+
+void Subsystem2::Operation() {
+  std::cout << "Subsystem2 operation..." << std::endl;
+}
+
+Facade::Facade() {
+  this->_subs1 = new Subsystem1();
+  this->_subs2 = new Subsystem2();
+}
+
+Facade::~Facade() {
+  delete _subs1;
+  delete _subs2;
+}
+
+void Facade::OperationWrapper() {
+  this->_subs1->Operation();
+  this->_subs2->Operation();
+}
+
+#include "facade.h"
+#include <iostream>
+
+int main(int argc, char* argv[]) {
+  Facade *f = new Facade();
+  f->OperationWrapper();
+  return 0;
+}
+
+在类中对子类操作,所有的操作都在facade中进行,具体的操作在子类中进行.
+
+

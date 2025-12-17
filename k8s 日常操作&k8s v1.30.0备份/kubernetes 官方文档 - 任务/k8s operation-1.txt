@@ -1,0 +1,2857 @@
+索引:
+----------------------------------------------------------------------------------------------------------------
+第一部分(1/16)
+
+### 版本信息
+以下的操作测试基于如下版本:
+docker.io/calico/cni:v3.28.0
+docker.io/calico/kube-controllers:v3.28.0
+docker.io/calico/node:v3.28.0
+registry.k8s.io/coredns/coredns:v1.11.1
+registry.k8s.io/etcd:3.5.12-0
+registry.k8s.io/kube-apiserver:v1.30.0
+registry.k8s.io/kube-controller-manager:v1.30.0
+registry.k8s.io/kube-proxy:v1.30.0
+registry.k8s.io/kube-scheduler:v1.30.0
+registry.k8s.io/metrics-server/metrics-server:v0.7.1
+registry.k8s.io/pause:3.9
+
+使用 kubeadm 方式安装部署
+
+# 管理集群
+## 用 kubeadm 进行管理 - 重要
+实现细节参考: 重要
+https://kubernetes.io/zh-cn/docs/reference/setup-tools/kubeadm/implementation-details/#save-the-kubeadm-clusterconfiguration-in-a-configmap-for-later-reference
+### 使用 kubeadm 进行证书管理
+* 使用 check-expiration 子命令来检查证书何时过期
+$ kubeadm certs check-expiration
+
+说明:
+1.该命令显示 /etc/kubernetes/pki 文件夹中的客户端证书以及 kubeadm(admin.conf、controller-manager.conf 和 scheduler.conf) 使用的 kubeconfig 文件中嵌入的客户端证书的到期时间/剩余时间.
+另外,kubeadm 会通知用户证书是否由外部管理; 在这种情况下,用户应该小心的手动/使用其他工具来管理证书更新.
+2.上面的列表中没有包含 kubelet.conf,因为 kubeadm 将 kubelet 配置为自动更新证书.轮换的证书位于目录 /var/lib/kubelet/pki.
+kubeadm 会在控制面升级的时候更新所有证书.
+3.kubeadm 会在控制面升级的时候更新所有证书.这个功能旨在解决最简单的用例;如果你对此类证书的更新没有特殊要求,并且定期执行 Kubernetes 版本升级(每次升级之间的间隔时间少于 1 年),则 kubeadm 将确保你的集群保持最新状态并保持合理的安全性.
+
+* 手动更新证书
+你能随时通过 kubeadm certs renew 命令手动更新你的证书,只需带上合适的命令行选项.
+
+此命令用 CA(或者 front-proxy-CA)证书和存储在 /etc/kubernetes/pki 中的密钥执行更新.
+
+执行完此命令之后你需要重启控制面 Pod.因为动态证书重载目前还不被所有组件和证书支持,所有这项操作是必须的.静态 Pod 是被本地 kubelet 而不是 API 服务器管理,所以 kubectl 不能用来删除或重启他们.要重启静态 Pod 你可以临时将清单文件从 /etc/kubernetes/manifests/ 移除并等待 20 秒 (参考 KubeletConfiguration 结构中的 fileCheckFrequency 值).如果 Pod 不在清单目录里,kubelet 将会终止它.在另一个 fileCheckFrequency 周期之后你可以将文件移回去,kubelet 可以完成 Pod 的重建,而组件的证书更新操作也得以完成.
+
+警告:
+如果你运行了一个 HA 集群,这个命令需要在所有控制面板节点上执行.
+
+说明:
+1.certs renew 使用现有的证书作为属性(Common Name、Organization、SAN 等)的权威来源,而不是 kubeadm-config ConfigMap.强烈建议使它们保持同步.
+
+kubeadm certs renew 可以更新任何特定的证书,或者使用子命令 all 更新所有的证书,如下所示:
+$ kubeadm certs renew all
+
+并且更新完成以后需要重启所有控制面板的 kube-apiserver,kube-controller-manager,kube-scheduler and etcd
+
+2.为了在更新 admin.conf 后更新 $ HOME/.kube/config 的内容,你必须运行以下命令:
+$ sudo cp -i /etc/kubernetes/admin.conf $ HOME/.kube/config
+$ sudo chown $ (id -u):$ (id -g) $ HOME/.kube/config
+
+### 配置 cgroup 驱动
+* 迁移到 systemd 驱动
+要将现有 kubeadm 集群的 cgroup 驱动从 cgroupfs 就地升级为 systemd,需要执行一个与 kubelet 升级类似的过程.
+该过程必须包含下面两个步骤:
+
+说明:还有一种方法,可以用已配置了 systemd 的新节点替换掉集群中的老节点.按这种方法,在加入新节点、确保工作负载可以安全迁移到新节点、及至删除旧节点这一系列操作之前,只需执行以下第一个步骤.
+
+1.修改 kubelet 的 ConfigMap
+ * 运行 kubectl edit cm kubelet-config -n kube-system.
+ * 修改现有 cgroupDriver 的值,或者新增如下式样的字段:
+   cgroupDriver:systemd
+        该字段必须出现在 ConfigMap 的 kubelet: 小节下.
+
+2.更新所有节点的 cgroup 驱动
+对于集群中的每一个节点:
+  * 执行命令 kubectl drain <node-name> --ignore-daemonsets,以 腾空节点
+  * 执行命令 systemctl stop kubelet,以停止 kubelet
+  * 停止容器运行时
+  * 修改容器运行时 cgroup 驱动为 systemd
+  * 在文件 /var/lib/kubelet/config.yaml 中添加设置 cgroupDriver:systemd
+  * 启动容器运行时
+  * 执行命令 systemctl start kubelet,以启动 kubelet
+  * 执行命令 kubectl uncordon <node-name>,以 取消节点隔离
+
+在节点上依次执行上述步骤,确保工作负载有充足的时间被调度到其他节点.流程完成后,确认所有节点和工作负载均健康如常.
+
+### 使用 kubeadm 重新配置集群
+参考: https://kubernetes.io/zh-cn/docs/tasks/administer-cluster/kubeadm/kubeadm-reconfigure/
+
+kubeadm 不支持自动重新配置部署在托管节点上的组件的方式.要修改组件配置,你必须手动编辑磁盘上关联的集群对象和文件.
+kubeadm 在 ConfigMap 和其他对象中写入了一组集群范围的组件配置选项.这些对象必须手动编辑,可以使用命令 kubectl edit.
+
+kubectl edit 命令将打开一个文本编辑器,你可以在其中直接编辑和保存对象.
+
+说明:
+保存对这些集群对象的任何更改后,节点上运行的组件可能不会自动更新.
+
+警告:
+ConfigMaps 中的组件配置存储为非结构化数据(YAML 字符串).这意味着在更新 ConfigMap 的内容时不会执行验证.你必须小心遵循特定组件配置的文档化 API 格式,并避免引入拼写错误和 YAML 缩进错误.
+
+
+1.更新 ClusterConfiguration
+在集群创建和升级期间,kubeadm 将其 ClusterConfiguration 写入 kube-system 命名空间中名为 kubeadm-config 的 ConfigMap.
+
+要更改 ClusterConfiguration 中的特定选项,你可以使用以下命令编辑 ConfigMap:
+$ kubectl edit cm -n kube-system kubeadm-config
+
+配置位于 data.ClusterConfiguration 键下.
+
+说明:ClusterConfiguration 包括各种影响单个组件配置的选项,例如 kube-apiserver、kube-scheduler、kube-controller-manager、 CoreDNS、etcd 和 kube-proxy.对配置的更改必须手动反映在节点组件上.
+
+1.1 在控制平面节点上反映 ClusterConfiguration 更改
+kubeadm 将控制平面组件作为位于 /etc/kubernetes/manifests 目录中的静态 Pod 清单进行管理.对 apiServer、controllerManager、scheduler 或 etcd键下的 ClusterConfiguration 的任何更改都必须反映在控制平面节点上清单目录中的关联文件中.
+
+此类更改可能包括:
+  * extraArgs - 需要更新传递给组件容器的标志列表
+  * extraMounts - 需要更新组件容器的卷挂载
+  * *SANs - 需要使用更新的主题备用名称编写新证书
+
+在继续进行这些更改之前,请确保你已备份目录 /etc/kubernetes/.
+
+kubeadm init phase 详细信息
+https://kubernetes.io/zh-cn/docs/reference/setup-tools/kubeadm/kubeadm-init-phase/#cmd-phase-upload-config
+
+要编写新证书,你可以使用:
+$  kubeadm init phase certs <component-name> --config <config-file>
+
+要在 /etc/kubernetes/manifests 中编写新的清单文件,你可以使用以下命令:
+
+* Kubernetes 控制平面组件
+kubeadm init phase control-plane <component-name> --config <config-file>
+
+* 本地 etcd
+kubeadm init phase etcd local --config <config-file>
+
+<config-file> 此文件指的是新的类似 kubeadm-config.yaml 文件,其中内容必须与更新后的 ClusterConfiguration 匹配.<component-name> 值必须是一个控制平面组件(apiserver、controller-manager 或 scheduler)的名称.
+
+说明: 更新 /etc/kubernetes/manifests 中的文件将告诉 kubelet 重新启动相应组件的静态 Pod.尝试一次对一个节点进行这些更改,以在不停机的情况下离开集群.
+
+比如: 使用命令更新 apiserver
+
+$  kubeadm init phase control-plane apiserver --config kubeadm-config.yaml  --v=5
+
+...
+
+I0527 07:55:32.208681   81009 manifests.go:157] [control-plane] wrote static Pod manifest for component "kube-apiserver" to "/etc/kubernetes/manifests/kube-apiserver.yaml"
+
+2.更新 KubeletConfiguration
+在集群创建和升级期间,kubeadm 将其 KubeletConfiguration 写入 kube-system 命名空间中名为 kubelet-config 的 ConfigMap.
+
+你可以使用以下命令编辑 ConfigMap:
+$ kubectl edit cm -n kube-system kubelet-config
+
+配置位于 data.kubelet 键下.
+
+2.1 反映 kubelet 的更改
+要反映 kubeadm 节点上的更改,你必须执行以下操作:
+  * 登录到 kubeadm 节点
+  * 备份 /var/lib/kubelet/config.yaml 和 /var/lib/kubelet/kubeadm-flags.env 文件
+  * 运行 kubeadm upgrade node phase kubelet-config 下载最新的 kubelet-config ConfigMap 内容到本地文件 /var/lib/kubelet
+    /config.yaml
+  * 编辑文件 /var/lib/kubelet/kubeadm-flags.env 以使用标志来应用额外的配置
+  * 使用 systemctl restart kubelet 重启 kubelet 服务
+
+说明:一次执行一个节点的这些更改,以允许正确地重新安排工作负载.
+说明:在 kubeadm upgrade 期间,kubeadm 从 kubelet-config ConfigMap 下载  KubeletConfiguration 并覆盖 /var/lib/kubelet/config.yaml 的内容.这意味着节点本地配置必须通过 /var/lib/kubelet/kubeadm-flags.env 中的标志或在 kubeadm upgrade 后手动更新/var/lib/kubelet/config.yaml` 的内容来应用,然后重新启动 kubelet.--- 这里说明从前面的下载覆盖的操作并不完整,需要最后手动修改覆盖后的文件.
+
+比如: 执行
+$  kubeadm upgrade node phase kubelet-config
+
+...
+
+[upgrade] Backing up kubelet config file to /etc/kubernetes/tmp/kubeadm-kubelet-config2177605260/config.yaml
+[kubelet-start] Writing kubelet configuration to file "/var/lib/kubelet/config.yaml"
+[upgrade] The configuration for this node was successfully updated!
+
+3.更新 KubeProxyConfiguration
+在集群创建和升级期间,kubeadm 将其写入 KubeProxyConfiguration 在名为 kube-proxy 的 kube-system 命名空间中的 ConfigMap 中.
+此 ConfigMap 由 kube-system 命名空间中的 kube-proxy DaemonSet 使用.
+
+要更改 KubeProxyConfiguration 中的特定选项,你可以使用以下命令编辑 ConfigMap:
+$  kubectl edit cm -n kube-system kube-proxy
+
+配置位于 data.config.conf 键下.
+
+3.1 反映 kube-proxy 的更改
+更新 kube-proxy ConfigMap 后,你可以重新启动所有 kube-proxy Pod:
+
+获取 Pod 名称:
+$ kubectl get po -n kube-system | grep kube-proxy
+
+使用以下命令删除 Pod:
+$  kubectl delete po -n kube-system <pod-name>
+
+将创建使用更新的 ConfigMap 的新 Pod.
+
+说明: 由于 kubeadm 将 kube-proxy 部署为 DaemonSet,因此不支持特定于节点的配置.
+
+4.更新 CoreDNS 的 Deployment 和 Service
+kubeadm 将 CoreDNS 部署为名为 coredns 的 Deployment,并使用 Service kube-dns,两者都在 kube-system 命名空间中.
+
+要更新任何 CoreDNS 设置,你可以编辑 Deployment 和 Service:
+
+$ kubectl edit deployment -n kube-system coredns
+$ kubectl edit service -n kube-system kube-dns
+
+4.1 反映 CoreDNS 的更改
+应用 CoreDNS 更改后,你可以删除 CoreDNS Pod.
+
+获取 Pod 名称:
+$ kubectl get po -n kube-system | grep coredns
+
+使用以下命令删除 Pod:
+$ kubectl delete po -n kube-system <pod-name>
+
+将创建具有更新的 CoreDNS 配置的新 Pod.
+
+说明: kubeadm 不允许在集群创建和升级期间配置 CoreDNS.这意味着如果执行了 kubeadm upgrade apply,你对 CoreDNS 对象的更改将丢失并且必须重新应用.
+
+### 使用 kubeadm 升级集群
+参考: https://kubernetes.io/zh-cn/docs/tasks/administer-cluster/kubeadm/kubeadm-upgrade/#recovering-from-a-failure-state
+
+目标: 从 1.29.3 升级 1.30.0
+
+1.升级控制平面节点
+控制面节点上的升级过程应该每次处理一个节点.首先选择一个要先行升级的控制面节点.该节点上必须拥有 /etc/kubernetes/admin.conf 文件.
+
+1.1 升级 kubeadm,kubectl,kubelet
+下载: https://github.com/kubernetes/kubernetes/blob/master/CHANGELOG/CHANGELOG-1.30.md#server-binaries
+将 kubectl,kubeadm,kubelet 替换到 /usr/local/bin/ 目录下,但是不要重启 kubelet 服务.
+
+验证 kubeadm 版本正确:
+$ kubeadm version
+
+下载对应版本的 image
+COMPONENT                 NODE      CURRENT    TARGET
+kube-apiserver            k8s01     v1.29.3    v1.30.0
+kube-controller-manager   k8s01     v1.29.3    v1.30.0
+kube-scheduler            k8s01     v1.29.3    v1.30.0
+kube-proxy                          1.29.3     v1.30.0
+CoreDNS                             v1.11.1    v1.11.1
+etcd                      k8s01     3.5.12-0   3.5.12-0
+
+1.2 验证升级计划
+$ kubeadm upgrade plan
+
+有如下的类似信息
+-------------------------------------------------------------------------
+[upgrade/config] Making sure the configuration is correct:
+[preflight] Running pre-flight checks.
+[upgrade/config] Reading configuration from the cluster...
+[upgrade/config] FYI: You can look at this config file with 'kubectl -n kube-system get cm kubeadm-config -o yaml'
+[upgrade] Running cluster health checks
+[upgrade] Fetching available versions to upgrade to
+[upgrade/versions] Cluster version: 1.30.0
+[upgrade/versions] kubeadm version: v1.30.0
+[upgrade/versions] Target version: v1.30.1
+[upgrade/versions] Latest version in the v1.30 series: v1.30.1
+
+Components that must be upgraded manually after you have upgraded the control plane with 'kubeadm upgrade apply':
+COMPONENT   NODE      CURRENT   TARGET
+kubelet     k8s02     v1.29.3   v1.30.1
+kubelet     k8s03     v1.29.3   v1.30.1
+kubelet     k8s01     v1.30.0   v1.30.1
+
+Upgrade to the latest version in the v1.30 series:
+
+COMPONENT                 NODE      CURRENT    TARGET
+kube-apiserver            k8s01     v1.30.0    v1.30.1
+kube-controller-manager   k8s01     v1.30.0    v1.30.1
+kube-scheduler            k8s01     v1.30.0    v1.30.1
+kube-proxy                          1.30.0     v1.30.1
+CoreDNS                             v1.11.1    v1.11.1
+etcd                      k8s01     3.5.12-0   3.5.12-0
+
+You can now apply the upgrade by executing the following command:
+
+	kubeadm upgrade apply v1.30.1
+
+Note: Before you can perform this upgrade,you have to update kubeadm to v1.30.1.
+
+_____________________________________________________________________
+
+
+The table below shows the current state of component configs as understood by this version of kubeadm.
+Configs that have a "yes" mark in the "MANUAL UPGRADE REQUIRED" column require manual config upgrade or
+resetting to kubeadm defaults before a successful upgrade can be performed.The version to manually
+upgrade to is denoted in the "PREFERRED VERSION" column.
+
+API GROUP                 CURRENT VERSION   PREFERRED VERSION   MANUAL UPGRADE REQUIRED
+kubeproxy.config.k8s.io   v1alpha1          v1alpha1            no
+kubelet.config.k8s.io     v1beta1           v1beta1             no
+_____________________________________________________________________
+
+
+1.3 选择要升级到的目标版本
+由于 kube-apiserver 静态 Pod 始终在运行(即使你已经执行了腾空节点的操作),因此当你执行包括 etcd 升级在内的 kubeadm 升级时,对服务器正在进行的请求将停滞,因为要重新启动新的 etcd 静态 Pod.作为一种解决方法,可以在运行 kubeadm upgrade apply 命令之前主动停止 kube-apiserver 进程几秒钟.这样可以允许正在进行的请求完成处理并关闭现有连接,并最大限度地减少 etcd 停机的后果.
+
+此操作可以在控制平面节点上按如下方式完成:
+$ killall -s SIGTERM kube-apiserver # 触发 kube-apiserver 体面关闭
+$ sleep 20 # 等待一下,以完成进行中的请求
+
+$ kubeadm upgrade apply v1.30.0 --v=5
+
+说明: 必须先将所有的镜像一次下载好,并且导入,否则如果执行失败,原有的导入的镜像将会被删除.
+
+完成以后.
+
+...
+
+[upgrade/successful] SUCCESS! Your cluster was upgraded to "v1.30.0".Enjoy!
+
+[upgrade/kubelet] Now that your control plane is upgraded,please proceed with upgrading your kubelets if you haven't already done so.
+
+1.4 腾空节点
+将节点标记为不可调度并驱逐所有负载,准备节点的维护:
+# 将 <node-to-drain> 替换为你要腾空的控制面节点名称
+$ kubectl drain <node-to-drain> --ignore-daemonsets
+
+1.5 升级 kubelet 和 kubectl
+$ systemctl daemon-reload
+$ systemctl restart kubelet
+
+1.6 解除节点的保护
+通过将节点标记为可调度,让其重新上线:
+# 将 <node-to-uncordon> 替换为你的节点名称
+$ kubectl uncordon <node-to-uncordon>
+
+2.对于其它控制面节点
+
+与第一个控制面节点相同,但是使用:
+$ kubeadm upgrade node
+
+此外,不需要执行 kubeadm upgrade plan 和更新 CNI 驱动插件的操作.
+
+3.升级工作节点
+3.1 升级 kubeadm,kubectl,kubelet
+下载: https://github.com/kubernetes/kubernetes/blob/master/CHANGELOG/CHANGELOG-1.30.md#server-binaries
+将 kubectl,kubeadm,kubelet 替换到 /usr/local/bin/ 目录下,但是不要重启 kubelet 服务.
+
+验证 kubeadm 版本正确:
+$ kubeadm version
+
+3.2 执行 "kubeadm upgrade"
+对于工作节点,下面的命令会升级本地的 kubelet 配置:
+$ kubeadm upgrade node
+
+3.3 腾空节点
+将节点标记为不可调度并驱逐所有负载,准备节点的维护:
+# 在控制平面节点上执行此命令
+# 将 <node-to-drain> 替换为你正腾空的节点的名称
+$ kubectl drain <node-to-drain> --ignore-daemonsets
+
+3.4 升级 kubelet 和 kubectl
+重启 kubelet:
+$ systemctl daemon-reload
+$ systemctl restart kubelet
+
+3.5 升级 kube-proxy
+通过 kubeadm upgrade node 命令似乎不能直接升级 kube-proxy,只是将对应的 ClusterConfig 从主节点获取到,但是并不会重建,因此,需要手动重建
+# 对应需要更新的工作节点上执行 - 导入新版本的 kube-proxy 镜像
+$ ctr -n k8s.io i import kube-proxy-v1.30.0.tar
+
+# 主节点执行 - 查到需要升级的 kube-proxy 容器
+$ kubectl get pods -n kube-system -o wide |grep kube-proxy
+...
+kube-proxy-gkmvk                          1/1     Running            4 (22h ago)   10d     192.168.1.12   k8s02   <none>           <none>
+$ kubectl delete pod kube-proxy-gkmvk -n kube-system  # 删除此容器
+
+# 对应需要更新的工作节点上执行 - 查看新的 kube-proxy 容器
+# 或者在主节点上 kubectl describe pod <CONTAINER-NAME> -n kube-system
+$ ctr -n k8s.io c ls |grep kube-proxy
+3e6607ec0908329d4b1c034a2eb5f9873497e7620d702bc58eb0212b993635c8    registry.k8s.io/kube-proxy:v1.30.0    io.containerd.runc.v2
+
+3.6 取消对节点的保护
+通过将节点标记为可调度,让节点重新上线:
+# 在控制平面节点上执行此命令
+# 将 <node-to-uncordon> 替换为你的节点名称
+$ kubectl uncordon <node-to-uncordon>
+
+4.校验升级
+$ kubectl get nodes                 			# 检查节点版本
+$ kubeadm certs check-expiration    # 检查证书
+
+说明:
+^^^^^^^^^^^^^^^^^^^^
+* kubeadm 升级失败以后从故障状态恢复
+如果 kubeadm upgrade 失败并且没有回滚,例如由于执行期间节点意外关闭,你可以再次运行 kubeadm upgrade.此命令是幂等的,并最终确保实际状态是你声明的期望状态.
+
+要从故障状态恢复,你还可以运行 sudo kubeadm upgrade apply --force 而无需更改集群正在运行的版本.
+
+在升级期间,kubeadm 向 /etc/kubernetes/tmp 目录下的如下备份文件夹写入数据:
+  * kubeadm-backup-etcd-<date>-<time>
+  * kubeadm-backup-manifests-<date>-<time>
+
+kubeadm-backup-etcd 包含当前控制面节点本地 etcd 成员数据的备份.如果 etcd 升级失败并且自动回滚也无法修复,则可以将此文件夹中的内容复制到 /var/lib/etcd 进行手工修复.如果使用的是外部的 etcd,则此备份文件夹为空.
+
+kubeadm-backup-manifests 包含当前控制面节点的静态 Pod 清单文件的备份版本.如果升级失败并且无法自动回滚,则此文件夹中的内容可以复制到 /etc/kubernetes/manifests 目录实现手工恢复.如果由于某些原因,在升级前后某个组件的清单未发生变化,则 kubeadm 也不会为之生成备份版本.
+
+* kubeadm upgrade apply 工作原理
+kubeadm upgrade apply 做了以下工作:
+  * 检查你的集群是否处于可升级状态:
+    .API 服务器是可访问的
+    .所有节点处于 Ready 状态
+    .控制面是健康的
+  * 强制执行版本偏差策略.
+  * 确保控制面的镜像是可用的或可拉取到服务器上.
+  * 如果组件配置要求版本升级,则生成替代配置与/或使用用户提供的覆盖版本配置.
+  * 升级控制面组件或回滚(如果其中任何一个组件无法启动).
+  * 应用新的 CoreDNS 和 kube-proxy 清单,并强制创建所有必需的 RBAC 规则.
+  * 如果旧文件在 180 天后过期,将创建 API 服务器的新证书和密钥文件并备份旧文件.
+
+kubeadm upgrade node 在其他控制平节点上执行以下操作:
+  * 从集群中获取 kubeadm ClusterConfiguration.
+  * (可选操作)备份 kube-apiserver 证书.
+  * 升级控制平面组件的静态 Pod 清单.
+  * 为本节点升级 kubelet 配置
+
+kubeadm upgrade node 在工作节点上完成以下工作:
+  * 从集群取回 kubeadm ClusterConfiguration.
+  * 为本节点升级 kubelet 配置.
+vvvvvvvvvvvvvvvvvvvv
+
+## 管理内存 CPU 和 API 资源
+### 为命名空间配置默认的内存请求和限制
+一个 Kubernetes 集群可被划分为多个命名空间.如果你在具有默认内存限制 的命名空间内尝试创建一个 Pod,并且这个 Pod 中的容器没有声明自己的内存资源限制,那么控制面会为该容器设定默认的内存限制.
+
+* 创建命名空间
+$ kubectl create namespace default-mem-example
+
+* 创建 LimitRange 和 Pod
+$ kubectl apply -f memory-defaults.yaml --namespace=default-mem-example
+
+memory-defaults.yaml
+------------------------------------
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: mem-limit-range
+spec:
+  limits:
+  - default:
+      memory: 512Mi
+    defaultRequest:
+      memory: 256Mi
+    type: Container
+------------------------------------
+
+* 现在如果你在 default-mem-example 命名空间中创建一个 Pod,并且该 Pod 中所有容器都没有声明自己的内存请求和内存限制,控制面会将内存的默认请求值 256MiB 和默认限制值 512MiB 应用到 Pod 上.
+
+以下为只包含一个容器的 Pod 的清单.该容器没有声明内存请求和限制.
+
+memory-defaults-pod.yaml
+------------------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: default-mem-demo
+spec:
+  containers:
+  - name: default-mem-demo-ctr
+    image: nginx
+------------------------------------
+
+$ kubectl apply -f memory-defaults-pod.yaml --namespace=default-mem-example
+
+输出内容显示该 Pod 的容器有 256 MiB 的内存请求和 512 MiB 的内存限制.这些都是 LimitRange 设置的默认值.
+------------------------------------
+...
+spec:
+  containers:
+  - image: nginx
+    imagePullPolicy: Always
+    name: default-mem-demo-ctr
+    resources:
+      limits:
+        memory: 512Mi
+      requests:
+        memory: 256Mi
+...
+------------------------------------
+
+* 声明容器的限制而不声明它的请求会怎么样？
+以下为只包含一个容器的 Pod 的清单.该容器声明了内存限制,而没有声明内存请求.
+
+memory-defaults-pod-2.yaml
+------------------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: default-mem-demo-2
+spec:
+  containers:
+  - name: default-mem-demo-2-ctr
+    image: nginx
+    resources:
+      limits:
+        memory: "1Gi"
+------------------------------------
+
+$ kubectl apply -f memory-defaults-pod-2.yaml --namespace=default-mem-example
+
+输出结果显示容器的内存请求被设置为它的内存限制相同的值.
+注意该容器没有被指定默认的内存请求值 256MiB.
+------------------------------------
+spec:
+  containers:
+  - image: nginx
+    imagePullPolicy: Always
+    name: default-mem-demo-2-ctr
+    resources:
+      limits:
+        memory: 1Gi
+      requests:
+        memory: 1Gi
+...
+------------------------------------
+
+* 声明容器的内存请求而不声明内存限制会怎么样？
+以下为只包含一个容器的 Pod 的清单.该容器声明了内存请求,但没有内存限制:
+
+memory-defaults-pod-3.yaml
+------------------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: default-mem-demo-3
+spec:
+  containers:
+  - name: default-mem-demo-3-ctr
+    image: nginx
+    resources:
+      requests:
+        memory: "128Mi"
+------------------------------------
+
+输出结果显示所创建的 Pod 中,容器的内存请求为 Pod 清单中声明的值.然而同一容器的内存限制被设置为 512MiB,此值是该命名空间的默认内存限制值.
+------------------------------------
+...
+spec:
+  containers:
+  - image: nginx
+    imagePullPolicy: Always
+    name: default-mem-demo-3-ctr
+    resources:
+      limits:
+        memory: 512Mi
+      requests:
+        memory: 128Mi
+...
+------------------------------------
+
+说明:LimitRange 不会检查它应用的默认值的一致性.这意味着 LimitRange 设置的 limit 的默认值可能小于客户端提交给 API 服务器的声明中为容器指定的 request 值.如果发生这种情况,最终会导致 Pod 无法调度.
+
+* 设置默认内存限制和请求的动机
+如果你的命名空间设置了内存资源配额,那么为内存限制设置一个默认值会很有帮助.
+以下是内存资源配额对命名空间的施加的三条限制:
+ .命名空间中运行的每个 Pod 中的容器都必须有内存限制.(如果为 Pod 中的每个容器声明了内存限制,Kubernetes 可以通过将其容器的内存限制相加推断出 Pod 级别的内存限制).
+ .内存限制用来在 Pod 被调度到的节点上执行资源预留.预留给命名空间中所有 Pod 使用的内存总量不能超过规定的限制.
+ .命名空间中所有 Pod 实际使用的内存总量也不能超过规定的限制.
+
+当你添加 LimitRange 时:
+如果该命名空间中的任何 Pod 的容器未指定内存限制,控制面将默认内存限制应用于该容器,这样 Pod 可以在受到内存 ResourceQuota 限制的命名空间中运行.
+
+### 为命名空间配置默认的 CPU 请求和限制
+一个 Kubernetes 集群可被划分为多个命名空间.如果你在具有默认 CPU 限制 的命名空间内创建一个 Pod,并且这个 Pod 中任何容器都没有声明自己的 CPU 限制,那么控制面会为容器设定默认的 CPU 限制.
+
+* 创建命名空间
+$ kubectl create namespace default-cpu-example
+
+* 创建 LimitRange 和 Pod
+$ kubectl apply -f cpu-defaults.yaml --namespace=default-cpu-example
+
+cpu-defaults.yaml
+---------------------------
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: cpu-limit-range
+spec:
+  limits:
+  - default:
+      cpu: 1
+    defaultRequest:
+      cpu: 0.5
+    type: Container
+---------------------------
+
+现在如果你在 default-cpu-example 命名空间中创建一个 Pod,并且该 Pod 中所有容器都没有声明自己的 CPU 请求和 CPU 限制,控制面会将 CPU 的默认请求值 0.5 和默认限制值 1 应用到 Pod 上.
+
+以下为只包含一个容器的 Pod 的清单.该容器没有声明 CPU 请求和限制.
+
+$ kubectl apply -f cpu-defaults-pod.yaml --namespace=default-cpu-example
+
+cpu-defaults-pod.yaml
+---------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: default-cpu-demo
+spec:
+  containers:
+  - name: default-cpu-demo-ctr
+    image: nginx
+---------------------------
+
+$ kubectl get pod default-cpu-demo --output=yaml --namespace=default-cpu-example
+
+输出显示该 Pod 的唯一的容器有 500m cpu 的 CPU 请求和 1 cpu 的 CPU 限制.这些是 LimitRange 声明的默认值.
+---------------------------
+spec:
+  containers:
+  - image: nginx
+    imagePullPolicy: Never
+    name: default-cpu-demo-ctr
+    resources:
+      limits:
+        cpu: "1"
+      requests:
+        cpu: 500m
+---------------------------
+
+* 你只声明容器的限制,而不声明请求会怎么样？
+以下为只包含一个容器的 Pod 的清单.该容器声明了 CPU 限制,而没有声明 CPU 请求.
+
+$ kubectl apply -f cpu-defaults-pod-2.yaml --namespace=default-cpu-example
+
+cpu-defaults-pod-2.yaml
+---------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: default-cpu-demo-2
+spec:
+  containers:
+  - name: default-cpu-demo-2-ctr
+    image: nginx
+    resources:
+      limits:
+        cpu: "1"
+---------------------------
+
+$ kubectl get pod default-cpu-demo-2 --output=yaml --namespace=default-cpu-example
+
+输出显示该容器的 CPU 请求和 CPU 限制设置相同.
+注意该容器没有被指定默认的 CPU 请求值 0.5 cpu:
+---------------------------
+spec:
+  containers:
+  - image: nginx
+    imagePullPolicy: Never
+    name: default-cpu-demo-2-ctr
+    resources:
+      limits:
+        cpu: "1"
+      requests:
+        cpu: "1"
+---------------------------
+
+* 你只声明容器的请求,而不声明它的限制会怎么样？
+这里给出了包含一个容器的 Pod 的示例清单.该容器声明了 CPU 请求,而没有声明 CPU 限制.
+
+$ kubectl apply -f cpu-defaults-pod-3.yaml --namespace=default-cpu-example
+
+cpu-defaults-pod-3.yaml
+---------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: default-cpu-demo-3
+spec:
+  containers:
+  - name: default-cpu-demo-3-ctr
+    image: nginx
+    resources:
+      requests:
+        cpu: "0.75"
+---------------------------
+
+$ kubectl get pod default-cpu-demo-3 --output=yaml --namespace=default-cpu-example
+
+输出显示你所创建的 Pod 中,容器的 CPU 请求为 Pod 清单中声明的值.然而同一容器的 CPU 限制被设置为 1 cpu,此值是该命名空间的默认 CPU 限制值.
+---------------------------
+spec:
+  containers:
+  - image: nginx
+    imagePullPolicy: Never
+    name: default-cpu-demo-3-ctr
+    resources:
+      limits:
+        cpu: "1"
+      requests:
+        cpu: 750m
+---------------------------
+
+* 默认 CPU 限制和请求的动机
+如果你的命名空间设置了 CPU 资源配额,为 CPU 限制设置一个默认值会很有帮助.以下是 CPU 资源配额对命名空间的施加的两条限制:
+ .命名空间中运行的每个 Pod 中的容器都必须有 CPU 限制.
+ .CPU 限制用来在 Pod 被调度到的节点上执行资源预留.
+
+预留给命名空间中所有 Pod 使用的 CPU 总量不能超过规定的限制.
+
+当你添加 LimitRange 时:
+如果该命名空间中的任何 Pod 的容器未指定 CPU 限制,控制面将默认 CPU 限制应用于该容器,这样 Pod 可以在受到 CPU ResourceQuota 限制的命名空间中运行.
+
+### 配置命名空间的最小和最大内存约束
+如何设置在名字空间 中运行的容器所使用的内存的最小值和最大值.你可以在 LimitRange 对象中指定最小和最大内存值.如果 Pod 不满足 LimitRange 施加的约束,则无法在名字空间中创建它.
+
+* 创建命名空间
+$ kubectl create namespace constraints-mem-example
+
+* 创建 LimitRange 和 Pod
+$ kubectl apply -f memory-constraints.yaml --namespace=constraints-mem-example
+
+memory-constraints.yaml
+---------------------------
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: mem-min-max-demo-lr
+spec:
+  limits:
+  - max:
+      memory: 1Gi
+    min:
+      memory: 500Mi
+    type: Container
+---------------------------
+
+$ kubectl get limitrange mem-min-max-demo-lr --namespace=constraints-mem-example --output=yaml
+
+输出显示预期的最小和最大内存约束.但请注意,即使你没有在 LimitRange 的配置文件中指定默认值,默认值也会自动生成.
+---------------------------
+spec:
+  limits:
+  - default:
+      memory: 1Gi
+    defaultRequest:
+      memory: 1Gi
+    max:
+      memory: 1Gi
+    min:
+      memory: 500Mi
+    type: Container
+---------------------------
+
+现在,每当在 constraints-mem-example 命名空间中创建 Pod 时,Kubernetes 就会执行下面的步骤:
+  .如果 Pod 中的任何容器未声明自己的内存请求和限制,控制面将为该容器设置默认的内存请求和限制.
+  .确保该 Pod 中的每个容器的内存请求至少 500 MiB.
+  .确保该 Pod 中每个容器内存请求不大于 1 GiB.
+以下为包含一个容器的 Pod 清单.该容器声明了 600 MiB 的内存请求和 800 MiB 的内存限制,这些满足了 LimitRange 施加的最小和最大内存约束.
+
+$ kubectl apply -f memory-constraints-pod.yaml --namespace=constraints-mem-example
+
+memory-constraints-pod.yaml
+---------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: constraints-mem-demo
+spec:
+  containers:
+  - name: constraints-mem-demo-ctr
+    image: nginx
+    resources:
+      limits:
+        memory: "800Mi"
+      requests:
+        memory: "600Mi"
+---------------------------
+
+$ kubectl get pod constraints-mem-demo --output=yaml --namespace=constraints-mem-example
+
+输出结果显示该 Pod 的容器的内存请求为 600 MiB,内存限制为 800 MiB.这些满足这个命名空间中 LimitRange 设定的限制范围.
+---------------------------
+spec:
+  containers:
+  - image: nginx
+    imagePullPolicy: Never
+    name: constraints-mem-demo-ctr
+    resources:
+      limits:
+        memory: 800Mi
+      requests:
+        memory: 600Mi
+---------------------------
+
+* 尝试创建一个超过最大内存限制的 Pod
+以下为包含一个容器的 Pod 的清单.这个容器声明了 800 MiB 的内存请求和 1.5 GiB 的内存限制.
+
+$ kubectl apply -f memory-constraints-pod-2.yaml --namespace=constraints-mem-example
+
+memory-constraints-pod-2.yaml
+---------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: constraints-mem-demo-2
+spec:
+  containers:
+  - name: constraints-mem-demo-2-ctr
+    image: nginx
+    resources:
+      limits:
+        memory: "1.5Gi"
+      requests:
+        memory: "800Mi"
+---------------------------
+
+输出结果显示 Pod 没有创建成功,因为它定义了一个容器的内存请求超过了允许的值.
+Error from server (Forbidden): error when creating "examples/admin/resource/memory-constraints-pod-2.yaml":
+pods "constraints-mem-demo-2" is forbidden: maximum memory usage per Container is 1Gi,but limit is 1536Mi
+
+* 尝试创建一个不满足最小内存请求的 Pod
+以下为只有一个容器的 Pod 的清单.这个容器声明了 100 MiB 的内存请求和 800 MiB 的内存限制.
+
+$ kubectl apply -f memory-constraints-pod-3.yaml --namespace=constraints-mem-example
+
+memory-constraints-pod-3.yaml
+---------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: constraints-mem-demo-3
+spec:
+  containers:
+  - name: constraints-mem-demo-3-ctr
+    image: nginx
+    resources:
+      limits:
+        memory: "800Mi"
+      requests:
+        memory: "100Mi"
+---------------------------
+
+输出结果显示 Pod 没有创建成功,因为它定义了一个容器的内存请求小于强制要求的最小值:
+Error from server (Forbidden): error when creating "examples/admin/resource/memory-constraints-pod-3.yaml":
+pods "constraints-mem-demo-3" is forbidden: minimum memory usage per Container is 500Mi,but request is 100Mi.
+
+* 创建一个没有声明内存请求和限制的 Pod
+以下为只有一个容器的 Pod 清单.该容器没有声明内存请求,也没有声明内存限制.
+
+$ kubectl apply -f memory-constraints-pod-4.yaml --namespace=constraints-mem-example
+
+memory-constraints-pod-4.yaml
+---------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: constraints-mem-demo-4
+spec:
+  containers:
+  - name: constraints-mem-demo-4-ctr
+    image: nginx
+---------------------------
+
+$ kubectl get pod constraints-mem-demo-4 --namespace=constraints-mem-example --output=yaml
+
+输出结果显示 Pod 的唯一容器内存请求为 1 GiB,内存限制为 1 GiB.容器怎样获得那些数值呢？
+---------------------------
+spec:
+  containers:
+  - image: nginx
+    imagePullPolicy: Never
+    name: constraints-mem-demo-4-ctr
+    resources:
+      limits:
+        memory: 1Gi
+      requests:
+        memory: 1Gi
+---------------------------
+
+因为你的 Pod 没有为容器声明任何内存请求和限制,集群会从 LimitRange 获取默认的内存请求和限制.应用于容器.
+
+* 强制执行内存最小和最大限制
+LimitRange 为命名空间设定的最小和最大内存限制只有在 Pod 创建和更新时才会强制执行.如果你更新 LimitRange,它不会影响此前创建的 Pod.
+
+* 设置内存最小和最大限制的动因
+作为集群管理员,你可能想规定 Pod 可以使用的内存总量限制.例如:
+  .集群的每个节点有 2 GiB 内存.你不想接受任何请求超过 2 GiB 的 Pod,因为集群中没有节点可以满足.
+  .集群由生产部门和开发部门共享.你希望允许产品部门的负载最多耗用 8 GiB 内存,但是开发部门的负载最多可使用 512 MiB.这时,你可以为产品部门和开发部门分别创建名字空间,并为各个名字空间设置内存约束.
+
+### 为命名空间配置 CPU 最小和最大约束
+为命名空间中的容器和 Pod 设置其所使用的 CPU 资源的最小和最大值.你可以通过 LimitRange 对象声明 CPU 的最小和最大值.如果 Pod 不能满足 LimitRange 的限制,就无法在该命名空间中被创建.
+
+* 创建命名空间
+$ kubectl create namespace constraints-cpu-example
+
+* 创建 LimitRange 和 Pod
+
+$ kubectl apply -f cpu-constraints.yaml --namespace=constraints-cpu-example
+
+cpu-constraints.yaml
+---------------------------
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: cpu-min-max-demo-lr
+spec:
+  limits:
+  - max:
+      cpu: "800m"
+    min:
+      cpu: "200m"
+    type: Container
+---------------------------
+
+$ kubectl get limitrange cpu-min-max-demo-lr --output=yaml --namespace=constraints-cpu-example
+
+输出结果显示 CPU 的最小和最大限制符合预期.但需要注意的是,尽管你在 LimitRange 的配置文件中你没有声明默认值,默认值也会被自动创建.
+---------------------------
+spec:
+  limits:
+  - default:
+      cpu: 800m
+    defaultRequest:
+      cpu: 800m
+    max:
+      cpu: 800m
+    min:
+      cpu: 200m
+    type: Container
+---------------------------
+
+现在,每当你在 constraints-cpu-example 命名空间中创建 Pod 时,或者某些其他的 Kubernetes API 客户端创建了等价的 Pod 时,Kubernetes 就会执行下面的步骤:
+  .如果 Pod 中的任何容器未声明自己的 CPU 请求和限制,控制面将为该容器设置默认的 CPU 请求和限制.
+  .确保该 Pod 中的每个容器的 CPU 请求至少 200 millicpu.
+  .确保该 Pod 中每个容器 CPU 请求不大于 800 millicpu.
+
+说明:
+当创建 LimitRange 对象时,你也可以声明大页面和 GPU 的限制.当这些资源同时声明了 default 和 defaultRequest 参数时,两个参数值必须相同.
+
+* 以下为某个仅包含一个容器的 Pod 的清单.该容器声明了 CPU 请求 500 millicpu 和 CPU 限制 800 millicpu.这些参数满足了 LimitRange 对象为此名字空间规定的 CPU 最小和最大限制.
+
+$ kubectl apply -f cpu-constraints-pod.yaml --namespace=constraints-cpu-example
+
+cpu-constraints-pod.yaml
+---------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: constraints-cpu-demo
+spec:
+  containers:
+  - name: constraints-cpu-demo-ctr
+    image: nginx
+    resources:
+      limits:
+        cpu: "800m"
+      requests:
+        cpu: "500m"
+---------------------------
+
+输出结果显示该 Pod 的容器的 CPU 请求为 500 millicpu,CPU 限制为 800 millicpu.这些参数满足 LimitRange 规定的限制范围.
+---------------------------
+resources:
+  limits:
+    cpu: 800m
+  requests:
+    cpu: 500m
+---------------------------
+
+* 尝试创建一个超过最大 CPU 限制的 Pod
+容器声明了 500 millicpu 的 CPU 请求和 1.5 CPU 的 CPU 限制.
+
+$ kubectl apply -f cpu-constraints-pod-2.yaml --namespace=constraints-cpu-example
+
+cpu-constraints-pod-2.yaml
+---------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: constraints-cpu-demo-2
+spec:
+  containers:
+  - name: constraints-cpu-demo-2-ctr
+    image: nginx
+    resources:
+      limits:
+        cpu: "1.5"
+      requests:
+        cpu: "500m"
+---------------------------
+
+输出结果表明 Pod 没有创建成功,因为其中定义了一个无法被接受的容器.该容器之所以无法被接受是因为其中设定了过高的 CPU 限制值:
+Error from server (Forbidden): error when creating "examples/admin/resource/cpu-constraints-pod-2.yaml":
+pods "constraints-cpu-demo-2" is forbidden: maximum cpu usage per Container is 800m,but limit is 1500m.
+
+* 尝试创建一个不满足最小 CPU 请求的 Pod
+以下为某个只有一个容器的 Pod 的清单.该容器声明了 CPU 请求 100 millicpu 和 CPU 限制 800 millicpu.
+
+cpu-constraints-pod-3.yaml
+---------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: constraints-cpu-demo-3
+spec:
+  containers:
+  - name: constraints-cpu-demo-3-ctr
+    image: nginx
+    resources:
+      limits:
+        cpu: "800m"
+      requests:
+        cpu: "100m"
+---------------------------
+
+输出结果显示 Pod 没有创建成功,因为其中定义了一个无法被接受的容器.该容器无法被接受的原因是其中所设置的 CPU 请求小于最小值的限制:
+Error from server (Forbidden): error when creating "examples/admin/resource/cpu-constraints-pod-3.yaml":
+pods "constraints-cpu-demo-3" is forbidden: minimum cpu usage per Container is 200m,but request is 100m.
+
+* 创建一个没有声明 CPU 请求和 CPU 限制的 Pod
+以下为一个只有一个容器的 Pod 的清单.该容器没有声明 CPU 请求,也没有声明 CPU 限制.
+
+$ kubectl apply -f cpu-constraints-pod-4.yaml --namespace=constraints-cpu-example
+
+cpu-constraints-pod-4.yaml
+---------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: constraints-cpu-demo-4
+spec:
+  containers:
+  - name: constraints-cpu-demo-4-ctr
+    image: vish/stress
+---------------------------
+
+输出结果显示 Pod 的唯一容器的 CPU 请求为 800 millicpu,CPU 限制为 800 millicpu.
+---------------------------
+resources:
+  limits:
+    cpu: 800m
+  requests:
+    cpu: 800m
+---------------------------
+
+因为这一容器没有声明自己的 CPU 请求和限制,控制面会根据命名空间中配置 LimitRange 设置默认的 CPU 请求和限制.
+
+此时,你的 Pod 可能已经运行起来也可能没有运行起来.回想一下我们本次任务的先决条件是你的每个节点都至少有 1 CPU.如果你的每个节点都只有 1 CPU,那将没有一个节点拥有足够的可分配 CPU 来满足 800 millicpu 的请求.如果你在用的节点恰好有 2 CPU,那么有可能有足够的 CPU 来满足 800 millicpu 的请求.
+
+CPU 最小和最大限制的强制执行
+只有当 Pod 创建或者更新时,LimitRange 为命名空间规定的 CPU 最小和最大限制才会被强制执行.如果你对 LimitRange 进行修改,那不会影响此前创建的 Pod.
+
+最小和最大 CPU 限制范围的动机
+作为集群管理员,你可能想设定 Pod 可以使用的 CPU 资源限制.例如:
+  .集群中的每个节点有两个 CPU.你不想接受任何请求超过 2 个 CPU 的 Pod,因为集群中没有节点可以支持这种请求.
+  .你的生产和开发部门共享一个集群.你想允许生产工作负载消耗 3 个 CPU,而开发部门工作负载的消耗限制为 1 个 CPU.你可以为生产和开发创建
+           不同的命名空间,并且为每个命名空间都应用 CPU 限制.
+
+### 为命名空间配置内存和 CPU 配额
+为命名空间下运行的所有 Pod 设置总的内存和 CPU 配额.你可以通过使用 ResourceQuota 对象设置配额.
+
+* 创建命名空间
+$ kubectl create namespace quota-mem-cpu-example
+
+* 创建 ResourceQuota
+$ kubectl apply -f quota-mem-cpu.yaml --namespace=quota-mem-cpu-example
+
+quota-mem-cpu.yaml
+---------------------------
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: mem-cpu-demo
+spec:
+  hard:
+    requests.cpu: "1"
+    requests.memory: 1Gi
+    limits.cpu: "2"
+    limits.memory: 2Gi
+---------------------------
+
+
+$ kubectl get resourcequota mem-cpu-demo --namespace=quota-mem-cpu-example --output=yaml
+
+---------------------------
+spec:
+  hard:
+    limits.cpu: "2"
+    limits.memory: 2Gi
+    requests.cpu: "1"
+    requests.memory: 1Gi
+---------------------------
+
+ResourceQuota 在 quota-mem-cpu-example 命名空间中设置了如下要求:
+  .在该命名空间中的每个 Pod 的所有容器都必须要有内存请求和限制,以及 CPU 请求和限制.
+  .在该命名空间中所有 Pod 的内存请求总和不能超过 1 GiB.
+  .在该命名空间中所有 Pod 的内存限制总和不能超过 2 GiB.
+  .在该命名空间中所有 Pod 的 CPU 请求总和不能超过 1 cpu.
+  .在该命名空间中所有 Pod 的 CPU 限制总和不能超过 2 cpu.
+
+* 创建 Pod
+$ kubectl apply -f quota-mem-cpu-pod.yaml --namespace=quota-mem-cpu-example
+
+quota-mem-cpu-pod.yaml
+---------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: quota-mem-cpu-demo
+spec:
+  containers:
+  - name: quota-mem-cpu-demo-ctr
+    image: nginx
+    resources:
+      limits:
+        memory: "800Mi"
+        cpu: "800m"
+      requests:
+        memory: "600Mi"
+        cpu: "400m"
+---------------------------
+
+$ kubectl get resourcequota mem-cpu-demo --namespace=quota-mem-cpu-example --output=yaml
+
+输出结果显示了配额以及有多少配额已经被使用.你可以看到 Pod 的内存和 CPU 请求值及限制值没有超过配额.
+---------------------------
+spec:
+  hard:
+    limits.cpu: "2"
+    limits.memory: 2Gi
+    requests.cpu: "1"
+    requests.memory: 1Gi
+status:
+  hard:
+    limits.cpu: "2"
+    limits.memory: 2Gi
+    requests.cpu: "1"
+    requests.memory: 1Gi
+  used:
+    limits.cpu: 800m
+    limits.memory: 800Mi
+    requests.cpu: 400m
+    requests.memory: 600Mi
+---------------------------
+
+* 尝试创建第二个 Pod
+以下为第二个 Pod 的清单:
+
+quota-mem-cpu-pod-2.yaml
+---------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: quota-mem-cpu-demo-2
+spec:
+  containers:
+  - name: quota-mem-cpu-demo-2-ctr
+    image: redis
+    resources:
+      limits:
+        memory: "1Gi"
+        cpu: "800m"
+      requests:
+        memory: "700Mi"
+        cpu: "400m"
+---------------------------
+
+$ kubectl apply -f quota-mem-cpu-pod-2.yaml --namespace=quota-mem-cpu-example
+
+在清单中,你可以看到 Pod 的内存请求为 700 MiB.请注意新的内存请求与已经使用的内存请求之和超过了内存请求的配额: 600 MiB + 700 MiB > 1 GiB.
+
+第二个 Pod 不能被创建成功.输出结果显示创建第二个 Pod 会导致内存请求总量超过内存请求配额.
+Error from server (Forbidden): error when creating "examples/admin/resource/quota-mem-cpu-pod-2.yaml":
+pods "quota-mem-cpu-demo-2" is forbidden: exceeded quota: mem-cpu-demo,
+requested: requests.memory=700Mi,used: requests.memory=600Mi,limited: requests.memory=1Gi
+
+
+### 配置命名空间下 Pod 配额
+在命名空间中设置可运行 Pod 总数的配额.你可以通过使用 ResourceQuota 对象来配置配额.
+
+* 创建一个命名空间
+$ kubectl create namespace quota-pod-example
+
+* 创建 ResourceQuota
+
+$ kubectl apply -f quota-pod.yaml --namespace=quota-pod-example
+
+quota-pod.yaml
+---------------------------
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: pod-demo
+spec:
+  hard:
+    pods: "2"
+---------------------------
+
+$ kubectl get resourcequota pod-demo --namespace=quota-pod-example --output=yaml
+
+从输出的信息我们可以看到,该命名空间下 Pod 的配额是 2 个,目前创建的 Pod 数为 0,配额使用率为 0.
+---------------------------
+spec:
+  hard:
+    pods: "2"
+status:
+  hard:
+    pods: "2"
+  used:
+    pods: "0"
+---------------------------
+
+* 下面是一个 Deployment 的示例清单:
+kubectl apply -f quota-pod-deployment.yaml --namespace=quota-pod-example
+
+quota-pod-deployment.yaml
+---------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pod-quota-demo
+spec:
+  selector:
+    matchLabels:
+      purpose: quota-demo
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        purpose: quota-demo
+    spec:
+      containers:
+      - name: pod-quota-demo
+        image: nginx
+---------------------------
+
+在清单中,replicas: 3 告诉 Kubernetes 尝试创建三个新的 Pod,且运行相同的应用.
+
+从输出的信息显示,即使 Deployment 指定了三个副本,也只有两个 Pod 被创建,原因是之前已经定义了配额:
+---------------------------
+  - lastTransitionTime: "2024-06-17T08:57:28Z"
+    lastUpdateTime: "2024-06-17T08:57:28Z"
+    message: 'pods "pod-quota-demo-7b6bdb777f-p6qcg" is forbidden: exceeded quota:
+      pod-demo,requested: pods=1,used: pods=2,limited: pods=2'
+    reason: FailedCreate
+    status: "True"
+    type: ReplicaFailure
+---------------------------
+
+## 使用 Kubernetes API 访问集群
+* 直接访问 REST API
+1.使用 kubectl 进行首次访问
+首次访问 Kubernetes API 时,请使用 Kubernetes 命令行工具 kubectl.
+要访问集群,你需要知道集群位置并拥有访问它的凭证.
+
+使用此命令检查 kubectl 已知的位置和凭证:
+$ kubectl config view
+
+2.kubectl 处理对 API 服务器的定位和身份验证.如果你想通过 http 客户端(如 curl、wget 或浏览器)直接访问 REST API,你可以通过多种方式对 API 服务器进行定位和身份验证:
+  * 以代理模式运行 kubectl(推荐).推荐使用此方法,因为它用存储的 apiserver 位置并使用自签名证书验证 API 服务器的标识.使用这种方法无法进行中间人(MITM)攻击.
+  * 另外,你可以直接为 HTTP 客户端提供位置和身份认证.这适用于被代理混淆的客户端代码.为防止中间人攻击,你需要将根证书导入浏览器.
+使用 Go 或 Python 客户端库可以在代理模式下访问 kubectl.
+
+3.使用 kubectl 代理
+下列命令使 kubectl 运行在反向代理模式下.它处理 API 服务器的定位和身份认证.
+像这样运行它:
+$ kubectl proxy --port=8080 &
+
+然后你可以通过 curl,wget,或浏览器浏览 API,像这样:
+$ curl http://localhost:8080/api/
+
+4.不使用 kubectl 代理
+通过将身份认证令牌直接传给 API 服务器,可以避免使用 kubectl 代理,像这样:
+
+使用 grep/cut 方式:
+# 查看所有的集群,因为你的 .kubeconfig 文件中可能包含多个上下文
+kubectl config view -o jsonpath='{"Cluster name\tServer\n"}{range .clusters[*]}{.name}{"\t"}{.cluster.server}{"\n"}{end}'
+
+# 从上述命令输出中选择你要与之交互的集群的名称,kubectl config view 中能找到 CLUSTER_NAME
+export CLUSTER_NAME="some_server_name"
+
+# 指向引用该集群名称的 API 服务器
+APISERVER=$(kubectl config view -o jsonpath="{.clusters[?(@.name==\"$CLUSTER_NAME\")].cluster.server}")
+
+# 创建一个 secret 来保存默认服务账户的令牌
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: default-token
+  annotations:
+    kubernetes.io/service-account.name: default
+type: kubernetes.io/service-account-token
+EOF
+
+# 等待令牌控制器使用令牌填充 secret:
+while ! kubectl describe secret default-token | grep -E '^token' >/dev/null; do
+  echo "waiting for token..." >&2
+  sleep 1
+done
+
+# 获取令牌
+TOKEN=$(kubectl get secret default-token -o jsonpath='{.data.token}' | base64 --decode)
+
+# 使用令牌玩转 API
+curl -X GET $APISERVER/api --header "Authorization: Bearer $TOKEN" --insecure
+
+^^^^^^^^^^^^^^^^^^^^
+* 使用 kubectl get pods <pod-name> -o custom-columns=NAME:.metadata.name,RSRC:.metadata.resourceVersion
+中的 -o custom-columns 参数
+
+通过 kubectl get pod hello-world-6db66cfc65-crhb2 -o yaml 可以显示所有可以显示的内容.
+
+比如:
+$ kubectl get pods hello-world-6db66cfc65-crhb2 -o custom-columns=\
+NAME:.metadata.name,\
+READY:.status.containerStatuses.ready,\
+STATUS:.status.containerStatuses.state,\
+NODE:.spec.nodeName,\
+IP:.status.podIP,\
+IMAGE:.status.containerStatuses[*].image
+
+输出:
+NAME                           READY    STATUS   NODE    IP             IMAGE
+hello-world-6db66cfc65-crhb2   <none>   <none>   k8s02   10.244.0.153   gcr.io/google-samples/hello-app:2.0
+
+说明:
+1.NAME: READY: STATUS: NODE: IP: IMAGE: 表示输出的第一行标题,自己定义
+2.着重介绍如何取 IMAGE 这一列内容
+
+IMAGE:.status.containerStatuses[*].image 这里的 containerStatuses: 是一个 map,取其中的内容用 containerStatuses[*].XX 的
+方式得到值,如下是 kubectl get pod hello-world-6db66cfc65-crhb2 -o yaml 的部分内容
+...
+status:
+  ...
+  containerStatuses:
+  - containerID: containerd://38800f648969ec03cd10143cd86c9ad94faabeb7c3f38b18baf040f0bfbfd792
+    image: gcr.io/google-samples/hello-app:2.0
+    imageID: sha256:f59157bf39125d4825957df841fa8de7f9eea9bdd1a0fe50799fa1e1365af8d4
+    lastState: {}
+    name: hello-world
+    ready: true
+    restartCount: 0
+    started: true
+    state:
+      running:
+        startedAt: "2024-06-07T07:55:16Z"
+...
+
+比如: .status.containerStatuses[*].image 得到的是 image: gcr.io/google-samples/hello-app:2.0 这一行的值
+     .status.containerStatuses[*].state.running.startedAt 得到 startedAt: "2024-06-07T07:55:16Z" 这一行的值
+vvvvvvvvvvvvvvvvvvvv
+
+## 改变默认 StorageClass
+改变默认的 Storage Class,它用于为没有特殊需求的 PersistentVolumeClaims 配置 volumes.
+
+* 为什么要改变默认存储类？
+取决于安装模式,你的 Kubernetes 集群可能和一个被标记为默认的已有 StorageClass 一起部署.这个默认的 StorageClass 以后将被用于动态的为没有特定存储类需求的 PersistentVolumeClaims 配置存储.
+
+预先安装的默认 StorageClass 可能不能很好的适应你期望的工作负载;例如,它配置的存储可能太过昂贵.如果是这样的话,你可以改变默认 StorageClass,或者完全禁用它以防止动态配置存储.
+
+删除默认 StorageClass 可能行不通,因为它可能会被你集群中的扩展管理器自动重建.
+
+* 改变默认 StorageClass
+1.列出你的集群中的 StorageClass:
+$ kubectl get storageclass
+
+输出类似这样:
+NAME                 PROVISIONER               AGE
+standard (default)   kubernetes.io/gce-pd      1d
+gold                 kubernetes.io/gce-pd      1d
+
+默认 StorageClass 以 (default) 标记.
+
+2.标记默认 StorageClass 非默认:
+默认 StorageClass 的注解 storageclass.kubernetes.io/is-default-class 设置为 true.注解的其它任意值或者缺省值将被解释为 false.
+
+要标记一个 StorageClass 为非默认的,你需要改变它的值为 false:
+$ kubectl patch storageclass standard -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"false"}}}'
+
+这里的 standard 是你选择的 StorageClass 的名字.
+
+3.标记一个 StorageClass 为默认的:
+
+和前面的步骤类似,你需要添加/设置注解 storageclass.kubernetes.io/is-default-class=true.
+$ kubectl patch storageclass <your-class-name> -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+
+请注意,最多只能有一个 StorageClass 能够被标记为默认.如果它们中有两个或多个被标记为默认,Kubernetes 将忽略这个注解,也就是它将表现为没有默认 StorageClass.
+
+4.验证你选用的 StorageClass 为默认的:
+$ kubectl get storageclass
+
+输出类似这样:
+NAME             PROVISIONER               AGE
+standard         kubernetes.io/gce-pd      1d
+gold (default)   kubernetes.io/gce-pd      1d
+
+## 将 PersistentVolume 的访问模式更改为 ReadWriteOncePod - 一次只有 1 个 pod 可以写入 pvc,此模式需要特性门支持,包含了如何查看当前运行的特性门
+将现有 PersistentVolume 的访问模式更改为使用 ReadWriteOncePod.
+
+Kubernetes 服务器版本必须不低于版本 v1.22.要获知版本信息,请输入 kubectl version.
+说明:
+ReadWriteOncePod 访问模式在 Kubernetes v1.29 版本中已进阶至 Stable.如果你运行的 Kubernetes 版本早于 v1.29,你可能需要启用一个特性门控.
+说明:
+ReadWriteOncePod 访问模式仅支持 CSI 卷.要使用这种卷访问模式,你需要更新以下 CSI 边车至下述版本或更高版本:
+csi-provisioner:v3.0.0+
+csi-attacher:v3.3.0+
+csi-resizer:v1.3.0+
+
+查看目前运行中的特性门
+^^^^^^^^^^^^^^^^^^^^
+$ kubectl get --raw /metrics | grep kubernetes_feature_enabled
+vvvvvvvvvvvvvvvvvvvv
+
+* 我为什么要使用 ReadWriteOncePod？
+在 Kubernetes v1.22 之前,ReadWriteOnce 访问模式通常用于限制需要单个写者存储访问模式的工作负载对 PersistentVolume 的访问.然而,这种访问模式有一个限制:它要求只能从单个节点上访问卷,但允许同一节点上的多个 Pod 同时读写同一个卷.对于需要严格遵循单个写者访问模式以确保数据安全的应用,这种模式可能形成风险.
+
+如果确保单个写者访问模式对于你的工作负载至关重要,请考虑将你的卷迁移到 ReadWriteOncePod.
+
+* 迁移现有 PersistentVolume
+如果你有一些 PersistentVolume,可以将它们迁移为使用 ReadWriteOncePod.系统仅支持从 ReadWriteOnce 迁移到 ReadWriteOncePod.
+
+在此示例中,已经有一个 ReadWriteOnce 的 "cat-pictures-pvc" PersistentVolumeClaim 被绑定到了 "cat-pictures-pv" PersistentVolume,还有一个使用此 PersistentVolumeClaim 的 "cat-pictures-writer" Deployment.
+
+cat-pictures-pv.yaml
+---------------------------
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: cat-pictures-pv
+  labels:
+    type: local
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/mnt/data"
+---------------------------
+
+说明:
+如果你的存储插件支持动态制备,系统将为你创建 "cat-pictures-pv",但其名称可能不同.要获取你的 PersistentVolume 的名称,请运行以下命令:
+$ kubectl get pvc cat-pictures-pvc -o jsonpath='{.spec.volumeName}'
+
+你可以在进行更改之前查看 PVC.你可以在本地查看清单,或运行 kubectl get pvc <PVC 名称> -o yaml.这条命令的输出类似于:
+
+cat-pictures-pvc.yaml
+---------------------------
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cat-pictures-pvc
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 3Gi
+---------------------------
+
+以下是一个依赖于此 PersistentVolumeClaim 的 Deployment 示例:
+
+cat-pictures-writer-deployment.yaml
+---------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cat-pictures-writer
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: cat-pictures-writer
+  template:
+    metadata:
+      labels:
+        app: cat-pictures-writer
+    spec:
+      containers:
+      - name: nginx
+        image: nginx
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: cat-pictures
+          mountPath: /mnt
+      volumes:
+      - name: cat-pictures
+        persistentVolumeClaim:
+          claimName: cat-pictures-pvc
+          readOnly: false
+---------------------------
+
+第一步,你需要编辑 PersistentVolume 的 spec.persistentVolumeReclaimPolicy 并将其设置为 Retain.此字段确保你在删除相应的 PersistentVolumeClaim 时不会删除 PersistentVolume:
+$ kubectl patch pv cat-pictures-pv -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
+
+接下来,你需要停止正在使用绑定到你要迁移的这个 PersistentVolume 上的 PersistentVolumeClaim 的所有工作负载,然后删除该 PersistentVolumeClaim.在迁移完成之前,不要对 PersistentVolumeClaim 进行任何其他更改,例如调整卷的大小.
+
+完成后,你需要清除 PersistentVolume 的 spec.claimRef.uid 以确保在重新创建时 PersistentVolumeClaim 能够绑定到它:
+$ kubectl scale --replicas=0 deployment cat-pictures-writer
+$ kubectl delete pvc cat-pictures-pvc
+$ kubectl patch pv cat-pictures-pv -p '{"spec":{"claimRef":{"uid":""}}}'
+
+之后,将 PersistentVolume 的有效访问模式列表替换为(仅)ReadWriteOncePod:
+$ kubectl patch pv cat-pictures-pv -p '{"spec":{"accessModes":["ReadWriteOncePod"]}}'
+
+说明:
+ReadWriteOncePod 访问模式不能与其他访问模式结合使用.你要确保在更新时 ReadWriteOncePod 是 PersistentVolume 上的唯一访问模式,否则请求将失败.
+
+接下来,你需要修改 PersistentVolumeClaim,将 ReadWriteOncePod 设置为唯一的访问模式.你还应将 PersistentVolumeClaim 的 spec.volumeName 设置为 PersistentVolume 的名称,以确保其绑定到特定的 PersistentVolume.
+
+cat-pictures-pvc-update.yaml
+---------------------------
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cat-pictures-pvc
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteOncePod
+  resources:
+    requests:
+      storage: 3Gi
+  volumeName: cat-pictures-pv   # 注意这里,需要添加的内容
+---------------------------
+
+完成后,你可以重新创建你的 PersistentVolumeClaim 并启动你的工作负载:
+
+# 重要提示:在 apply 操作之前必须编辑在 cat-pictures-pvc.yaml 中的 PVC.你需要:
+# - 将 ReadWriteOncePod 设置为唯一的访问模式
+# - 将 spec.volumeName 设置为 "cat-pictures-pv"
+$ kubectl apply -f cat-pictures-pvc.yaml
+$ kubectl apply -f cat-pictures-writer-deployment.yaml
+
+注意: 原始的 .spec.replicas: 3,重新部署 deployment 以后,只可能有 1 个 pod 处于 running 状态,类似如下的输出:
+$ kubectl get pod -o wide
+NAME                                   READY   STATUS    RESTARTS   AGE   IP             NODE     NOMINATED NODE   READINESS GATES
+cat-pictures-writer-6596748ddc-ps7rj   0/1     Pending   0          11m   <none>         <none>   <none>           <none>
+cat-pictures-writer-6596748ddc-vt2xz   0/1     Pending   0          32s   <none>         <none>   <none>           <none>
+cat-pictures-writer-6596748ddc-xjsjk   1/1     Running   0          11m   10.244.0.135   k8s02    <none>           <none>
+
+即是 ReadWriteOncePod 模式只能允许 1 个 pod 存在并挂载,当删除这个 running 的 pod,会有另外一个 Pending 的 pod 启动挂载
+$ kubectl delete pod cat-pictures-writer-6596748ddc-xjsjk
+pod "cat-pictures-writer-6596748ddc-xjsjk" deleted
+$ kubectl get pod
+NAME                                   READY   STATUS    RESTARTS   AGE
+cat-pictures-writer-6596748ddc-ps7rj   1/1     Running   0          13m
+cat-pictures-writer-6596748ddc-rrrq9   0/1     Pending   0          3s
+cat-pictures-writer-6596748ddc-vt2xz   0/1     Pending   0          2m15s
+
+最后,你可以编辑 PersistentVolume 的 spec.persistentVolumeReclaimPolicy 并将其设置回 Delete,如果你之前更改了这个字段的话.
+$ kubectl patch pv cat-pictures-pv -p '{"spec":{"persistentVolumeReclaimPolicy":"Delete"}}'
+
+## 更改 PersistentVolume 的回收策略
+* 为什么要更改 PersistentVolume 的回收策略
+PersistentVolumes 可以有多种回收策略,包括 "Retain"、"Recycle" 和 "Delete".
+对于动态配置的 PersistentVolumes 来说,默认回收策略为 "Delete".这表示当用户删除对应的 PersistentVolumeClaim 时,动态配置的 volume 将被自动删除.如果 volume 包含重要数据时,这种自动行为可能是不合适的.那种情况下,更适合使用 "Retain" 策略.使用 "Retain" 时,如果用户删除 PersistentVolumeClaim,对应的 PersistentVolume 不会被删除.相反,它将变为 Released 状态,表示所有的数据可以被手动恢复.
+
+* 更改 PersistentVolume 的回收策略
+1.列出你集群中的 PersistentVolumes
+$ kubectl get pv
+
+输出类似于这样:
+---------------------------
+NAME                                       CAPACITY   ACCESSMODES   RECLAIMPOLICY   STATUS    CLAIM             STORAGECLASS     REASON    AGE
+pvc-b6efd8da-b7b5-11e6-9d58-0ed433a7dd94   4Gi        RWO           Delete          Bound     default/claim1    manual                     10s
+pvc-b95650f8-b7b5-11e6-9d58-0ed433a7dd94   4Gi        RWO           Delete          Bound     default/claim2    manual                     6s
+pvc-bb3ca71d-b7b5-11e6-9d58-0ed433a7dd94   4Gi        RWO           Delete          Bound     default/claim3    manual                     3s
+---------------------------
+这个列表同样包含了绑定到每个卷的 claims 名称,以便更容易的识别动态配置的卷.
+
+2.选择你的 PersistentVolumes 中的一个并更改它的回收策略:
+$ kubectl patch pv <your-pv-name> -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
+
+这里的 <your-pv-name> 是你选择的 PersistentVolume 的名字.
+
+说明:
+在 Windows 系统上,你必须对包含空格的 JSONPath 模板加双引号(而不是像上面 一样为 Bash 环境使用的单引号).这也意味着你必须使用单引号或者转义的双引号 来处理模板中的字面值.例如:
+$ kubectl patch pv <your-pv-name> -p "{\"spec\":{\"persistentVolumeReclaimPolicy\":\"Retain\"}}"
+
+3.验证你选择的 PersistentVolume 拥有正确的策略:
+$ kubectl get pv
+
+输出类似于这样:
+---------------------------
+NAME                                       CAPACITY   ACCESSMODES   RECLAIMPOLICY   STATUS    CLAIM             STORAGECLASS     REASON    AGE
+pvc-b6efd8da-b7b5-11e6-9d58-0ed433a7dd94   4Gi        RWO           Delete          Bound     default/claim1    manual                     40s
+pvc-b95650f8-b7b5-11e6-9d58-0ed433a7dd94   4Gi        RWO           Delete          Bound     default/claim2    manual                     36s
+pvc-bb3ca71d-b7b5-11e6-9d58-0ed433a7dd94   4Gi        RWO           Retain          Bound     default/claim3    manual                     33s
+---------------------------
+在前面的输出中,你可以看到绑定到申领 default/claim3 的卷的回收策略为 Retain.当用户删除申领 default/claim3 时,它不会被自动删除.
+
+## 配置 API 对象配额
+为 API 对象配置配额,包括 PersistentVolumeClaim 和 Service.配额限制了可以在命名空间中创建的特定类型对象的数量.你可以在 ResourceQuota 对象中指定配额.
+
+* 创建命名空间
+$ kubectl create namespace quota-object-example
+
+* 创建 ResourceQuota
+$ kubectl apply -f quota-objects.yaml --namespace=quota-object-example
+
+quota-objects.yaml
+------------------------------------
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: object-quota-demo
+spec:
+  hard:
+    persistentvolumeclaims: "1"
+    services.loadbalancers: "2"
+    services.nodeports: "0"
+------------------------------------
+
+输出结果表明在 quota-object-example 命名空间中,至多只能有一个 PersistentVolumeClaim,最多两个 LoadBalancer 类型的服务,不能有 NodePort 类型的服务.
+------------------------------------
+status:
+  hard:
+    persistentvolumeclaims: "1"
+    services.loadbalancers: "2"
+    services.nodeports: "0"
+  used:
+    persistentvolumeclaims: "0"
+    services.loadbalancers: "0"
+    services.nodeports: "0"
+------------------------------------
+
+* 创建 PersistentVolumeClaim
+$ kubectl apply -f quota-objects-pvc.yaml --namespace=quota-object-example
+
+quota-objects-pvc.yaml
+------------------------------------
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-quota-demo
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 3Gi
+------------------------------------
+
+$ kubectl get persistentvolumeclaims --namespace=quota-object-example
+
+输出信息表明 PersistentVolumeClaim 存在并且处于 Pending 状态:
+------------------------------------
+NAME             STATUS
+pvc-quota-demo   Pending
+------------------------------------
+
+* 尝试创建第二个 PersistentVolumeClaim
+$ kubectl apply -f quota-objects-pvc-2.yaml --namespace=quota-object-example
+
+输出信息表明第二个 PersistentVolumeClaim 没有创建成功,因为这会超出命名空间的配额.
+------------------------------------
+Error from server (Forbidden): error when creating "quota-objects-pvc-2.yaml": persistentvolumeclaims "pvc-quota-demo-2" is forbidden: exceeded quota: object-quota-demo,requested: persistentvolumeclaims=1,used: persistentvolumeclaims=1,limited: persistentvolumeclaims=1
+------------------------------------
+
+* 下面这些字符串可被用来标识那些能被配额限制的 API 资源:
+字符串	                                                        API 对象
+"pods"	                  Pod
+"services"	              Service
+"replicationcontrollers"	ReplicationController
+"resourcequotas"	        ResourceQuota
+"secrets"	                Secret
+"configmaps"	            ConfigMap
+"persistentvolumeclaims"	PersistentVolumeClaim
+"services.nodeports"	    NodePort 类型的 Service
+"services.loadbalancers"	LoadBalancer 类型的 Service
+
+## 调试 DNS 问题
+
+* 创建一个简单的 Pod 作为测试环境
+
+$ kubectl apply -f dnsutils.yaml
+
+dnsutils.yaml
+---------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: dnsutils
+  namespace: default
+spec:
+  containers:
+  - name: dnsutils
+    image: registry.k8s.io/e2e-test-images/jessie-dnsutils:1.3
+    command:
+      - sleep
+      - "infinity"
+    imagePullPolicy: IfNotPresent
+  restartPolicy: Always
+---------------------------
+
+* 一旦 Pod 处于运行状态,你就可以在该环境里执行 nslookup.如果你看到类似下列的内容,则表示 DNS 是正常运行的.
+
+$ kubectl exec -i -t dnsutils -- nslookup kubernetes.default
+Server:		10.96.0.10
+Address:	10.96.0.10#53
+
+Name:	kubernetes.default.svc.cluster.local
+Address: 10.96.0.1
+
+* 先检查本地的 DNS 配置
+查看 resolv.conf 文件的内容
+
+$ kubectl exec -ti dnsutils -- cat /etc/resolv.conf
+
+验证 search 和 nameserver 的配置是否与下面的内容类似 (注意 search 根据不同的云提供商可能会有所不同):
+
+search default.svc.cluster.local svc.cluster.local cluster.local google.internal c.gce_project_id.internal
+nameserver 10.0.0.10
+options ndots:5
+
+下列错误表示 CoreDNS (或 kube-dns)插件或者相关服务出现了问题:
+
+$ kubectl exec -i -t dnsutils -- nslookup kubernetes.default
+
+输出为:
+Server:    10.0.0.10
+Address 1: 10.0.0.10
+
+nslookup: can't resolve 'kubernetes.default'
+
+或者
+
+kubectl exec -i -t dnsutils -- nslookup kubernetes.default
+
+输出为:
+Server:    10.0.0.10
+Address 1: 10.0.0.10 kube-dns.kube-system.svc.cluster.local
+
+nslookup: can't resolve 'kubernetes.default'
+
+* 检查 DNS Pod 是否运行
+使用 kubectl get pods 命令来验证 DNS Pod 是否运行.
+
+$ kubectl get pods --namespace=kube-system -l k8s-app=kube-dns
+
+输出为:
+NAME                       READY     STATUS    RESTARTS   AGE
+...
+coredns-7b96bf9f76-5hsxb   1/1       Running   0           1h
+coredns-7b96bf9f76-mvmmt   1/1       Running   0           1h
+...
+
+说明:
+对于 CoreDNS 和 kube-dns 部署而言,标签 k8s-app 的值都应该是 kube-dns.
+
+如果你发现没有 CoreDNS Pod 在运行,或者该 Pod 的状态是 failed 或者 completed,那可能这个 DNS 插件在你当前的环境里并没有成功部署,你将需要手动去部署它.
+
+* 检查 DNS Pod 里的错误
+使用 kubectl logs 命令来查看 DNS 容器的日志信息.
+
+如查看 CoreDNS 的日志信息:
+
+$ kubectl logs --namespace=kube-system -l k8s-app=kube-dns
+
+下列是一个正常运行的 CoreDNS 日志信息:
+.:53
+[INFO] plugin/reload: Running configuration SHA512 = 591cf328cccc12bc490481273e738df59329c62c0b729d94e8b61db9961c2fa5f046dd37f1cf888b953814040d180f52594972691cd6ff41be96639138a43908
+CoreDNS-1.11.1
+linux/amd64,go1.20.7,ae2bbc2
+
+* 检查是否启用了 DNS 服务
+使用 kubectl get service 命令来检查 DNS 服务是否已经启用.
+
+$ kubectl get svc --namespace=kube-system
+
+输出为:
+NAME       TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)                  AGE
+kube-dns   ClusterIP   10.96.0.10   <none>        53/UDP,53/TCP,9153/TCP   2d
+
+说明:
+不管是 CoreDNS 还是 kube-dns,这个服务的名字都会是 kube-dns.
+
+* DNS 的端点公开了吗？
+你可以使用 kubectl get endpoints 命令来验证 DNS 的端点是否公开了.
+
+$ kubectl get endpoints kube-dns --namespace=kube-system
+
+NAME       ENDPOINTS                                               AGE
+kube-dns   10.244.0.0:53,10.244.0.2:53,10.244.0.0:53 + 3 more...2d
+
+* DNS 查询有被接收或者执行吗？
+你可以通过给 CoreDNS 的配置文件(也叫 Corefile)添加 log 插件来检查查询是否被正确接收.CoreDNS 的 Corefile 被保存在一个叫 coredns 的 ConfigMap 里,使用下列命令来编辑它:
+
+$ kubectl -n kube-system edit configmap coredns
+
+* CoreDNS 是否有足够的权限？
+CoreDNS 必须能够列出 service 和 endpoint 相关的资源来正确解析服务名称.
+
+首先,获取当前的 ClusterRole system:coredns:
+$ kubectl describe clusterrole system:coredns -n kube-system
+Name:         system:coredns
+Labels:       <none>
+Annotations:  <none>
+PolicyRule:
+  Resources                        Non-Resource URLs  Resource Names  Verbs
+  ---------                        -----------------  --------------  -----
+  endpoints                        []                 []              [list watch]
+  namespaces                       []                 []              [list watch]
+  pods                             []                 []              [list watch]
+  services                         []                 []              [list watch]
+  endpointslices.discovery.k8s.io  []                 []              [list watch]
+
+如果缺少任何权限,请编辑 ClusterRole 来添加它们:
+$ kubectl edit clusterrole system:coredns -n kube-system
+
+EndpointSlices 权限的插入示例:
+...
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs:
+  - list
+  - watch
+...
+
+* 你的服务在正确的名字空间中吗？
+未指定名字空间的 DNS 查询仅作用于 Pod 所在的名字空间.
+如果 Pod 和服务的名字空间不相同,则 DNS 查询必须指定服务所在的名字空间.
+
+该查询仅限于 Pod 所在的名字空间:
+$ kubectl exec -i -t dnsutils -- nslookup <service-name>
+
+指定名字空间的查询:
+$ kubectl exec -i -t dnsutils -- nslookup <service-name>.<namespace>
+
+## 限制存储使用量
+如何限制一个名字空间中的存储使用量,用到了以下资源:ResourceQuota、 LimitRange 和 PersistentVolumeClaim
+
+说明: 在"配置 API 对象配额"章节中描述了可以通过 ResourceQuota 限制的资源类型,可前往查看
+
+* 场景:限制存储使用量
+集群管理员代表用户群操作集群,该管理员希望控制单个名字空间可以消耗多少存储空间以控制成本.
+
+该管理员想要限制:
+  1.名字空间中持久卷申领(persistent volume claims)的数量
+  2.每个申领(claim)可以请求的存储量
+  3.名字空间可以具有的累计存储量
+
+* 使用 LimitRange 限制存储请求
+将 LimitRange 添加到名字空间会为存储请求大小强制设置最小值和最大值.存储是通过 PersistentVolumeClaim 来发起请求的.执行限制范围控制的准入控制器会拒绝任何高于或低于管理员所设阈值的 PVC.
+
+在此示例中,请求 10Gi 存储的 PVC 将被拒绝,因为它超过了最大 2Gi.
+---------------------------
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: storagelimits
+spec:
+  limits:
+  - type: PersistentVolumeClaim
+    max:
+      storage: 2Gi
+    min:
+      storage: 1Gi
+---------------------------
+当底层存储提供程序需要某些最小值时,将会用到所设置最小存储请求值.例如,AWS EBS volumes 的最低要求为 1Gi.
+
+* 使用 StorageQuota 限制 PVC 数目和累计存储容量
+管理员可以限制某个名字空间中的 PVC 个数以及这些 PVC 的累计容量.如果 PVC 的数目超过任一上限值,新的 PVC 将被拒绝.
+
+在此示例中,名字空间中的第 6 个 PVC 将被拒绝,因为它超过了最大计数 5.或者,当与上面的 2Gi 最大容量限制结合在一起时,意味着 5Gi 的最大配额不能支持 3 个都是 2Gi 的 PVC.后者实际上是向名字空间请求 6Gi 容量,而该名字空间已经设置上限为 5Gi.
+---------------------------
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: storagequota
+spec:
+  hard:
+    persistentvolumeclaims: "5"
+    requests.storage: "5Gi"
+---------------------------
+
+限制范围对象可以用来设置可请求的存储量上限,而资源配额对象则可以通过申领计数和 累计存储容量有效地限制名字空间耗用的存储量.
+
+## 名字空间演练 - 重要,可以在多个命名空间切换,特别是关于 context (kubectl context view) 的应用
+Kubernetes 名字空间 有助于不同的项目、团队或客户去共享 Kubernetes 集群.
+
+名字空间通过以下方式实现这点:
+  1.为名字设置作用域.
+  2.为集群中的部分资源关联鉴权和策略的机制.
+
+* 创建新的名字空间
+假设一个场景,某组织正在使用共享的 Kubernetes 集群来支持开发和生产:
+  .开发团队希望在集群中维护一个空间,以便他们可以查看用于构建和运行其应用程序的 Pod、Service 和 Deployment 列表.在这个空间里,
+    Kubernetes 资源被自由地加入或移除,对谁能够或不能修改资源的限制被放宽,以实现敏捷开发.
+  .运维团队希望在集群中维护一个空间,以便他们可以强制实施一些严格的规程,对谁可以或谁不可以操作运行生产站点的 Pod、Service 和
+    Deployment 集合进行控制.
+
+该组织可以遵循的一种模式是将 Kubernetes 集群划分为两个名字空间:development 和 production.
+
+让我们创建两个新的名字空间来保存我们的工作.
+
+$ kubectl create -f namespace-dev.yaml
+---------------------------
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: development
+  labels:
+    name: development
+---------------------------
+
+$ kubectl create -f namespace-prod.yaml
+---------------------------
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: production
+  labels:
+    name: production
+---------------------------
+
+* 在每个名字空间中创建 Pod
+Kubernetes 名字空间为集群中的 Pod、Service 和 Deployment 提供了作用域.
+与一个名字空间交互的用户不会看到另一个名字空间中的内容.
+为了演示这一点,让我们在 development 名字空间中启动一个简单的 Deployment 和 Pod.
+
+我们首先检查一下当前的上下文:
+
+$ kubectl config view
+---------------------------
+apiVersion: v1
+clusters:
+- cluster:
+    certificate-authority-data: DATA+OMITTED
+    server: https://192.168.1.11:6443
+  name: kubernetes
+contexts:
+- context:
+    cluster: kubernetes
+    user: kubernetes-admin
+  name: kubernetes-admin@kubernetes
+current-context: kubernetes-admin@kubernetes
+kind: Config
+preferences: {}
+users:
+- name: kubernetes-admin
+  user:
+    client-certificate-data: DATA+OMITTED
+    client-key-data: DATA+OMITTED
+---------------------------
+
+$ kubectl config current-context
+kubernetes-admin@kubernetes
+
+下一步是为 kubectl 客户端定义一个上下文,以便在每个名字空间中工作."cluster" 和 "user" 字段的值将从当前上下文中复制.
+$ kubectl config set-context dev --namespace=development \
+  --cluster=kubernetes \
+  --user=kubernetes-admin
+
+$ kubectl config set-context prod --namespace=production \
+  --cluster=kubernetes \
+  --user=kubernetes-admin
+
+默认情况下,上述命令会添加两个上下文到 .kube/config 文件中.你现在可以查看上下文并根据你希望使用的名字空间并在这两个新的请求上下文之间切换.
+
+# 查看新的上下文:
+$ kubectl config view
+---------------------------
+apiVersion: v1
+clusters:
+- cluster:
+    certificate-authority-data: DATA+OMITTED
+    server: https://192.168.1.11:6443
+  name: kubernetes
+contexts:
+- context:                                # 这里新添加的 context dev
+    cluster: kubernetes
+    namespace: development
+    user: kubernetes-admin
+  name: dev
+- context:
+    cluster: kubernetes
+    user: kubernetes-admin
+  name: kubernetes-admin@kubernetes
+- context:                              # 这里新添加的 context prod
+    cluster: kubernetes
+    namespace: production
+    user: kubernetes-admin
+  name: prod
+current-context: kubernetes-admin@kubernetes
+kind: Config
+preferences: {}
+users:
+- name: kubernetes-admin
+  user:
+    client-certificate-data: DATA+OMITTED
+    client-key-data: DATA+OMITTED
+---------------------------
+
+切换到 development 名字空间进行操作.
+$ kubectl config use-context dev
+Switched to context "dev".
+
+$ kubectl config current-context
+dev
+
+此时,我们从命令行向 Kubernetes 集群发出的所有请求都限定在 development 名字空间中.
+
+让我们创建一些内容.
+$ kubectl apply -f snowflake-deployment.yaml
+
+snowflake-deployment.yaml
+---------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: snowflake
+  name: snowflake
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: snowflake
+  template:
+    metadata:
+      labels:
+        app: snowflake
+    spec:
+      containers:
+      - image: registry.k8s.io/serve_hostname
+        imagePullPolicy: Always
+        name: snowflake
+---------------------------
+
+$ kubectl get deployment
+NAME        READY   UP-TO-DATE   AVAILABLE   AGE
+snowflake   2/2     2            2           46s
+
+$ kubectl get pods -l app=snowflake
+NAME                         READY   STATUS    RESTARTS   AGE
+snowflake-6987c8547d-bx474   1/1     Running   0          2m20s
+snowflake-6987c8547d-s9p5l   1/1     Running   0          2m20s
+
+$ kubectl get pods
+NAME                         READY   STATUS    RESTARTS   AGE
+snowflake-6987c8547d-bx474   1/1     Running   0          2m35s
+snowflake-6987c8547d-s9p5l   1/1     Running   0          2m35s
+
+注意: 这里上面命令都没有指定 -n development
+
+# 切换到 production 名字空间,展示一个名字空间中的资源如何对另一个名字空间不可见.
+$ kubectl config use-context prod
+
+production 名字空间应该是空的,下列命令应该返回的内容为空.
+$ kubectl get deployment
+$ kubectl get pods
+
+No resources found in production namespace.
+No resources found in production namespace.
+
+创建一些名为 cattle 的 Pod.
+$ kubectl create deployment cattle --image=registry.k8s.io/serve_hostname --replicas=5
+$ kubectl get deployment
+
+$ kubectl get pods -l run=cattle
+NAME                      READY   STATUS        RESTARTS   AGE
+cattle-85885fc65b-6nwfs   1/1     Running       0          23s
+cattle-85885fc65b-bc2q4   1/1     Running       0          25s
+cattle-85885fc65b-psqhx   1/1     Running       0          25s
+cattle-85885fc65b-pwwpz   1/1     Running       0          24s
+cattle-85885fc65b-v47kq   1/1     Running       0          23s
+
+## 操作 Kubernetes 中的 etcd 集群 - 重要
+https://kubernetes.io/zh-cn/docs/tasks/administer-cluster/configure-upgrade-etcd/
+
+根据文档中的建议,最好是将 etcd 作为集群在单独的机器上运行
+
+## 为系统守护进程预留计算资源
+Kubernetes 的节点可以按照 Capacity 调度.默认情况下 pod 能够使用节点全部可用容量.这是个问题,因为节点自己通常运行了不少驱动 OS 和 Kubernetes 的系统守护进程.除非为这些系统守护进程留出资源,否则它们将与 Pod 争夺资源并导致节点资源短缺问题.
+
+kubelet 公开了一个名为 'Node Allocatable' 的特性,有助于为系统守护进程预留计算资源.Kubernetes 推荐集群管理员按照每个节点上的工作负载密度配置 'Node Allocatable'.
+
+* 节点可分配资源
+Kubernetes 节点上的 'Allocatable' 被定义为 Pod 可用计算资源量.调度器不会超额申请 'Allocatable'.目前支持 'CPU'、'memory' 和 'ephemeral-storage' 这几个参数.
+
+$ kubectl describe node k8s01      # 这里可以查看具体的内容如下
+...
+Allocated resources:
+  (Total limits may be over 100 percent,i.e.,overcommitted.)
+  Resource           Requests     Limits
+  --------           --------     ------
+  cpu                1100m (55%)  0 (0%)
+  memory             240Mi (4%)   340Mi (5%)
+  ephemeral-storage  0 (0%)       0 (0%)
+  hugepages-2Mi      0 (0%)       0 (0%)
+Events:              <none>
+
+* 启用 QoS 和 Pod 级别的 cgroups
+为了恰当地在节点范围实施节点可分配约束,你必须通过 cgroupsPerQOS 设置启用新的 cgroup 层次结构.这个设置是默认启用的.启用后,kubelet 将在其管理的 cgroup 层次结构中创建所有终端用户的 Pod.
+
+* 配置 cgroup 驱动
+kubelet 支持在主机上使用 cgroup 驱动操作 cgroup 层次结构.该驱动通过 cgroupDriver 设置进行配置.
+
+支持的参数值如下:
+  .cgroupfs 是默认的驱动,在主机上直接操作 cgroup 文件系统以对 cgroup 沙箱进行管理.
+  .systemd 是可选的驱动,使用 init 系统支持的资源的瞬时切片管理 cgroup 沙箱.
+
+取决于相关容器运行时的配置,操作员可能需要选择一个特定的 cgroup 驱动来保证系统正常运行.例如,如果操作员使用 containerd 运行时提供的 systemd cgroup 驱动时,必须配置 kubelet 使用 systemd cgroup 驱动.
+
+* Kube 预留值
+ .KubeletConfiguration 设置: kubeReserved: {}.示例值 {cpu: 100m,memory: 100Mi,ephemeral-storage: 1Gi,pid=1000}
+ .KubeletConfiguration 设置: kubeReservedCgroup: ""
+
+^^^^^^^^^^^^^^^^^^^^
+在 Kubernetes 中,ephemeral-storage(临时存储)是一种用于表示容器可以使用的临时存储资源的概念.它通常用于表示容器在节点上可以使用的本地磁盘空间,供容器内的应用程序进行临时文件存储、缓存、日志等操作.
+
+在 Kubernetes 中,每个节点都有一定的本地磁盘空间可以用于存储容器的临时数据.ephemeral-storage 是用来限制容器对这些本地磁盘资源的使用量,以避免容器过度使用本地磁盘资源导致节点磁盘空间不足或资源争用的情况.
+vvvvvvvvvvvvvvvvvvvv
+
+kubeReserved 用来给诸如 kubelet、容器运行时等 Kubernetes 系统守护进程记述其资源预留值.该配置并非用来给以 Pod 形式运行的系统守护进程预留资源.kubeReserved 通常是节点上 Pod 密度 的函数.
+除了 cpu、内存 和 ephemeral-storage 之外,pid 可用来指定为 Kubernetes 系统守护进程预留指定数量的进程 ID.
+要选择性地对 Kubernetes 系统守护进程上执行 kubeReserved 保护,需要把 kubelet 的 kubeReservedCgroup 设置的值设为 kube 守护进程的父控制组,并将 kube-reserved 添加到 enforceNodeAllocatable.
+推荐将 Kubernetes 系统守护进程放置于顶级控制组之下(例如 systemd 机器上的 runtime.slice).理想情况下每个系统守护进程都应该在其自己的子控制组中运行.请参考这个设计方案,进一步了解关于推荐控制组层次结构的细节.
+
+请注意,如果 kubeReservedCgroup 不存在,Kubelet 将 不会 创建它.如果指定了一个无效的 cgroup,Kubelet 将会无法启动.就 systemd cgroup 驱动而言,你要为所定义的 cgroup 设置名称时要遵循特定的模式: 所设置的名字应该是你为 kubeReservedCgroup 所给的参数值加上 .slice 后缀.
+
+* 系统预留值
+ .KubeletConfiguration 设置: systemReserved: {}.示例值 {cpu: 100m,memory: 100Mi,ephemeral-storage: 1Gi,pid=1000}
+ .KubeletConfiguration 设置: systemReservedCgroup: ""
+
+systemReserved 用于为诸如 sshd、udev 等系统守护进程记述其资源预留值.systemReserved 也应该为 kernel 预留 内存,因为目前 kernel
+使用的内存并不记在 Kubernetes 的 Pod 上.同时还推荐为用户登录会话预留资源(systemd 体系中的 user.slice).
+除了 cpu、内存 和 ephemeral-storage 之外,pid 可用来指定为 Kubernetes 系统守护进程预留指定数量的进程 ID.
+要想为系统守护进程上可选地实施 systemReserved 约束,请指定 kubelet 的 systemReservedCgroup 设置值为 OS 系统守护进程的父级控制组,并将 system-reserved 添加到 enforceNodeAllocatable.
+推荐将 OS 系统守护进程放在一个顶级控制组之下(例如 systemd 机器上的 system.slice).
+
+请注意,如果 systemReservedCgroup 不存在,kubelet 不会 创建它.如果指定了无效的 cgroup,kubelet 将会失败.就 systemd cgroup 驱动而言,你在指定 cgroup 名字时要遵循特定的模式: 该名字应该是你为 systemReservedCgroup 参数所设置的值加上 .slice 后缀.
+
+* 显式预留的 CPU 列表
+KubeletConfiguration 设置: reservedSystemCPUs: 示例值 0-3
+
+reservedSystemCPUs 旨在为操作系统守护程序和 Kubernetes 系统守护程序预留一组明确指定编号的 CPU.reservedSystemCPUs 适用于不打算针对 cpuset 资源为操作系统守护程序和 Kubernetes 系统守护程序定义独立的顶级 cgroups 的系统.如果 Kubelet 没有 指定参数 kubeReservedCgroup 和 systemReservedCgroup,则 reservedSystemCPUs 的设置将优先于 kubeReservedCgroup 和 systemReservedCgroup 选项.
+
+* 驱逐阈值
+KubeletConfiguration 设置:  evictionHard: {memory.available: "100Mi",nodefs.available: "10%",nodefs.inodesFree: "5%",imagefs.available: "15%"}.示例值: {memory.available: "<500Mi"}
+
+节点级别的内存压力将导致系统内存不足,这将影响到整个节点及其上运行的所有 Pod.节点可以暂时离线直到内存已经回收为止.为了防止系统内存不足(或减少系统内存不足的可能性),kubelet 提供了资源不足管理.驱逐操作只支持 memory 和 ephemeral-storage.通过 evictionHard 设置预留一些内存后,当节点上的可用内存降至预留值以下时,kubelet 将尝试驱逐 Pod.如果节点上不存在系统守护进程,Pod 将不能使用超过 capacity-eviction-hard 所指定的资源量.因此,为驱逐而预留的资源对 Pod 是不可用的.
+
+* 实施节点可分配约束
+KubeletConfiguration 设置: enforceNodeAllocatable: [pods].示例值: [pods,system-reserved,kube-reserved]
+
+调度器将 'Allocatable' 视为 Pod 可用的 capacity(资源容量).
+
+kubelet 默认对 Pod 执行 'Allocatable' 约束.无论何时,如果所有 Pod 的总用量超过了 'Allocatable',驱逐 Pod 的措施将被执行.可将 KubeletConfiguration enforceNodeAllocatable 设置为 pods 值来控制这个措施.
+
+可选地,通过在同一设置中同时指定 kube-reserved 和 system-reserved 值,可以使 kubelet 强制实施 kubeReserved 和 systemReserved 约束.请注意,要想执行 kubeReserved 或者 systemReserved 约束,需要对应设置 kubeReservedCgroup 或者 systemReservedCgroup.
+
+* 操作 kubelet 具体参数 - 重要
+查看 kubelet 配置 - 查看当前正在运行的 KubeletConfiguration 的配置
+1.在终端中使用 kubectl proxy 启动代理服务器.
+$ kubectl proxy
+2.打开另一个终端窗口并使用 curl 来获取 kubelet 配置.将 <node-name> 替换为节点的实际名称:
+$ curl -X GET http://127.0.0.1:8001/api/v1/nodes/<node-name>/proxy/configz | jq .
+
+修改 kubelet 配置
+1.通过 systemctl status kubelet  -l --no-pager 查看到
+/usr/local/bin/kubelet --bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf --kubeconfig=/etc/kubernetes/kubelet.conf --config=/var/lib/kubelet/config.yaml --container-runtime-endpoint=unix:///run/containerd/containerd.sock --pod-infra-container-image=registry.k8s.io/pause:3.9
+
+--config=/var/lib/kubelet/config.yaml 这里显示的是 KubeletConfiguration 的配置文件,当需要修改和添加参数时,修改此文件
+
+2.测试,修改 /var/lib/kubelet/config.yaml 文件中的如下部分
+...
+kind: KubeletConfiguration
+logging:
+  flushFrequency: 15s     # 文件默认为 0(不是指 0s),通过 curl 命令查看到的 "flushFrequency": "5s",默认值
+  options:                # 如果修改为 15s 以后,重启 kubelet 以后,通过 curl 可以查看到值已经修改到
+    json:                 # "flushFrequency": "15s"
+      infoBufferSize: "0"
+    text:
+      infoBufferSize: "0"
+  verbosity: 0
+...
+
+3.节点分配资源相关参数
+...
+evictionHard:
+  imagefs.available: 15%
+  imagefs.inodesFree: 5%
+  memory.available: 100Mi
+  nodefs.available: 10%
+  nodefs.inodesFree: 5%
+...
+
+enforceNodeAllocatable:
+- pods
+- system-reserved
+- kube-reserved
+...
+
+kubeReservedCgroup: /kube.slice
+kubeReserved:
+  cpu: 100m
+  memory: 100Mi
+  ephemeral-storage: 1Gi
+  pid: 1000
+...
+
+systemReservedCgroup: /system.slice
+systemReserved:
+  cpu: 100m
+  memory: 100Mi
+  ephemeral-storage: 1Gi
+  pid: 1000
+
+* 示例场景
+这是一个用于说明节点可分配(Node Allocatable)计算方式的示例:
+  .节点拥有 32Gi memory、16 CPU 和 100Gi Storage 资源
+  .kubeReserved 被设置为 {cpu: 1000m,memory: 2Gi,ephemeral-storage: 1Gi}
+  .systemReserved 被设置为 {cpu: 500m,memory: 1Gi,ephemeral-storage: 1Gi}
+  .evictionHard 被设置为 {memory.available: "<500Mi",nodefs.available: "<10%"}
+
+在这个场景下,'Allocatable' 将会是 14.5 CPUs、28.5Gi 内存以及 88Gi 本地存储.调度器保证这个节点上的所有 Pod 的内存 requests 总量不超过 28.5Gi,存储不超过 '88Gi'.当 Pod 的内存使用总量超过 28.5Gi 或者磁盘使用总量超过 88Gi 时,kubelet 将会驱逐它们.如果节点上的所有进程都尽可能多地使用 CPU,则 Pod 加起来不能使用超过 14.5 CPUs 的资源.
+
+当没有执行 kubeReserved 和/或 systemReserved 策略且系统守护进程使用量超过其预留时,如果节点内存用量高于 31.5Gi 或 storage 大于 90Gi,kubelet 将会驱逐 Pod.
+
+## 以非 root 用户身份运行 Kubernetes 节点组件 - 参考,需要单独节点测试
+https://kubernetes.io/zh-cn/docs/tasks/administer-cluster/kubelet-in-userns/
+
+## 安全地清空一个节点
+准备开始
+此任务假定你已经满足了以下先决条件:
+ 1.在节点清空期间,不要求应用具有高可用性
+ 2.你已经了解了 PodDisruptionBudget 的概念,并为需要它的应用配置了 PodDisruptionBudget.
+
+说明: PodDisruptionBudget 请查看下面的部分
+     ### 干扰(Disruptions)
+     ### 为应用程序设置干扰预算(Disruption Budget) 部分
+
+* 配置干扰预算
+为了确保你的负载在维护期间仍然可用,你可以配置一个 PodDisruptionBudget.如果可用性对于正在清空的该节点上运行或可能在该节点上运行的任何应用程序很重要,首先配置一个 PodDisruptionBudgets 并继续遵循本指南.
+
+建议为你的 PodDisruptionBudgets 设置 AlwaysAllow 不健康 Pod 驱逐策略,以在节点清空期间支持驱逐异常的应用程序.默认行为是等待应用程序的 Pod 变为 健康后,才能进行清空操作.
+
+* 使用 kubectl drain 从服务中删除一个节点
+在对节点执行维护(例如内核升级、硬件维护等)之前,可以使用 kubectl drain 从节点安全地逐出所有 Pod.安全的驱逐过程允许 Pod 的容器体面地终止,并确保满足指定的 PodDisruptionBudgets.
+
+说明:
+默认情况下,kubectl drain 将忽略节点上不能杀死的特定系统 Pod;
+
+kubectl drain 的成功返回,表明所有的 Pod(除了上一段中描述的被排除的那些),已经被安全地逐出(考虑到期望的终止宽限期和你定义的 PodDisruptionBudget).然后就可以安全地关闭节点,比如关闭物理机器的电源,如果它运行在云平台上,则删除它的虚拟机.
+
+说明:
+如果存在新的、能够容忍 node.kubernetes.io/unschedulable 污点的 Pod,那么这些 Pod 可能会被调度到你已经清空的节点上.除了 DaemonSet 之外,请避免容忍此污点.
+
+如果你或另一个 API 用户(绕过调度器)直接为 Pod 设置了 nodeName字段,则即使你已将该节点清空并标记为不可调度,Pod 仍将被绑定到这个指定的节点并在该节点上运行.
+
+首先,确定想要清空的节点的名称.可以用以下命令列出集群中的所有节点:
+$ kubectl get nodes
+
+接下来,告诉 Kubernetes 清空节点:
+$ kubectl drain --ignore-daemonsets <节点名称>
+
+如果存在 DaemonSet 管理的 Pod,你将需要为 kubectl 设置 --ignore-daemonsets 以成功地清空节点.kubectl drain 子命令自身实际上不清空节点上的 DaemonSet Pod 集合: DaemonSet 控制器(作为控制平面的一部分)会立即用新的等效 Pod 替换缺少的 Pod.DaemonSet 控制器还会创建忽略不可调度污点的 Pod,这种污点允许在你正在清空的节点上启动新的 Pod.
+
+一旦它返回(没有报错),你就可以下线此节点(或者等价地,如果在云平台上,删除支持该节点的虚拟机).如果要在维护操作期间将节点留在集群中,则需要运行:
+$ kubectl uncordon <node name>
+
+然后告诉 Kubernetes,它可以继续在此节点上调度新的 Pod.
+
+* 并行清空多个节点
+kubectl drain 命令一次只能发送给一个节点.但是,你可以在不同的终端或后台为不同的节点并行地运行多个 kubectl drain 命令.同时运行的多个 drain 命令仍然遵循你指定的 PodDisruptionBudget.
+
+例如,如果你有一个三副本的 StatefulSet,并设置了一个 PodDisruptionBudget,指定 minAvailable: 2.如果所有的三个 Pod 处于健康(healthy)状态,并且你并行地发出多个 drain 命令,那么 kubectl drain 只会从 StatefulSet 中逐出一个 Pod,因为 Kubernetes 会遵守 PodDisruptionBudget 并确保在任何时候只有一个 Pod 不可用(最多不可用 Pod 个数的计算方法:replicas - minAvailable).任何会导致处于健康(healthy) 状态的副本数量低于指定预算的清空操作都将被阻止.
+
+* 驱逐 API
+如果你不喜欢使用 kubectl drain (比如避免调用外部命令,或者更细化地控制 Pod 驱逐过程),你也可以用驱逐 API 通过编程的方式达到驱逐的效果.
+
+请优先阅读如下(干扰(Disruptions))章节
+^^^^^^^^^^^^^^^^^^^^
+### 干扰(Disruptions)
+文档同样适用于想要执行自动化集群操作(例如升级和自动扩展集群)的集群管理员.
+
+* 自愿干扰和非自愿干扰
+Pod 不会消失,除非有人(用户或控制器)将其销毁,或者出现了不可避免的硬件或软件系统错误.
+
+我们把这些不可避免的情况称为应用的非自愿干扰(Involuntary Disruptions).例如:
+ .节点下层物理机的硬件故障
+ .集群管理员错误地删除虚拟机(实例)
+ .云提供商或虚拟机管理程序中的故障导致的虚拟机消失
+ .内核错误
+ .节点由于集群网络隔离从集群中消失
+ .由于节点资源不足导致 pod 被驱逐.
+
+除了资源不足的情况,大多数用户应该都熟悉这些情况;它们不是特定于 Kubernetes 的.
+
+我们称其他情况为自愿干扰(Voluntary Disruptions).包括由应用所有者发起的操作和由集群管理员发起的操作.典型的应用所有者的操作包括:
+ .删除 Deployment 或其他管理 Pod 的控制器
+ .更新了 Deployment 的 Pod 模板导致 Pod 重启
+ .直接删除 Pod(例如,因为误操作)
+
+集群管理员操作包括:
+ .排空(drain)节点进行修复或升级.
+ .从集群中排空节点以缩小集群(了解集群自动扩缩).
+ .从节点中移除一个 Pod,以允许其他 Pod 使用该节点.
+这些操作可能由集群管理员直接执行,也可能由集群管理员所使用的自动化工具执行,或者由集群托管提供商自动执行.
+
+注意:
+并非所有的自愿干扰都会受到 Pod 干扰预算的限制.例如,删除 Deployment 或 Pod 的删除操作就会跳过 Pod 干扰预算检查.
+
+* 处理干扰
+以下是减轻非自愿干扰的一些方法:
+ .确保 Pod 在请求中给出所需资源.
+ .如果需要更高的可用性,请复制应用.
+ .为了在运行复制应用时获得更高的可用性,请跨机架(使用 反亲和性)或跨区域(如果使用多区域集群)扩展应用.
+
+* 干扰预算
+作为一个应用的所有者,你可以为每个应用创建一个 PodDisruptionBudget(PDB).PDB 将限制在同一时间因自愿干扰导致的多副本应用中发生宕机的 Pod 数量.例如,基于票选机制的应用希望确保运行中的副本数永远不会低于票选所需的数量.Web 前端可能希望确保提供负载的副本数量永远不会低于总数的某个百分比.
+
+PDB 指定应用可以容忍的副本数量(相当于应该有多少副本).例如,具有 .spec.replicas: 5 的 Deployment 在任何时间都应该有 5 个 Pod.如果 PDB 允许其在某一时刻有 4 个副本,那么驱逐 API 将允许同一时刻仅有一个(而不是两个)Pod 自愿干扰.
+
+Pod 的“预期”数量由管理这些 Pod 的工作负载资源的 .spec.replicas 参数计算出来的.控制平面通过检查 Pod 的 .metadata.ownerReferences 来发现关联的工作负载资源.
+
+PDB 无法防止非自愿干扰;但它们确实计入预算.
+由于应用的滚动升级而被删除或不可用的 Pod 确实会计入干扰预算,但是工作负载资源(如 Deployment 和 StatefulSet)在进行滚动升级时不受 PDB 的限制.应用更新期间的故障处理方式是在对应的工作负载资源的 spec 中配置的.
+建议在你的 PodDisruptionBudget 中将不健康 Pod 驱逐策略 设置为 AlwaysAllow 以支持在节点腾空期间驱逐行为不当的应用程序.默认行为是等待应用程序 Pod 变得健康,然后才能继续执行腾空.
+
+当使用驱逐 API 驱逐 Pod 时,Pod 会被体面地终止,期间会参考 PodSpec 中的 terminationGracePeriodSeconds 配置值.
+
+* 分离集群所有者和应用所有者角色
+通常,将集群管理者和应用所有者视为彼此了解有限的独立角色是很有用的.这种责任分离在下面这些场景下是有意义的:
+ .当有许多应用团队共用一个 Kubernetes 集群,并且有自然的专业角色
+ .当第三方工具或服务用于集群自动化管理
+
+Pod 干扰预算通过在角色之间提供接口来支持这种分离.
+如果你的组织中没有这样的责任分离,则可能不需要使用 Pod 干扰预算.
+
+* 如何在集群上执行干扰性操作
+如果你是集群管理员,并且需要对集群中的所有节点执行干扰操作,例如节点或系统软件升级,则可以使用以下选项
+ .接受升级期间的停机时间.
+ .故障转移到另一个完整的副本集群.
+   .没有停机时间,但是对于重复的节点和人工协调成本可能是昂贵的.
+ .编写可容忍干扰的应用和使用 PDB.
+   .不停机.
+   .最小的资源重复.
+   .允许更多的集群管理自动化.
+   .编写可容忍干扰的应用是棘手的,但对于支持容忍自愿干扰所做的工作,和支持自动扩缩和容忍非 自愿干扰所做工作相比,有大量的重叠
+
+### 为应用程序设置干扰预算(Disruption Budget) - 重要,使用 Deployment/ReplicationController/ReplicaSet/StatefulSet 控制器通过 PodDisruptionBudget(PDB) 来保证 pod 的数量,应用状态健康等等
+* 准备开始
+ .你的 Kubernetes 服务器版本必须不低于版本 v1.21.要获知版本信息
+ .你是 Kubernetes 集群中某应用的所有者,该应用有高可用要求.
+ .你应了解如何部署无状态应用 和/或有状态应用.
+ .你应当了解关于 Pod 干扰的文档.
+ .用户应当与集群所有者或服务提供者确认其遵从 Pod 干扰预算(Pod Disruption Budgets)的规则.
+
+* 用 PodDisruptionBudget 来保护应用
+ 1.确定想要使用 PodDisruptionBudget(PDB)来保护的应用.
+ 2.考虑应用对干扰的反应.
+ 3.以 YAML 文件形式定义 PDB.
+ 4.通过 YAML 文件创建 PDB 对象.
+
+* 确定要保护的应用
+用户想要保护通过内置的 Kubernetes 控制器指定的应用,这是最常见的使用场景:
+ .Deployment
+ .ReplicationController
+ .ReplicaSet
+ .StatefulSet
+
+在这种情况下,在控制器的 .spec.selector 字段中做记录,并在 PDB 的 .spec.selector 字段中加入同样的选择算符.
+用户也可以用 PDB 来保护不受上述控制器控制的 Pod,或任意的 Pod 集合,但是正如 任意工作负载和任意选择算符中描述的,这里存在一些限制.
+
+* 考虑应用对干扰的反应
+确定在自发干扰时,多少实例可以在短时间内同时关闭.
+ .无状态的前端:
+   .关注: 不能降低服务能力 10% 以上.
+       .解决方案:例如,使用 PDB,指定其 minAvailable 值为 90%.
+ .单实例有状态应用:
+   .关注: 不要在不通知的情况下终止该应用.
+       .可能的解决方案 1:不使用 PDB,并忍受偶尔的停机.
+       .可能的解决方案 2:设置 maxUnavailable=0 的 PDB.意为(Kubernetes 范畴之外的)集群操作人员需要在终止应用前与用户协商,协商
+                         后准备停机,然后删除 PDB 表示准备接受干扰,后续再重新创建.
+ .多实例有状态应用,如 Consul、ZooKeeper 或 etcd:
+   .关注:不要将实例数量减少至低于仲裁规模,否则将出现写入失败.
+       .可能的解决方案 1: 设置 maxUnavailable 值为 1 (适用于不同规模的应用).
+       .可能的解决方案 2: 设置 minAvailable 值为仲裁规模(例如规模为 5 时设置为 3).(允许同时出现更多的干扰).
+ .可重新启动的批处理任务:
+   .关注:自发干扰的情况下,需要确保任务完成.
+       .可能的解决方案: 不创建 PDB.任务控制器会创建一个替换 Pod.
+
+指定百分比时的舍入逻辑
+minAvailable 或 maxUnavailable 的值可以表示为整数或百分比.
+ .指定整数值时,它表示 Pod 个数.例如,如果将 minAvailable 设置为 10,那么即使在干扰期间,也必须始终有 10 个 Pod 可用.
+ .通过将值设置为百分比的字符串表示形式(例如 "50％")来指定百分比时,它表示占总 Pod 数的百分比.例如,如果将 minAvailable 设置为 "50％
+   ",则干扰期间至少 50％ 的 Pod 保持可用.
+
+如果将值指定为百分比,则可能无法映射到确切数量的 Pod.例如,如果你有 7 个 Pod,并且你将 minAvailable 设置为 "50％",具体是 3 个 Pod 或 4 个 Pod 必须可用并非显而易见.Kubernetes 采用向上取整到最接近的整数的办法,因此在这种情况下,必须有 4 个 Pod.当你将 maxUnavailable 值指定为一个百分比时,Kubernetes 将可以干扰的 Pod 个数向上取整.因此干扰可以超过你定义的 maxUnavailable 百分比.
+
+* 指定 PodDisruptionBudget
+一个 PodDisruptionBudget 有 3 个字段:
+ .标签选择算符 .spec.selector 用于指定其所作用的 Pod 集合,该字段为必需字段.
+ ..spec.minAvailable 表示驱逐后仍须保证可用的 Pod 数量.即使因此影响到 Pod 驱逐(即该条件在和 Pod 驱逐发生冲突时优先保证).
+   minAvailable 值可以是绝对值,也可以是百分比.
+ ..spec.maxUnavailable (Kubernetes 1.7 及更高的版本中可用)表示驱逐后允许不可用的 Pod 的最大数量.其值可以是绝对值或是百分比.
+
+说明:
+policy/v1beta1 和 policy/v1 API 中 PodDisruptionBudget 的空选择算符的行为略有不同.在 policy/v1beta1 中,空的选择算符不会匹配任何 Pod,而 policy/v1 中,空的选择算符会匹配名字空间中所有 Pod.
+
+用户在同一个 PodDisruptionBudget 中只能够指定 maxUnavailable 和 minAvailable 中的一个.maxUnavailable 只能够用于控制存在相应控制器的 Pod 的驱逐(即不受控制器控制的 Pod 不在 maxUnavailable 控制范围内).
+
+在下面的示例中,“所需副本”指的是相应控制器的 scale,控制器对 PodDisruptionBudget 所选择的 Pod 进行管理.
+示例 1: 设置 minAvailable 值为 5 的情况下,驱逐时需保证 PodDisruptionBudget 的 selector 选中的 Pod 中 5 个或 5 个以上处于健康状态.
+示例 2: 设置 minAvailable 值为 30% 的情况下,驱逐时需保证 Pod 所需副本的至少 30% 处于健康状态.
+示例 3: 设置 maxUnavailable 值为 5 的情况下,驱逐时需保证所需副本中最多 5 个处于不可用状态.
+示例 4: 设置 maxUnavailable 值为 30% 的情况下,只要不健康的副本数量不超过所需副本总数的 30% (取整到最接近的整数),就允许驱逐.如果所需副本的总数仅为一个,则仍允许该单个副本中断,从而导致不可用性实际达到 100%.
+
+在典型用法中,干扰预算会被用于一个控制器管理的一组 Pod 中 —— 例如: 一个 ReplicaSet 或 StatefulSet 中的 Pod.
+
+说明:
+干扰预算并不能真正保证指定数量/百分比的 Pod 一直处于运行状态.例如:当 Pod 集合的规模处于预算指定的最小值时,承载集合中某个 Pod 的节点发生了故障,这样就导致集合中可用 Pod 的数量低于预算指定值.预算只能够针对自发的驱逐提供保护,而不能针对所有 Pod 不可用的诱因.
+
+如果你将 maxUnavailable 的值设置为 0% (或 0)或设置 minAvailable 值为 100% (或等于副本数) 则会阻止所有的自愿驱逐.当你为 ReplicaSet 等工作负载对象设置阻止自愿驱逐时,你将无法成功地腾空运行其中一个 Pod 的节点.如果你尝试腾空正在运行着被阻止驱逐的 Pod 的节点,则腾空永远不会完成.按照 PodDisruptionBudget 的语义,这是允许的.
+
+用户可以在下面看到 Pod 干扰预算定义的示例,它们与带有 app: zookeeper 标签的 Pod 相匹配:
+
+使用 minAvailable 的 PDB 示例:
+zookeeper-pod-disruption-budget-minavailable.yaml
+---------------------------
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: zk-pdb
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: zookeeper
+---------------------------
+
+使用 maxUnavailable 的 PDB 示例:
+zookeeper-pod-disruption-budget-maxunavailable.yaml
+---------------------------
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: zk-pdb
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: zookeeper
+---------------------------
+
+例如,如果上述 zk-pdb 选择的是一个规格为 3 的 StatefulSet 对应的 Pod,那么上面两种规范的含义完全相同.推荐使用 maxUnavailable,因为它自动响应控制器副本数量的变化.
+
+* 创建 PDB 对象
+$ kubectl apply -f zookeeper-pod-disruption-budget-minavailable.yaml
+
+* 检查 PDB 状态
+假设用户的名字空间下没有匹配 app: zookeeper 的 Pod,用户会看到类似下面的信息:
+$ kubectl get poddisruptionbudgets
+NAME     MIN AVAILABLE   MAX UNAVAILABLE   ALLOWED DISRUPTIONS   AGE
+zk-pdb   2               N/A               0                     7s
+
+假设有匹配的 Pod (比如说 3 个),那么用户会看到类似下面的信息:
+$ kubectl get poddisruptionbudgets
+NAME     MIN AVAILABLE   MAX UNAVAILABLE   ALLOWED DISRUPTIONS   AGE
+zk-pdb   2               N/A               1                     7s
+
+ALLOWED DISRUPTIONS 值非 0 意味着干扰控制器已经感知到相应的 Pod,对匹配的 Pod 进行统计,并更新了 PDB 的状态.
+
+用户可以通过以下命令获取更多 PDB 状态相关信息:
+$ kubectl get poddisruptionbudgets zk-pdb -o yaml
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  annotations:
+…
+  creationTimestamp: "2020-03-04T04:22:56Z"
+  generation: 1
+  name: zk-pdb
+…
+status:
+  currentHealthy: 3
+  desiredHealthy: 2
+  disruptionsAllowed: 1
+  expectedPods: 3
+  observedGeneration: 1
+
+Pod 的健康
+如果 Pod 的 .status.conditions 中包含 type="Ready" 和 status="True" 的项,则当前实现将其视为健康的 Pod.这些 Pod 通过 PDB 状态中的 .status.currentHealthy 字段被跟踪.
+
+* 不健康的 Pod 驱逐策略
+特性状态: Kubernetes v1.27 [beta]
+
+说明:
+此特性默认启用,你可以通过在 API 服务器上禁用 PDBUnhealthyPodEvictionPolicy 特性门控来禁用它.
+
+守护应用程序的 PodDisruptionBudget 通过不允许驱逐健康的 Pod 来确保 .status.currentHealthy 的 Pod 数量不低于 .status.desiredHealthy 中指定的数量.通过使用 .spec.unhealthyPodEvictionPolicy,你还可以定义条件来判定何时应考虑驱逐不健康的 Pod.未指定策略时的默认行为对应于 IfHealthyBudget 策略.
+
+策略包含:
+  IfHealthyBudget
+      对于运行中但还不健康的 Pod (.status.phase="Running"),只有所守护的应用程序不受干扰 (.status.currentHealthy 至少等于
+  .status.desiredHealthy)时才能被驱逐.
+     此策略确保已受干扰的应用程序所运行的 Pod 会尽可能成为健康.这对腾空节点有负面影响,可能会因 PDB 守护的应用程序行为错误而阻止腾空.更具
+     体地说,这些应用程序的 Pod 处于 CrashLoopBackOff 状态 (由于漏洞或错误配置)或其 Pod 只是未能报告 Ready 状况.
+
+  AlwaysAllow
+     运行中但还不健康的 Pod(.status.phase="Running")将被视为已受干扰且可以被驱逐,与是否满足 PDB 中的判决条件无关.
+     这意味着受干扰的应用程序所运行的 Pod 可能没有机会恢复健康.通过使用此策略,集群管理器可以轻松驱逐由 PDB 所守护的行为错误的应用程序.
+     更具体地说,这些应用程序的 Pod 处于 CrashLoopBackOff 状态(由于漏洞或错误配置)或其 Pod 只是未能报告 Ready 状况.
+
+说明:
+处于 Pending、Succeeded 或 Failed 阶段的 Pod 总是被考虑驱逐.
+
+* 任意工作负载和任意选择算符
+如果你只针对内置的工作负载资源(Deployment、ReplicaSet、StatefulSet 和 ReplicationController)或在实现了 scale 子资源的自定义资源使用 PDB,并且 PDB 选择算符与 Pod 所属资源的选择算符完全匹配,那么可以跳过这一节.
+
+你可以针对由其他资源、某个 "operator" 控制的或者“裸的(不受控制器控制)” Pod 使用 PDB,但存在以下限制:
+ .只能够使用 .spec.minAvailable,而不能够使用 .spec.maxUnavailable.
+ .只能够使用整数作为 .spec.minAvailable 的值,而不能使用百分比.
+
+你无法使用其他的可用性配置,因为如果没有被支持的属主资源,Kubernetes 无法推导出 Pod 的总数.
+
+你可以使用能够选择属于工作负载资源的 Pod 的子集或超集的选择算符.驱逐 API 将不允许驱逐被多个 PDB 覆盖的任何 Pod,因此大多数用户都希望避免重叠的选择算符.重叠 PDB 的一种合理用途是将 Pod 从一个 PDB 转交到另一个 PDB 的场合.
+vvvvvvvvvvvvvvvvvvvv
+
+## 保护集群 - 重要,包括: 控制对 api 的访问,控制对 Kubelet 的访问,控制运行时负载或用户的能力,保护集群组件免受破坏
+https://kubernetes.io/zh-cn/docs/tasks/administer-cluster/securing-a-cluster/
+
+* 控制对 Kubernetes API 的访问
+因为 Kubernetes 是完全通过 API 驱动的,所以,控制和限制谁可以通过 API 访问集群,以及允许这些访问者执行什么样的 API 动作,就成为了安全控制的第一道防线.
+ .为所有 API 交互使用传输层安全(TLS)
+   Kubernetes 期望集群中所有的 API 通信在默认情况下都使用 TLS 加密,大多数安装方法也允许创建所需的证书并且分发到集群组件中.
+
+ .API 认证
+        安装集群时,选择一个 API 服务器的身份验证机制,去使用与之匹配的公共访问模式.例如,小型的单用户集群可能希望使用简单的证书或静态承载令牌
+        方法.更大的集群则可能希望整合现有的、OIDC、LDAP 等允许用户分组的服务器.
+        所有 API 客户端都必须经过身份验证,即使它是基础设施的一部分,比如节点、代理、调度程序和卷插件.这些客户端通常使用 服务帐户 或 X509 客户
+        端证书,并在集群启动时自动创建或是作为集群安装的一部分进行设置.
+
+ .API 授权
+        一旦通过身份认证,每个 API 的调用都将通过鉴权检查.Kubernetes 集成基于角色的访问控制(RBAC)组件,将传入的用户或组与一组绑定到角色的
+        权限匹配.这些权限将动作(get、create、delete)和资源(Pod、Service、Node)进行组合,并可在名字空间或者集群范围生效.Kubernetes 提
+        供了一组可直接使用的角色,这些角色根据客户可能希望执行的操作提供合理的责任划分.建议你同时使用 Node 和 RBAC 两个鉴权组件,再与
+   NodeRestriction 准入插件结合使用.
+
+        与身份验证一样,简单而广泛的角色可能适合于较小的集群,但是随着更多的用户与集群交互,可能需要将团队划分到有更多角色限制的、 单独的名字空
+        间中去.
+
+        就鉴权而言,很重要的一点是理解对象上的更新操作如何导致在其它地方发生对应行为.例如,用户可能不能直接创建 Pod,但允许他们通过创建
+   Deployment 来创建这些 Pod,这将让他们间接创建这些 Pod.同样地,从 API 删除一个节点将导致调度到这些节点上的 Pod 被中止,并在其他节点上
+        重新创建.原生的角色设计代表了灵活性和常见用例之间的平衡,但须限制的角色应该被仔细审查,以防止意外的权限升级.如果内置的角色无法满足你的
+        需求,则可以根据使用场景需要创建特定的角色.
+
+* 控制对 Kubelet 的访问
+Kubelet 公开 HTTPS 端点,这些端点提供了对节点和容器的强大的控制能力.默认情况下,Kubelet 允许对此 API 进行未经身份验证的访问.
+生产级别的集群应启用 Kubelet 身份认证和授权.
+
+* 控制运行时负载或用户的能力
+Kubernetes 中的授权故意设计成较高抽象级别,侧重于对资源的粗粒度行为.更强大的控制是 策略 的形式呈现的,根据使用场景限制这些对象如何作用于集群、自身和其他资源.
+ .限制集群上的资源使用
+        资源配额(Resource Quota)限制了赋予命名空间的资源的数量或容量.资源配额通常用于限制名字空间可以分配的 CPU、内存或持久磁盘的数量,但
+        也可以控制每个名字空间中存在多少个 Pod、Service 或 Volume.
+        限制范围(Limit Range) 限制上述某些资源的最大值或者最小值,以防止用户使用类似内存这样的通用保留资源时请求不合理的过高或过低的值,或
+        者在没有指定的情况下提供默认限制.
+
+ .控制容器运行的特权
+   Pod 定义包含了一个安全上下文,用于描述一些访问请求,如以某个节点上的特定 Linux 用户(如 root)身份运行,以特权形式运行,访问主机网络,以
+        及一些在宿主节点上不受约束地运行的其它控制权限等等.
+        你可以配置 Pod 安全准入来在某个 名字空间中 强制实施特定的 Pod 安全标准(Pod Security Standard),或者检查安全上的缺陷.
+
+ .防止容器加载不需要的内核模块
+        如果在某些情况下,Linux 内核会根据需要自动从磁盘加载内核模块,这类情况的例子有挂接了一个硬件或挂载了一个文件系统.与 Kubernetes 特别
+        相关的是,即使是非特权的进程也可能导致某些网络协议相关的内核模块被加载,而这只需创建一个适当类型的套接字.这就可能允许攻击者利用管理员
+        假定未使用的内核模块中的安全漏洞.
+
+        为了防止特定模块被自动加载,你可以将它们从节点上卸载或者添加规则来阻止这些模块.在大多数 Linux 发行版上,你可以通过创建类似
+   /etc/modprobe.d/kubernetes-blacklist.conf 这种文件来做到这一点,其中的内容如下所示:
+    # DCCP is unlikely to be needed,has had multiple serious
+    # vulnerabilities,and is not well-maintained.
+    blacklist dccp
+
+    # SCTP is not used in most Kubernetes clusters,and has also had
+    # vulnerabilities in the past.
+    blacklist sctp
+
+        为了更大范围地阻止内核模块被加载,你可以使用 Linux 安全模块(如 SELinux)来彻底拒绝容器的 module_request 权限,从而防止在任何情况下
+        系统为容器加载内核模块.(Pod 仍然可以使用手动加载的模块,或者使用由内核代表某些特权进程所加载的模块.)
+
+ .限制网络访问
+        基于名字空间的网络策略 允许应用程序作者限制其它名字空间中的哪些 Pod 可以访问自身名字空间内的 Pod 和端口.现在已经有许多支持网络策略的
+   Kubernetes 网络驱动.
+        配额(Quota)和限制范围(Limit Range)也可用于控制用户是否可以请求节点端口或负载均衡服务.在很多集群上,节点端口和负载均衡服务也可控制
+        用户的应用程序是否在集群之外可见.
+        此外也可能存在一些基于插件或基于环境的网络规则,能够提供额外的保护能力.例如各节点上的防火墙、物理隔离集群节点以防止串扰或者高级的网
+         络策略等.
+
+ .限制云元数据 API 访问
+        云平台(AWS、Azure、GCE 等)经常将 metadata 本地服务暴露给实例.
+
+ .控制 Pod 可以访问的节点
+        默认情况下,对 Pod 可以运行在哪些节点上是没有任何限制的.Kubernetes 给最终用户提供了 一组丰富的策略用于控制 Pod 所放置的节点位置,以
+        及基于污点的 Pod 放置和驱逐.对于许多集群,使用这些策略来分离工作负载可以作为一种约定,要求作者遵守或者通过工具强制.
+
+* 保护集群组件免受破坏
+ .限制访问 etcd
+        拥有对 API 的 etcd 后端的写访问权限相当于获得了整个集群的 root 权限,读访问权限也可能被利用,实现相当快速的权限提升.对于从 API 服务器
+        访问其 etcd 服务器,管理员应该总是使用比较强的凭证,如通过 TLS 客户端证书来实现双向认证.通常,我们建议将 etcd 服务器隔离到只有 API 服
+        务器可以访问的防火墙后面.
+        注意:
+        允许集群中其它组件对整个主键空间(keyspace)拥有读或写权限去访问 etcd 实例,相当于授予这些组件集群管理员的访问权限.对于非主控组件,强
+        烈推荐使用不同的 etcd 实例,或者使用 etcd 的访问控制列表 来限制这些组件只能读或写主键空间的一个子集.
+
+ .启用审计日志
+         审计日志是 Beta 特性,负责记录 API 操作以便在发生破坏时进行事后分析.建议启用审计日志,并将审计文件归档到安全服务器上.
+
+ .限制使用 Alpha 和 Beta 特性
+   Kubernetes 的 Alpha 和 Beta 特性还在努力开发中,可能存在导致安全漏洞的缺陷或错误.当你怀疑存在风险时,可以禁用那些不需要使用的特性.
+
+ .经常轮换基础设施证书
+        一项机密信息或凭据的生命期越短,攻击者就越难使用该凭据.在证书上设置较短的生命期并实现自动轮换是控制安全的一个好方法.使用身份验证提供
+        程序时,应该使用那些可以控制所发布令牌的合法时长的提供程序,并尽可能设置较短的生命期.如果在外部集成场景中使用服务帐户令牌,则应该经常性
+        地轮换这些令牌.例如,一旦引导阶段完成,就应该撤销用于配置节点的引导令牌,或者取消它的授权.
+
+ .在启用第三方集成之前,请先审查它们
+        许多集成到 Kubernetes 的第三方软件或服务都可能改变你的集群的安全配置.启用集成时,在授予访问权限之前,你应该始终检查扩展所请求的权限.
+        例如,许多安全性集成中可能要求查看集群上的所有 Secret 的访问权限,本质上该组件便成为了集群的管理员.当有疑问时,如果可能的话,将要集成的
+        组件限制在某指定名字空间中运行.
+        如果执行 Pod 创建操作的组件能够在 kube-system 这类名字空间中创建 Pod,则这类组件也可能获得意外的权限,因为这些 Pod 可以访问服务账户
+        的 Secret,或者,如果对应服务帐户被授权访问宽松的 PodSecurityPolicy,它们就能以较高的权限运行.
+        如果你使用 Pod 安全准入,并且允许任何组件在一个允许执行特权 Pod 的名字空间中创建 Pod,这些 Pod 就可能从所在的容器中逃逸,利用被拓宽的
+        访问权限来实现特权提升.
+        你不应该允许不可信的组件在任何系统名字空间(名字以 kube- 开头)中创建 Pod,也不允许它们在访问权限授权可被利用来提升特权的名字空间中创
+        建 Pod.
+
+ .对 Secret 进行静态加密
+        一般情况下,etcd 数据库包含了通过 Kubernetes API 可以访问到的所有信息,并且可能为攻击者提供对你的集群的状态的较多的可见性.你要始终
+        使用经过充分审查的备份和加密方案来加密备份数据,并考虑在可能的情况下使用全盘加密.
+        对于 Kubernetes API 中的信息,Kubernetes 支持可选的静态数据加密.这让你可以确保当 Kubernetes 存储对象(例如 Secret 或
+   ConfigMap)的数据时,API 服务器写入的是加密的对象.这种加密意味着即使有权访问 etcd 备份数据的某些人也无法查看这些对象的内容.在
+   Kubernetes 1.30 中,你也可以加密自定义资源;针对以 CustomResourceDefinition 形式定义的扩展 API,对其执行静态加密的能力作为
+   v1.26 版本的一部分已添加到 Kubernetes.
+
+## 通过配置文件设置 kubelet 参数
+* 创建配置文件
+下面是一个 kubelet 配置文件示例:
+---------------------------
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+address: "192.168.0.8"
+port: 20250
+serializeImagePulls: false
+evictionHard:
+    memory.available:  "100Mi"
+    nodefs.available:  "10%"
+    nodefs.inodesFree: "5%"
+    imagefs.available: "15%"
+---------------------------
+
+在此示例中,kubelet 配置为以下设置:
+  1.address: kubelet 将在 192.168.0.8 IP 地址上提供服务.
+  2.port: kubelet 将在 20250 端口上提供服务.
+  3.serializeImagePulls: 并行拉取镜像.
+  4.evictionHard:kubelet 将在以下情况之一驱逐 Pod:
+     .当节点的可用内存降至 100MiB 以下时.
+     .当节点主文件系统的已使用 inode 超过 95%.
+     .当镜像文件系统的可用空间小于 15% 时.
+     .当节点主文件系统的 inode 超过 95% 正在使用时.
+     说明:
+     在示例中,通过只更改 evictionHard 的一个参数的默认值,其他参数的默认值将不会被继承,他们会被设置为零.如果要提供自定义值,你应该分别设置
+     所有阈值.
+
+  imagefs 是一个可选的文件系统,容器运行时使用它来存储容器镜像和容器可写层.
+
+* 启动通过配置文件配置的 kubelet 进程
+说明:
+如果你使用 kubeadm 初始化你的集群,在使用 kubeadm init 创建你的集群的时候请使用 kubelet-config.更多细节请使用 kubeadm 配置 kubelet
+
+启动 kubelet 需要将 --config 参数设置为 kubelet 配置文件的路径.kubelet 将从此文件加载其配置.
+请注意,命令行参数与配置文件有相同的值时,就会覆盖配置文件中的该值.这有助于确保命令行 API 的向后兼容性.
+请注意,kubelet 配置文件中的相对文件路径是相对于 kubelet 配置文件的位置解析的,而命令行参数中的相对路径是相对于 kubelet 的当前工作目录解析的.
+请注意,命令行参数和 kubelet 配置文件的某些默认值不同.如果设置了 --config,并且没有通过命令行指定值,则 KubeletConfiguration 版本的默认值生效.在上面的例子中,version 是 kubelet.config.k8s.io/v1beta1.
+
+* kubelet 配置文件的插件目录
+特性状态: Kubernetes v1.30 [beta]
+
+你可以为 kubelet 指定一个插件配置目录.默认情况下,kubelet 不会在任何地方查找插件配置文件 - 你必须指定路径.例如: --config-dir=/etc/kubernetes/kubelet.conf.d
+
+对于 Kubernetes v1.28 到 v1.29,如果你还为 kubelet 进程设置了环境变量 KUBELET_CONFIG_DROPIN_DIR_ALPHA(该变量的值无关紧要),则只能指定 --config-dir.
+
+说明:
+合法的 kubelet 插件配置文件的后缀必须为 .conf.例如 99-kubelet-address.conf.
+
+kubelet 通过按字母数字顺序对整个文件名进行排序来处理其配置插件目录中的文件.例如,首先处理 00-kubelet.conf,然后用名为 01-kubelet.conf 的文件覆盖.
+
+这些文件可能包含部分配置,但不应无效,并且必须包含类型元数据,特别是 apiVersion 和 kind.仅对 kubelet 内部存储的、最终生成的配置结构执行验证.这为管理和合并来自不同来源的 kubelet 配置提供了灵活性,同时防止了不需要的配置.但是,请务必注意,产生的行为会根据配置字段的数据类型而有所不同.kubelet 配置结构中不同数据类型的合并方式不同.
+
+kubelet 配置合并顺序
+在启动时,kubelet 会合并来自以下几部分的配置:
+ .在命令行中指定的特性门控(优先级最低).
+ .kubelet 配置文件.
+ .排序的插件配置文件.
+ .不包括特性门控的命令行参数(优先级最高).
+   说明:
+ kubelet 的配置插件目录机制类似,但与 kubeadm 工具允许 patch 配置的方式不同.kubeadm 工具使用特定的补丁策略,而 kubelet 配置插件文件
+   的唯一补丁策略是 replace.kubelet 根据字母数字对后缀进行排序来确定合并顺序,并替换更高优先级文件中存在的每个字段.
+
+* 查看 kubelet 配置
+由于现在可以使用此特性将配置分布在多个文件中,因此如果有人想要检查最终启动的配置,他们可以按照以下步骤检查 kubelet 配置:
+  1.在终端中使用 kubectl proxy 启动代理服务器.
+     $ kubectl proxy
+
+              其输出如下:
+       Starting to serve on 127.0.0.1:8001
+
+  2.打开另一个终端窗口并使用 curl 来获取 kubelet 配置.将 <node-name> 替换为节点的实际名称:
+     $ curl -X GET http://127.0.0.1:8001/api/v1/nodes/<node-name>/proxy/configz | jq .
+
+kubelet 的配置参考:
+https://kubernetes.io/zh-cn/docs/reference/config-api/kubelet-config.v1beta1/#FormatOptions
+
+## 在集群中使用级联删除
+展示如何设置在你的集群执行垃圾收集时要使用的级联删除类型
+
+创建 deployment
+$ kubectl apply -f deployment.yaml
+
+deployment.yaml
+---------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+spec:
+  selector:
+    matchLabels:
+      app: nginx
+  replicas: 2 # 告知 Deployment 运行 2 个与该模板匹配的 Pod
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx
+        ports:
+        - containerPort: 80
+---------------------------
+
+* 检查 Pod 上的属主引用
+检查确认你的 Pods 上存在 ownerReferences 字段:
+$ kubectl get pods -l app=nginx --output=yaml
+---------------------------
+...
+ownerReferences:
+- apiVersion: apps/v1
+  blockOwnerDeletion: true
+  controller: true
+  kind: ReplicaSet
+  name: nginx-deployment-8555cf6fd8
+  uid: 0d4e1475-9ee8-4889-ab01-1985e8a8d1bd
+...
+---------------------------
+
+* 使用前台级联删除
+默认情况下,Kubernetes 使用后台级联删除 以删除依赖某对象的其他对象.取决于你的集群所运行的 Kubernetes 版本,你可以使用 kubectl 或者 Kubernetes API 来切换到前台级联删除.
+
+你可以使用 kubectl 或者 Kubernetes API 来基于前台级联删除来删除对象.
+
+.使用 kubectl
+运行下面的命令:
+$ kubectl delete deployment nginx-deployment --cascade=foreground
+
+.使用 Kubernetes API
+1.启动一个本地代理会话:
+$ kubectl proxy --port=8080
+
+2.使用 curl 来触发删除操作:
+$ curl -X DELETE localhost:8080/apis/apps/v1/namespaces/default/deployments/nginx-deployment \
+    -d '{"kind":"DeleteOptions","apiVersion":"v1","propagationPolicy":"Foreground"}' \
+    -H "Content-Type: application/json"
+
+输出中包含 foregroundDeletion finalizer,类似这样:
+---------------------------
+...
+"finalizers": [
+  "foregroundDeletion"
+],
+...
+---------------------------
+
+* 使用后台级联删除
+你可以使用 kubectl 或者 Kubernetes API 来执行后台级联删除方式的对象删除操作.
+
+Kubernetes 默认采用后台级联删除方式,如果你在运行下面的命令时不指定 --cascade 标志或者 propagationPolicy 参数时,用这种方式来删除对象.
+
+.使用 kubectl
+运行下面的命令:
+$ kubectl delete deployment nginx-deployment --cascade=background
+
+.使用 Kubernetes API
+1.启动一个本地代理会话:
+$ kubectl proxy --port=8080
+
+2.使用 curl 来触发删除操作:
+$ curl -X DELETE localhost:8080/apis/apps/v1/namespaces/default/deployments/nginx-deployment \
+    -d '{"kind":"DeleteOptions","apiVersion":"v1","propagationPolicy":"Background"}' \
+    -H "Content-Type: application/json"
+
+输出类似于:
+{
+  "kind": "Status",
+  "apiVersion": "v1",
+  "metadata": {},
+  "status": "Success",
+  "details": {
+    "name": "nginx-deployment",
+    "group": "apps",
+    "kind": "deployments",
+    "uid": "388a3f9a-fbfe-4f3c-b8a5-fcaadf3d092e"
+  }
+}
+
+* 删除属主对象和孤立的依赖对象 - 如下的操作将使得 deployment 和 pod 之间不在关联,通过 kubectl get deployment 将看不见 deployment,而通过 kubectl get pods 仍然能看见 pod,并且通过 kubectl get rs 仍然能看见 rs
+默认情况下,当你告诉 Kubernetes 删除某个对象时,控制器也会删除依赖该对象的其他对象.取决于你的集群所运行的 Kubernetes 版本,你也可以使用 kubectl 或者 Kubernetes API 来让 Kubernetes 孤立这些依赖对象.
+
+.使用 kubectl
+运行下面的命令:
+$ kubectl delete deployment nginx-deployment --cascade=orphan
+
+.使用 Kubernetes API
+1.启动一个本地代理会话:
+$ kubectl proxy --port=8080
+
+2.使用 curl 来触发删除操作:
+$ curl -X DELETE localhost:8080/apis/apps/v1/namespaces/default/deployments/nginx-deployment \
+    -d '{"kind":"DeleteOptions","apiVersion":"v1","propagationPolicy":"Orphan"}' \
+    -H "Content-Type: application/json"
+
+输出中在 finalizers 字段中包含 orphan,如下所示:
+---------------------------
+...
+"finalizers": [
+  "orphan"
+],
+...
+---------------------------
+
+## 使用 CoreDNS 进行服务发现
+参考:
+https://kubernetes.io/zh-cn/docs/tasks/administer-cluster/kms-provider/
+
+在 Kubernetes 1.21 版本中,kubeadm 移除了对将 kube-dns 作为 DNS 应用的支持.对于 kubeadm v1.30,所支持的唯一的集群 DNS 应用是 CoreDNS.
+
+其中包括安装 CoreDNS,迁移到 CoreDNS,升级 CoreDNS,CoreDNS 调优等等内容
+
+## 在 Kubernetes 集群中使用 sysctl
+如何通过 sysctl 接口在 Kubernetes 集群中配置和使用内核参数.
+
+目前,在 Linux 内核中,有许多的 sysctl 参数都是 有命名空间的.这就意味着可以为节点上的每个 Pod 分别去设置它们的 sysctl 参数.在 Kubernetes 中,只有那些有命名空间的 sysctl 参数可以通过 Pod 的 securityContext 对其进行配置.

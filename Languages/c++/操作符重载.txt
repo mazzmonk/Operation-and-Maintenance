@@ -1,0 +1,66 @@
+操作符定义为非成员函数时，通常必须将他们设置为所操作类的友元。在这种情况下，操作符通常需要访问类的私有部分
+
+class Sales_item {
+	friend std::istream& operator>>(std::istream&, Sales_item&);
+	friend std::ostream& operator<<(std::ostream&, const Sales_item&);
+public:
+	Sales_item& operator+=(const Sales_item&);
+};
+
+Sales_item operator+(const Sales_item&, const Sales_item&);
+
+这里有3个非成员，1个成员
+
+
+一般而言，将算术和关系操作符定义为非成员函数
+
+有四个符号（+，-，*,&)既可以作为一元操作符又可以作为二元操作符，这些操作符有的在其中一种情况下可以重载，有的两种都可以，定义的是那个操作符由操作数数目控制。
+
+大多数重载操作符可以定义成普通非成员函数或类的成员函数。
+重要：
+作为类的重载函数，其形参看起来比操作数数目少1。作为成员函数的操作符有一个隐含的this形参，限定为第一个操作数。
+重载一元操作符如果作为成员函数就没有（显式）形参，如果作为非成员函数就有一个形参。
+类似地，重载二元操作符定义成员时有一个形参，定义为非成员函数时有两个形参。
+
+例如：我们定义一个运算符去做Matrix和Vector的乘法。当然，Matrix和Vector都会将他们的表示隐藏起来，并提供一组操作他们类型的对象的元算。
+然后，我们所要的这个乘法例程不可能同时成为两者的成员函数。此外，我们可能也不希望提供一些低级访问函数，使每个用户都能对Matrix和Vector的完整表示进行读写操作。为避免这些情况，我们可以声明这个operator*作为两个类的友元：
+
+class Matrix;
+
+class Vector {
+	float v[4];	
+	//...
+	friend Vecotor operator*(const Matrix&, const Vecotr&);
+};
+
+class Matrix {
+	Vector[4];
+	//...
+	friend Vector operator*(const Matrix&, const Vector&);
+};
+
+Vector operator*(const Matrix& m, const Vector& v)
+{
+	Vector r;
+	for (int i=0; i<4; i++) {
+		r.v[i] = 0;
+		for (int j = 0;j<4;j++) r.v[i] += m.v[i].v[j] * v.v[j];
+	}
+	return r;
+}
+
+friend可以放在类声明中的私有部分或者公用部分
+
+
+
+
+
+
+
+
+
+
+
+
+
+

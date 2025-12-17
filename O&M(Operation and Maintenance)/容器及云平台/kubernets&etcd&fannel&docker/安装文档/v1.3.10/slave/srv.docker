@@ -1,0 +1,27 @@
+#!/bin/bash
+# author:jack
+# date:20171024
+# startup docker daemon
+# execute with ROOT user
+# FILENAME:srv.docker
+##################################
+
+if [ -e GLOBAL-ENV ];then
+  source GLOBAL-ENV
+else
+  echo 'File GLOBAL-ENV does not exist.'
+  echo -1
+fi
+
+DOCKER_EXE_PATH=/usr/bin
+
+
+$DOCKER_EXE_PATH/dockerd \
+--exec-root="$HOME_PATH/apps/docker/var/run/docker" \
+-g "$HOME_PATH/apps/docker/var/lib/docker" \
+-p "$HOME_PATH/apps/docker/var/run/docker.pid" \
+-H "unix://$HOME_PATH/apps/docker/var/run/socket"  \
+--insecure-registry=$REGISTRY_IPADDRESS:5000" \
+>> $HOME_PATH/apps/docker/logs/docker.log 2>&1 &
+
+

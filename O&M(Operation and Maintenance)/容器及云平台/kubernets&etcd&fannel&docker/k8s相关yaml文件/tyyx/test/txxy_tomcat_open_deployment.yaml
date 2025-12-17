@@ -1,0 +1,21 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: txxy-ofns-open
+  labels:
+    name: txxy-ofns-open
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        name: txxy-ofns-open
+    spec:
+      containers:
+      - name: txxy-ofns-open
+        image: 192.168.6.83:5000/tyyx/tomcat:latest
+        ports:
+        - containerPort: 8080
+        securityContext:
+          privileged: true
+

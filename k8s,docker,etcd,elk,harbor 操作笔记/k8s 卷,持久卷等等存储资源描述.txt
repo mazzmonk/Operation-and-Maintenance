@@ -1,0 +1,384 @@
+1. 在 kubernetes 的官方(https://kubernetes.io/zh-cn/docs/concepts/storage/volumes/)描述的卷,是一个抽象概念,是所有卷的一个统称.
+其中提到的 cephfs,emptyDir,nfs,iscsi,local,persistentVolumeClaim 等等指的是卷的类型.
+
+2. 从另外一个角度,卷分为 
+* 持久卷(Persistent Volume) --- 当 pod 删除的时候,数据仍然存在,分为动态创建和静态创建
+
+官方文档(https://kubernetes.io/zh-cn/docs/concepts/storage/persistent-volumes/)中的描述如下:
+########################################################
+静态创建
+集群管理员创建若干 PV 卷.这些卷对象带有真实存储的细节信息, 并且对集群用户可用(可见).PV 卷对象存在于 Kubernetes API 中,可供用户消费(使用).
+
+动态创建
+如果管理员所创建的所有静态 PV 卷都无法与用户的 PersistentVolumeClaim 匹配, 集群可以尝试为该 PVC 申领动态创建一个存储卷. 这一创建操作是基于 StorageClass 来实现的: PVC 申领必须请求某个 存储类, 同时集群管理员必须已经创建并配置了该类,这样动态创建卷的动作才会发生. 如果 PVC 申领指定存储类为 "",则相当于为自身禁止使用动态创建的卷.
+
+PV 持久卷是用插件的形式来实现的. Kubernetes 目前支持以下插件:
+cephfs - CephFS volume, csi - 容器存储接口 (CSI), fc - Fibre Channel (FC) 存储,hostPath - HostPath 卷 (仅供单节点测试使用;不适用于多节点集群;请尝试使用 local 卷作为替代),iscsi - iSCSI (SCSI over IP) 存储,local - 节点上挂载的本地存储设备,nfs - 网络文件系统 (NFS) 存储,rbd - Rados 块设备 (RBD) 卷 等等
+########################################################
+
+* 投射卷(Projected Volumes) 
+* 存储类(StorageClass) --- 用于动态创建 pv
+* 临时卷(Ephemeral Volume) --- 当 pod 删除/重启/停止的时候,数据不存在
+
+注意: 第1点中提到的卷类型,属于这里的几种中的一种或几种(比如有某种卷类型可以支持 pv,storageClass)
+
+*******************************************************************************************************
+*******************************************************************************************************
+
+pv(通过 yaml 方式建立的pv,区别与广义的 pv) 及 storageclass 的区别
+
+
+相同点:
+1. 使用 storageclass 和 直接定义 pv 的效果相同,当使用的时候都需要定义 pvc,pv 都会由 storageclass 自动创建
+
+不同点:
+1. 为什么需要StorageClass
+在一个大规模的Kubernetes集群里,可能有成千上万个PVC,这就意味着运维人员必须实现创建出这个多个PV,此外,随着项目的需要,会有新的PVC不断被提交,那么运维人员就需要不断的添加新的,满足要求的PV,否则新的Pod就会因为PVC绑定不到PV而导致创建失败.而且通过 PVC 请求到一定的存储空间也很有可能不足以满足应用对于存储设备的各种需求.
+
+而且不同的应用程序对于存储性能的要求可能也不尽相同,比如读写速度、并发性能等,为了解决这一问题,Kubernetes 又为我们引入了一个新的资源对象:StorageClass,通过 StorageClass 的定义,管理员可以将存储资源定义为某种类型的资源,比如快速存储、慢速存储等,用户根据 StorageClass 的描述就可以非常直观的知道各种存储资源的具体特性了,这样就可以根据应用的特性去申请合适的存储资源了.
+
+* 运行原理
+要使用 StorageClass,我们就得安装对应的自动配置程序,比如我们这里存储后端使用的是 nfs,那么我们就需要使用到一个 nfs-client 的自动配置程序,我们也叫它 Provisioner(制备器),这个程序使用我们已经配置好的 nfs 服务器,来自动创建持久卷,也就是自动帮我们创建 PV.
+
+a. 自动创建的 PV 以${namespace}-${pvcName}-${pvName}这样的命名格式创建在 NFS 服务器上的共享数据目录中
+b. 而当这个 PV 被回收后会以archieved-${namespace}-${pvcName}-${pvName}这样的命名格式存在 NFS 服务器上.
+
+* StorageClass 资源
+每个 StorageClass 都包含 provisioner、parameters 和 reclaimPolicy 字段, 这些字段会在 StorageClass 需要动态分配 PersistentVolume 时会使用到.
+
+StorageClass 对象的命名很重要,用户使用这个命名来请求生成一个特定的类. 当创建 StorageClass 对象时,管理员设置 StorageClass 对象的命名和其他参数,一旦创建了对象就不能再对其更新.
+
+管理员可以为没有申请绑定到特定 StorageClass 的 PVC 指定一个默认的存储类.
+
+* storageclass 的流程 
+建立 storageclass yaml -> 建立 pvc yaml -> 挂载 pvc 使用
+
+使用 storageclass 的时候,当建立 pvc 的时候,会同时建立相应的 pv,并且看起来像如下的样子:
+storageclass name: smb
+pvc name: pvc-smb
+
+# kubectl get pvc
+NAME                    STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+pvc-smb                 Bound    pvc-4f73bd6b-d0c8-4992-9604-7f2b0ea38b11   5Gi        RWO            smb     
+
+# kubectl get pv
+NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM                           STORAGECLASS   REASON   AGE
+pvc-4f73bd6b-d0c8-4992-9604-7f2b0ea38b11   5Gi        RWO            Retain           Bound    default/pvc-smb                 smb                     8m18s
+
+注意: 当有 pvc 绑定的时候, pv 的 Bound
+
+# 当删除 pvc 的时候,对应的 pv 是 Released 的状态
+# kubectl get pv
+NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS     CLAIM                           STORAGECLASS   REASON   AGE
+pvc-4f73bd6b-d0c8-4992-9604-7f2b0ea38b11   5Gi        RWO            Retain           Released   default/pvc-smb                 smb                     62m
+
+# 当重新部署相同的 pvc 的时候,会生成一个新的 pv,并且新的绑定
+# kubectl get pv
+NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS     CLAIM                           STORAGECLASS   REASON   AGE
+pvc-190703a5-84be-4018-9fb6-1447a50ac1f3   5Gi        RWO            Retain           Bound      default/pvc-smb                 smb                     2m54s
+pvc-4f73bd6b-d0c8-4992-9604-7f2b0ea38b11   5Gi        RWO            Retain           Released   default/pvc-smb                 smb                     109m
+
+注意: 上述的 pv,1个是新的 pv,一个是旧的 pv
+
+2. 当使用 StatefulSet 做为挂载的时候,由于有类似如下的内容:
+StatefulSet name: statefulset-smb
+
+......
+volumeClaimTemplates:
+    - metadata:
+        name: smb
+        annotations:
+          volume.beta.kubernetes.io/storage-class: smb
+      spec:
+        accessModes: ["ReadWriteMany"]
+        resources:
+          requests:
+            storage: 3Gi
+
+因此也会自动的生成 pvc,pv
+
+# kubectl get pvc |grep statefulset
+smb-statefulset-smb-0   Bound    pvc-ea222bc4-937e-42e5-b4bc-d406105e4f85   3Gi        RWX            smb            111m
+
+# kubectl get pv |grep statefulset
+pvc-ea222bc4-937e-42e5-b4bc-d406105e4f85   3Gi        RWX            Retain           Bound      default/smb-statefulset-smb-0   smb                     111m
+
+注意: StatefulSet 是一类很特殊的应用,对于 pvc,pv 的绑定使用与普通的应用不同,有自己的回收,删除等等策略.
+原文链接: https://kubernetes.io/zh-cn/docs/concepts/workloads/controllers/statefulset/
+
+
+# 删除 statefulset, pvc,pv 仍然存在,这是 statefulset 与其他的应用不同的地方
+
+# kubectl get pvc
+NAME                    STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+smb-statefulset-smb-0   Bound    pvc-ea222bc4-937e-42e5-b4bc-d406105e4f85   3Gi        RWX            smb            129m
+
+# kubectl get pv
+NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS     CLAIM                           STORAGECLASS   REASON   AGE
+pvc-ea222bc4-937e-42e5-b4bc-d406105e4f85   3Gi        RWX            Retain           Bound      default/smb-statefulset-smb-0   smb                     129m
+
+# 当使用相同的 statefulset 文件重建的时候,其中的 pvc,pv将重用
+
+# kubectl get pv|grep state
+pvc-ea222bc4-937e-42e5-b4bc-d406105e4f85   3Gi        RWX            Retain           Bound      default/smb-statefulset-smb-0   smb                     6h24m
+
+# kubectl get pvc|grep state
+smb-statefulset-smb-0   Bound    pvc-ea222bc4-937e-42e5-b4bc-d406105e4f85   3Gi        RWX            smb            6h24m
+
+# kubectl get statefulset
+NAME              READY   AGE
+statefulset-smb   1/1     6m43s
+
+# kubectl get pod -o wide
+NAME                     READY   STATUS    RESTARTS   AGE     IP               NODE         NOMINATED NODE   READINESS GATES
+statefulset-smb-0        1/1     Running   0          6m58s   172.29.235.253   k8s-master   <none>           <none>
+
+上述例子用的 storageclass, pvc,statefulset 文件
+##############################################################
+# create access smb secret
+kubectl create secret generic secret-smb \        
+    --from-literal username="WORKGROUP\test01" \    # 用于访问 samba 的用户和域
+    --from-literal password="123456"               # 上面用户的密码
+
+
+# StorageClass 
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: smb
+provisioner: smb.csi.k8s.io
+parameters:
+  source:  "//172.20.10.6/share"             #"//SMB_SERVER_NAME/SHARE_NAME"
+  csi.storage.k8s.io/node-stage-secret-name: "secret-smb"         # secret 的名字
+  csi.storage.k8s.io/node-stage-secret-namespace: "default"
+  #  createSubDir: "true"    # optional: create a sub dir for new volume
+reclaimPolicy: Retain      # only Retain is supported         # 这里类似 pv 的 回收策略,支持 delete 和 retain,默认值是 Delete
+volumeBindingMode: Immediate
+allowVolumeExpansion: true
+mountOptions:
+  - dir_mode=0777
+  - file_mode=0777
+  - uid=1001
+  - gid=1001
+
+---
+
+# statefulset
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx
+  labels:
+    app: nginx
+spec:
+  ports:
+  - port: 80
+    name: web
+  clusterIP: None
+  selector:
+    app: nginx
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: statefulset-smb
+  labels:
+    app: nginx
+spec:
+  serviceName: statefulset-smb
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      nodeSelector:
+        "kubernetes.io/os": linux
+      containers:
+        - name: statefulset-smb
+          image: nginx
+          command:
+            - "/bin/bash"
+            - "-c" 
+            - set -euo pipefail; while true; do echo $(date) >> /share/data.txt; sleep 1; done
+          volumeMounts:
+            - name: smb         # 这里的名称和后面的 volumeClaimTemplates.metadata.name 的值相同
+              mountPath: /share
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: nginx
+  volumeClaimTemplates:             # 这里建立 pvc
+    - metadata:
+        name: smb
+        annotations:
+          volume.beta.kubernetes.io/storage-class: smb
+      spec:
+        accessModes: ["ReadWriteMany"]
+        resources:
+          requests:
+            storage: 3Gi
+
+
+##############################################################
+
+
+3. pod 使用 storageclass
+必须有 storageclass, 建立 pvc, 挂载使用
+
+##############################################################
+
+# 建立 pvc
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-smb
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: smb     # 前面建立的 storageclass
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+
+# 挂载使用
+apiVersion: v1
+kind: Pod
+metadata:
+  name: task-pv-pod
+spec:
+  nodeSelector:
+    kubernetes.io/hostname: k8s-master 
+  volumes:
+    - name: task-pv-storag
+      persistentVolumeClaim:
+        claimName: pvc-smb    # pvc 的名称
+  containers:
+    - name: task-pv-container
+      image: nginx
+      ports:
+        - containerPort: 80
+          name: "http-server"
+      volumeMounts:
+        - mountPath: "/usr/share/nginx/html"
+          name: task-pv-storage
+
+##############################################################
+
+注意: 上述的 2 种方式建立的挂载,都挂载的同一个目录,因此目录中的内容相同
+
+
+4. 通过建立 pv,然后 pvc 的方式挂载
+步骤: 按照官方的说法,就是静态 pv 的使用方式,建立 pv, 然后建立 pvc, 然后挂载使用
+
+通过静态方式建立的 pv,不会包含storageclass, 系统是不会自动删除
+
+
+# 注意建立的 pv, 没有建立 pvc 之前的状态是 Available
+# kubectl get pv
+NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM                           STORAGECLASS   REASON   AGE
+pv-static-smb                              3Gi        RWX            Retain           Available                        
+
+# 建立 pvc 以后,pv, pvc 都会出现 Bound
+# kubectl get pvc
+NAME                    STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+pvc-static-smb          Bound    pv-static-smb                              3Gi        RWX                           82s
+
+# kubectl get pv
+NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS     CLAIM                           STORAGECLASS   REASON   AGE
+pv-static-smb                              3Gi        RWX            Retain           Bound      default/pvc-static-smb                                  7m53s
+
+
+
+##############################################################
+# 建立 pv
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-static-smb
+spec:
+  capacity:
+    storage: 3Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  mountOptions:
+    - dir_mode=0777
+    - file_mode=0777
+    - vers=3.0
+  csi:
+    driver: smb.csi.k8s.io
+    readOnly: false
+    volumeHandle: VOLUME_ID     # 唯一的卷 ID
+    volumeAttributes:
+      source: "//172.20.10.6/share"
+    nodeStageSecretRef:
+      name: secret-smb      # 前面建立的 secret
+      namespace: default
+
+--- 
+
+# 建立 pvc 
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-static-smb
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi
+  volumeName: pv-static-smb
+  storageClassName: ""                # 设置为空表示,此 pvc 只能用于不包含 storageclass 的 pv
+
+--- 
+
+# 挂载使用
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: static-pv-pod
+spec:
+  nodeSelector:
+    kubernetes.io/hostname: k8s-master 
+  volumes:
+    - name: static-pv       # 自定义的名称
+      persistentVolumeClaim:
+        claimName: pvc-static-smb 
+  containers:
+    - name: task-pv-container
+      image: nginx
+      ports:
+        - containerPort: 80
+          name: "http-server"
+      volumeMounts:
+        - mountPath: "/usr/share/nginx/html"
+          name: static-pv     # 必须和 volumes.name 一致
+
+##############################################################
+
+注意: 
+1. 当删除 pod 的挂载以后,pv,pvc 然后存在,并且数据不会丢失
+2. 同时删除 pvc 的时候, pv 上的内容仍然不会丢失,但是会出现如下的现象,pv 显示是 released, 但是 claim 还是绑定在之前使用的 pvc
+导致此现象的原因在 pv 中设置的  persistentVolumeReclaimPolicy: Retain, Retain 表示手动的删除,同时即使删除了 pvc, pv claim部分仍然显示是与
+pvc 绑定在一起,比如下面的显示,同时目前支持的回收策略为 Retain,Delete,与 storageclass 相同
+
+# kubectl get pv 
+NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS     CLAIM                           STORAGECLASS   REASON   AGE
+pv-static-smb                              3Gi        RWX            Retain           Released   default/pvc-static-smb                                  38m
+
+3. 为了删除这种绑定,需要将 pv 手动删除,但是,原始存储上的数据并不会丢失
+
+原文链接: 
+https://kubernetes.io/zh-cn/docs/concepts/storage/persistent-volumes/#persistentvolume-deletion-protection-finalizer
+
+
+
+

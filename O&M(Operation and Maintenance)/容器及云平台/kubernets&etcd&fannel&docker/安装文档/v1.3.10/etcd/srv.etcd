@@ -1,0 +1,32 @@
+#!/bin/bash
+# author:jack
+# date:20171029
+# setup kubernetes 
+# execute with ROOT user
+# FILENAME:srv.etcd
+#########################
+
+if [ -e GLOBAL-ENV ];then
+  source GLOBAL-ENV
+else
+  echo 'File GLOBAL-ENV does not exist.'
+  echo -1
+fi
+
+
+$HOME_PATH/apps/etcd/bin/etcd \
+--name $ETCD_NODE01 \
+--data-dir '$HOME_PATH/apps/etcd/data' \
+--wal-dir '$HOME_PATH/apps/etcd/wal' \
+--snapshot-count 10000 \
+--heartbeat-interval 100 \
+--election-timeout 1000 \
+--listen-peer-urls "http://$LOCAL_IPADDRESS:2380" \
+--listen-client-urls "http://0.0.0.0:2379,http://0.0.0.0:4001" \
+--max-snapshots 5 \
+--max-wals 5 \
+--initial-advertise-peer-urls "http://192.168.81.5:2380" \
+--initial-cluster "$ETCD_NODE01=http://$ETCD_NODE01_IPADDRESS:2380,$ETCD_NODE02=http://ETCD_NODE02_IPADDRESS:2380,$ETCD_NODE03=http://ETCD_NODE03_IPADDRESS:2380" \
+--initial-cluster-token "etcd-cluster" \
+--advertise-client-urls "http://$LOCAL_IPADDRESS:2379,http://$LOCAL_IPADDRESS:4001' \
+--initial-cluster-state "existing"

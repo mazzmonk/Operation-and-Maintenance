@@ -1,0 +1,11 @@
+1) C/C++ build > Settings > GCC C++ Compiler > Dialect > Language standard to 'ISO C++11 (-std=c++0x)'
+2) C/C++ build > Settings > GCC C++ Linker > Libraries add 'pthread' to Libraries
+
+
+
+使用此版本至少不会出现代码无法识别std::thread之类的错误，导致有个小叉在代码前边，同时似乎有代码提示
+Eclipse IDE for C/C++ Developers
+Version: Oxygen Release (4.7.0)
+Build id: 20170620-1800
+OS: Linux, v.3.19.0-32-generic, x86_64 / gtk 3.10.8
+

@@ -1,0 +1,318 @@
+Libraries Listed Alphabetically 按字母序的库列表
+
+accumulators - 进行累增计算的框架，以及一组统计学的累加器，来自 Eric Niebler.
+any - 保存具有不同值类型的单个值的一种安全、泛型的容器，来自 Kevlin Henney. 
+array - 兼容STL的容器，是固定大小的数组的包装，来自 Nicolai Josuttis.
+asio - 可移植的网络和其它底层I/O，包括 sockets, 定时器, 主机名解释，socket 输入输出流，串行端口，文件描述符和 Windows HANDLEs，来自 Chris Kohlhoff.
+assign - 以从所未有如此容易的方法将常数或生成的数据填入容器，来自 Thorsten Ottosen.
+bimap - 双向 maps, 来自 Matias Capeletto.
+bind and mem_fn - 泛型绑定器，用于函数/对象/指针和成员函数，来自 Peter Dimov.
+call_traits - 定义用于传递参数的类型，来自 John Maddock, Howard Hinnant 等人.
+circular_buffer - STL 兼容的环或循环缓冲区容器，来自 Jan Gaspar.
+compatibility - 协助非一致性的标准库，来自 Ralf Grosse-Kunstleve 和 Jens Maurer.
+compressed_pair - 空成员优化，来自 John Maddock, Howard Hinnant 等人.
+concept check - 泛型编程的工具，来自 Jeremy Siek.
+config - 协助 boost 库开发人员适应编译器的特性，不适用于库用户。
+conversion - 多态和字面转换，来自 Dave Abrahams 和 Kevlin Henney.
+crc - 循环冗余码，来自 Daryle Walker.
+date_time - 日期-时间库，来自 Jeff Garland.
+dynamic_bitset - 一个在运行期可变大小的 std::bitset 版本，来自 Jeremy Siek 和 Chuck Allison.
+enable_if - 函数模板重载的选择性内含物，来自 Jaakko Järvi, Jeremiah Willcock, 和 Andrew Lumsdaine.
+exception - 用于在异常对象中传送任意数据的库，可以在线程间传送异常(N2179)， 来自 Emil Dotchevski.
+filesystem - 可移植的路径、目录遍历和其它有用的文件系统操作，来自 Beman Dawes.
+flyweight - 管理大量高度冗余的对象的一个设计模式，来自 Joaquín M López Muñoz.
+foreach - BOOST_FOREACH 宏可以很容易地遍历一个序列的所有元素，来自 Eric Niebler.
+format - 类型安全的 '类printf' 的格式化操作，来自 Samuel Krempp.
+function - 延期调用和回调的函数对象包装，来自 Doug Gregor.
+function_types - 用于可调用、内建类型的类型 traits, 来自 Tobias Schwinger.
+functional - 增强的函数对象适配器，来自 Mark Rodgers.
+functional/factory - 用于动态和静态对象创建的函数对象模板，来自 Tobias Schwinger
+functional/forward - 允许泛型函数对象接受变长参数的适配器，来自 Tobias Schwinger
+functional/hash - 一个 TR1 的散列函数对象，可以扩展为对用户定义类型进行散列，来自 Daniel James.
+fusion - 与 tuples 一起使用的库，包括多种容器、算法等。来自 Joel de Guzman, Dan Marsden 和 Tobias Schwinger.
+gil - 通用图像库，来自 Lubomir Bourdev 和 Hailin Jin.
+graph - 通用的图组件和算法，来自 Jeremy Siek 和一个Notre Dame大学的团队；目前由 Andrew Sutton 和 Jeremiah Willcock 维护。
+integer - 头文件，使得处理整型类型更为容易.
+interprocess - 共享内存、内存映射文件、进程共享互斥体、条件变量、容器和分配器，来自 Ion Gaztañaga.
+interval - 将常用的算术函数扩展至数学区间，来自 Guillaume Melquiond, Herv´ Brönnimann 和 Sylvain Pion.
+intrusive - 插入式的容器和算法，来自 Ion Gaztañaga.
+in_place_factory, typed_in_place_factory - 泛型的用参数列表就地构造所含对象，来自 Fernando Cacciola.
+io state savers - 保存 I/O 状态，以防止数据混乱，来自 Daryle Walker.
+iostreams - 一个框架，用于定义流、流缓冲和i/o过滤器，来自 Jonathan Turkanis.
+iterators - 迭代器构造框架，适配器、概念及其它，来自 Dave Abrahams, Jeremy Siek, 和 Thomas Witt.
+lambda - 就地定义小型的无名函数对象，及其它，来自 Jaakko Järvi 和 Gary Powell.
+lexical_cast - 通用的字面文本转换，如：将 int 表示为字符串，或反之，来自 Kevlin Henney.
+math - 数学领域的几个贡献，来自多个作者.
+math/complex number algorithms - 这些复数算法是目前C++标准中的三角函数的反面，来自 John Maddock.
+math/common_factor - 最大公约数和最小公倍数，来自 Daryle Walker.
+math/octonion - 八元数，来自 Hubert Holin.
+math/quaternion - 四元数，来自 Hubert Holin.
+math/special_functions - 大量选定的特殊数学函数，来自 John Maddock, Paul Bristow, Hubert Holin 和 Xiaogang Zhang.
+math/statistical distributions - 大量选定的单变量统计分布和函数，来自 John Maddock 和 Paul Bristow
+minmax - 标准库的扩展，同时的 min/max 和 min/max 元素计算，来自 Hervé Brönnimann.
+MPI - 消息传送接口库，用于分布式内存的并行应用编程，来自 Douglas Gregor 和 Matthias Troyer.
+mpl - 模板元编程框架，编译期算法、序列和元函数类，来自 Aleksey Gurtovoy.
+meta state machine - 高性能表现的 UML 2.0 有限状态机，来自 Christophe Henry.
+multi_array - 多维容器和用于邻接数据数组的适配器，来自 Ron Garcia.
+multi_index - 具有多个STL兼容访问接口的容器，来自 Joaquín M López Muñoz.
+numeric/conversion - 优化的基于策略的数字转换，来自 Fernando Cacciola.
+operators - 用模板来简化算术类和迭代器，来自 Dave Abrahams 和 Jeremy Siek.
+optional - 任意值的可区别联合包装，来自 Fernando Cacciola.
+parameter - 用于编写以名字来接受参数的函数，来自 David Abrahams 和 Daniel Wallin.
+pointer container - 用于存放分配在堆上的多态对象的容器，以便于OO编程，来自 Thorsten Ottosen.
+polygon - 整数坐标的平面多边形的布尔/裁剪，缩放/位移及其它运算，来自 Lucanus Simonson.
+pool - 内存池管理，来自 Steve Cleary.
+preprocessor - 预处理器元编程工具，包含循环和递归，来自 Vesa Karvonen 和 Paul Mensonides.
+program_options - 存取来自命令行、配置文件或其它来源的配置数据，来自 Vladimir Prus.
+property map - 用于定义接口的概念，将键值对象映射到值对象，来自 Jeremy Siek.
+property tree - 一个树型数据结构，尤其适合于保存配置数据，来自 Marcin Kalicinski 和 Sebastian Redl.
+proto - 表达式模板库以及用于领域专用嵌入式语言的编译器构造工具集，来自 Eric Niebler.
+python - 将C++的类和函数反射到 Python, 来自 Dave Abrahams.
+random - 一个完整的随机数生成系统，来自 Jens Maurer.
+range - 用于基于区间的算法的概念和工具，以及基于区间的算法和区间适配器，可写出高效和易读的代码，来自 Thorsten Ottosen 和 Neil Groves.
+rational - 有理数类，来自 Paul Moore.
+ref - 一个工具库，用于将引用传递给泛型函数，来自 Jaako Järvi, Peter Dimov, Doug Gregor, 和 Dave Abrahams.
+regex - 正则表达式库，来自 John Maddock.
+result_of - 确定某个函数调用表达式的类型。
+scope_exit - 在退出作用域时执行任意代码，来自 Alexander Nasonov.
+serialization - 数据持久化和整编的串行化，来自 Robert Ramey
+signals - 可管理的信号和插槽回调实现，来自 Doug Gregor.
+signals2 - 可管理的信号和插槽回调实现(线程安全的版本2)，来自 Frank Mori Hess.
+smart_ptr - 六种智能指针类模板，来自 Greg Colvin, Beman Dawes, Peter Dimov, 和 Darin Adler.
+statechart - 任意复杂的有限状态机，可以实现为非常易读和易维护的C++代码，来自 Andreas Huber.
+static_assert - 静态断言(编译期断言), 来自 John Maddock.
+spirit - LL 分析器框架，以内联的C++方式直接从 EBNF 语法实现分析器，来自 Joel de Guzman 及其团队.
+string_algo - 字符串算法库，来自 Pavol Droba.
+swap - 增强的泛型 swap 函数，来自 Joseph Gauterin.
+system - 操作系统支持，包括即将成为 C++0x 标准库组成部分的诊断支持，来自 Beman Dawes.
+test - 支持简单的程序测试、全单元测试，以及程序执行监控，来自 Gennadiy Rozental.
+thread - 可移植的C++多线程，来自 William Kempf.
+timer - 事件定时器，进度计时器，以及进度显示类，来自 Beman Dawes.
+tokenizer - 将一个字符串或其它字符序列分解为一系列记号，来自 John Bandela.
+TR1 - 对C++库扩展技术报告的一个实现，以其它 Boost 库为基础，来自 John Maddock.
+tribool - 三态布尔类型库，来自 Doug Gregor.
+tuple - 更易于定义返回多个数值的函数，及其它，来自 Jaakko Järvi.
+type_traits - 用于类型的基本特性的模板，来自 John Maddock, Steve Cleary 等人.
+typeof - 模拟 typeof 操作符，来自 Arkadiy Vertleyb 和 Peder Holt.
+uBLAS - 基本的线性代数，用于密集矩阵、压缩矩阵和稀疏矩阵，来自 Joerg Walter 和 Mathias Koch.
+units - 零开销的量纲分析和单位/数量操作和转换，来自 Matthias Schabel 和 Steven Watanabe. 
+unordered - 无序关联式容器，来自 Daniel James.
+utility - 类 noncopyable 和 checked_delete(), checked_array_delete(), next(),  prior() 函数模板，再加上 base-from-member idiom, 来自 Dave Abrahams 和其它人.
+value_initialized - 统一语法的数值初始化包装，来自 Fernando Cacciola, 基于 David Abrahams 的原作.
+uuid - 一个通用的唯一标识符，来自 Andy Tompkins.
+variant - 安全、泛型、基于栈的可识别联合的容器，来自 Eric Friedman 和 Itay Maman.
+wave - 将委托型C99/C++预处理器的功能打包到一个符合标准的实现，有易于使用的迭代器接口，来自 Hartmut Kaiser.
+xpressive - 可以写为字符串或表达式模板的正则表达式，并可以相互引用和递归，提供强有力的上下文无关语法，来自 Eric Niebler.
+
+
+Libraries Listed by Category 分类的库列表
+
+
+String and text processing 字符串和文本处理
+
+conversion/lexical_cast - lexical_cast 类模板，来自 Kevlin Henney.
+format - 类型安全的 '类printf' 的格式化操作，来自 Samuel Krempp.
+iostreams - 一个框架，用于定义流、流缓冲和i/o过滤器，来自 Jonathan Turkanis.
+regex - 正则表达式库，来自 John Maddock
+spirit - LL 分析器框架，以内联的C++方式直接从 EBNF 语法实现分析器，来自 Joel de Guzman 及其团队.
+string_algo - 字符串算法库，来自 Pavol Droba
+tokenizer - 将一个字符串或其它字符序列分解为一系列记号，来自 John Bandela
+wave - 将委托型C99/C++预处理器的功能打包到一个符合标准的实现，有易于使用的迭代器接口，来自 Hartmut Kaiser.
+xpressive - 可以写为字符串或表达式模板的正则表达式，并可以相互引用和递归，提供强有力的上下文无关语法，来自 Eric Niebler.
+
+
+Containers 容器
+
+array - 兼容STL的容器，是固定大小的数组的包装，来自 Nicolai Josuttis.
+bimap - 双向 maps, 来自 Matias Capeletto.
+circular_buffer - STL 兼容的环或循环缓冲区容器，来自 Jan Gaspar.
+dynamic_bitset - 一个在运行期可变大小的 std::bitset 版本，来自 Jeremy Siek 和 Chuck Allison.
+gil - 通用图像库，来自 Lubomir Bourdev 和 Hailin Jin.
+graph - 通用的图组件和算法，来自 Jeremy Siek 和一个Notre Dame大学的团队；目前由 Andrew Sutton 和 Jeremiah Willcock 维护。
+intrusive - 插入式的容器和算法，来自 Ion Gaztañaga.
+multi_array - 多维容器和用于邻接数据数组的适配器，来自 Ron Garcia.
+multi_index - 具有多个STL兼容访问接口的容器，来自 Joaquín M López Muñoz.
+pointer container - 用于存放分配在堆上的多态对象的容器，以便于OO编程，来自 Thorsten Ottosen.
+property map - 用于定义接口的概念，将键值对象映射到值对象，来自 Jeremy Siek.
+property tree - 一个树型数据结构，尤其适合于保存配置数据，来自 Marcin Kalicinski 和 Sebastian Redl.
+unordered - 无序关联式容器，来自 Daniel James.
+variant - 安全、泛型、基于栈的可识别联合的容器，来自 Eric Friedman 和 Itay Maman.
+
+
+Iterators 迭代器
+
+gil - 通用图像库，来自 Lubomir Bourdev 和 Hailin Jin.
+graph - 通用的图组件和算法，来自 Jeremy Siek 和一个Notre Dame大学的团队；目前由 Andrew Sutton 和 Jeremiah Willcock 维护。
+iterators - 迭代器构造框架，适配器、概念及其它，来自 Dave Abrahams, Jeremy Siek, 和 Thomas Witt.
+operators - 用模板来简化算术类和迭代器，来自 Dave Abrahams 和 Jeremy Siek.
+tokenizer - 将一个字符串或其它字符序列分解为一系列记号，来自 John Bandela.
+
+
+Algorithms 算法
+
+foreach - BOOST_FOREACH 宏可以很容易地遍历一个序列的所有元素，来自 Eric Niebler.
+gil - 通用图像库，来自 Lubomir Bourdev 和 Hailin Jin.
+graph - 通用的图组件和算法，来自 Jeremy Siek 和一个Notre Dame大学的团队；目前由 Andrew Sutton 和 Jeremiah Willcock 维护。
+minmax - 标准库的扩展，同时的 min/max 和 min/max 元素计算，来自 Hervé Brönnimann.
+string_algo - 字符串算法库，来自 Pavol Droba
+utility - 类 next(),  prior() 函数模板等, 来自 Dave Abrahams 和其它人.
+range - 一个用于泛型算法的新架构，建基于新的迭代器概念之上，来自 Thorsten Ottosen.
+
+
+Function objects and higher-order programming 函数对象和高阶编程
+
+bind and mem_fn - 泛型绑定器，用于函数/对象/指针和成员函数，来自 Peter Dimov.
+function - 延期调用和回调的函数对象包装，来自 Doug Gregor.
+functional - 增强的函数对象适配器，来自 Mark Rodgers.
+functional/factory - 用于动态和静态对象创建的函数对象模板，来自 Tobias Schwinger
+functional/forward - 允许泛型函数对象接受变长参数的适配器，来自 Tobias Schwinger
+functional/hash - 一个 TR1 的散列函数对象，可以扩展为对用户定义类型进行散列，来自 Daniel James.
+lambda - 就地定义小型的无名函数对象，及其它，来自 Jaakko Järvi 和 Gary Powell.
+ref - 一个工具库，用于将引用传递给泛型函数，来自 Jaako Järvi, Peter Dimov, Doug Gregor, 和 Dave Abrahams.
+signals - 可管理的信号和插槽回调实现，来自 Doug Gregor.
+signals2 - 可管理的信号和插槽回调实现(线程安全的版本2)，来自 Frank Mori Hess.
+result_of - 判断一个函数调用表达式的类型.
+
+
+Generic Programming 泛型编程
+
+call_traits - 定义用于传递参数的类型，来自 John Maddock, Howard Hinnant 等人.
+concept check - 泛型编程的工具，来自 Jeremy Siek.
+enable_if - 函数模板重载的选择性内含物，来自 Jaakko Järvi, Jeremiah Willcock, 和 Andrew Lumsdaine.
+function_types - 用于可调用、内建类型的类型 traits, 来自 Tobias Schwinger.
+gil - 通用图像库，来自 Lubomir Bourdev 和 Hailin Jin.
+in_place_factory, typed_in_place_factory - 泛型的用参数列表就地构造所含对象，来自 Fernando Cacciola.
+operators - 用模板来简化算术类和迭代器，来自 Dave Abrahams 和 Jeremy Siek.
+property map - 用于定义接口的概念，将键值对象映射到值对象，来自 Jeremy Siek.
+proto - 表达式模板库以及用于领域专用嵌入式语言的编译器构造工具集，来自 Eric Niebler.
+static_assert - 静态断言(编译期断言), 来自 John Maddock.
+type_traits - 用于类型的基本特性的模板，来自 John Maddock, Steve Cleary 等人.
+
+
+Template Metaprogramming 模板元编程
+
+function_types - 用于可调用、内建类型的类型 traits, 来自 Tobias Schwinger.
+fusion - 与 tuples 一起使用的库，包括多种容器、算法等。来自 Joel de Guzman, Dan Marsden 和 Tobias Schwinger.
+mpl - 模板元编程框架，编译期算法、序列和元函数类，来自 Aleksey Gurtovoy.
+static_assert - 静态断言(编译期断言), 来自 John Maddock.
+type_traits - 用于类型的基本特性的模板，来自 John Maddock, Steve Cleary 等人.
+
+
+Preprocessor Metaprogramming 预处理元编程
+
+preprocessor - 预处理器元编程工具，包含循环和递归，来自 Vesa Karvonen 和 Paul Mensonides.
+
+
+Concurrent Programming 并行编程
+
+asio - 可移植的网络和其它底层I/O，包括 sockets, 定时器, 主机名解释，socket 输入输出流，串行端口，文件描述符和 Windows HANDLEs，来自 Chris Kohlhoff. 
+interprocess - 共享内存、内存映射文件、进程共享互斥体、条件变量、容器和分配器，来自 Ion Gaztañaga.
+MPI - 消息传送接口库，用于分布式内存的并行应用编程，来自 Douglas Gregor 和 Matthias Troyer.
+thread - 可移植的C++多线程，来自 William Kempf.
+
+
+Math and numerics 数学与数字
+
+accumulators - 进行累增计算的框架，以及一组统计学的累加器，来自 Eric Niebler.
+integer - 头文件，使得处理整型类型更为容易.
+interval - 将常用的算术函数扩展至数学区间，来自 Guillaume Melquiond, Herv´ Brönnimann 和 Sylvain Pion.
+math - 数学领域的几个贡献，来自多个作者.
+math/complex number algorithms - 这些复数算法是目前C++标准中的三角函数的反面，来自 John Maddock.
+math/common_factor - 最大公约数和最小公倍数，来自 Daryle Walker.
+math/octonion - 八元数，来自 Hubert Holin.
+math/quaternion - 四元数，来自 Hubert Holin.
+math/special_functions - 大量选定的特殊数学函数，来自 John Maddock, Paul Bristow, Hubert Holin 和 Xiaogang Zhang.
+math/statistical distributions - 大量选定的单变量统计分布和函数，来自 John Maddock 和 Paul Bristow.
+multi_array - 多维容器和用于邻接数据数组的适配器，来自 Ron Garcia.
+numeric/conversion - 优化的基于策略的数字转换，来自 Fernando Cacciola.
+operators - 用模板来简化算术类和迭代器，来自 Dave Abrahams 和 Jeremy Siek.
+random - 一个完整的随机数生成系统，来自 Jens Maurer.
+rational - 有理数类，来自 Paul Moore.
+uBLAS - 基本的线性代数，用于密集矩阵、压缩矩阵和稀疏矩阵，来自 Joerg Walter 和 Mathias Koch.
+
+
+Correctness and testing 正确性和测试
+
+concept check - 泛型编程的工具，来自 Jeremy Siek.
+static_assert - 静态断言(编译期断言), 来自 John Maddock.
+test - 支持简单的程序测试、全单元测试，以及程序执行监控，来自 Gennadiy Rozental.
+
+
+Data structures 数据结构
+
+any - 保存具有不同值类型的单个值的一种安全、泛型的容器，来自 Kevlin Henney.
+bimap - 双向 maps, 来自 Matias Capeletto.
+compressed_pair - 空成员优化，来自 John Maddock, Howard Hinnant 等人.
+fusion - 与 tuples 一起使用的库，包括多种容器、算法等。来自 Joel de Guzman, Dan Marsden 和 Tobias Schwinger.
+multi_index - 具有多个STL兼容访问接口的容器，来自 Joaquín M López Muñoz.
+pointer container - 用于存放分配在堆上的多态对象的容器，以便于OO编程，来自 Thorsten Ottosen.
+property tree - 一个树型数据结构，尤其适合于保存配置数据，来自 Marcin Kalicinski 和 Sebastian Redl.
+tuple - 更易于定义返回多个数值的函数，及其它，来自 Jaakko Järvi.
+uuid - 一个通用的唯一标识符，来自 Andy Tompkins.
+variant - 安全、泛型、基于栈的可识别联合的容器，来自 Eric Friedman 和 Itay Maman.
+
+
+Image processing 图像处理
+
+gil - 通用图像库，来自 Lubomir Bourdev 和 Hailin Jin. 
+
+
+Input/Output 输入/输出
+
+asio - 可移植的网络和其它底层I/O，包括 sockets, 定时器, 主机名解释，socket 输入输出流，串行端口，文件描述符和 Windows HANDLEs，来自 Chris Kohlhoff.
+assign - 以从所未有如此容易的方法将常数或生成的数据填入容器，来自 Thorsten Ottosen.
+format - 类型安全的 '类printf' 的格式化操作，来自 Samuel Krempp.
+io state savers - 保存 I/O 状态，以防止数据混乱，来自 Daryle Walker.
+iostreams - 一个框架，用于定义流、流缓冲和i/o过滤器，来自 Jonathan Turkanis.
+program_options - 存取来自命令行、配置文件或其它来源的配置数据，来自 Vladimir Prus.
+serialization - 数据持久化和整编的串行化，来自 Robert Ramey.
+
+
+Inter-language support 交叉语言支持
+
+python - 将C++的类和函数反射到 Python, 来自 Dave Abrahams.
+
+
+Memory 内存
+
+pool - 内存池管理，来自 Steve Cleary.
+smart_ptr - 六种智能指针类模板，来自 Greg Colvin, Beman Dawes, Peter Dimov, 和 Darin Adler.
+utility - 类 noncopyable 和 checked_delete(), checked_array_delete(), next(),  prior() 函数模板，再加上 base-from-member idiom, 来自 Dave Abrahams 和其它人.
+
+
+Parsing 语法分析
+
+spirit - LL 分析器框架，以内联的C++方式直接从 EBNF 语法实现分析器，来自 Joel de Guzman 及其团队. 
+
+
+Programming Interfaces 编程接口
+
+function - 延期调用和回调的函数对象包装，来自 Doug Gregor.
+parameter - 用于编写以名字来接受参数的函数，来自 David Abrahams 和 Daniel Wallin.
+
+
+Miscellaneous 杂项
+base-from-member - 用成员来初始基类的惯用法，来自 Daryle Walker.
+compressed_pair - 空成员优化，来自 John Maddock, Howard Hinnant 等人.
+conversion - 多态和字面转换，来自 Dave Abrahams 和 Kevlin Henney.
+crc - 循环冗余码，来自 Daryle Walker.
+date_time - 日期-时间库，来自 Jeff Garland.
+exception - 用于在异常对象中传送任意数据的库，可以在线程间传送异常(N2179)， 来自 Emil Dotchevski.
+filesystem - 可移植的路径、目录遍历和其它有用的文件系统操作，来自 Beman Dawes.
+flyweight - 管理大量高度冗余的对象的一个设计模式，来自 Joaquín M López Muñoz.
+lexical_cast -  通用的字面文本转换，如：将 int 表示为字符串，或反之，来自 Kevlin Henney.
+meta state machine - 高性能表现的 UML 2.0 有限状态机，来自 Christophe Henry.
+numeric/conversion - 优化的基于策略的数字转换，来自 Fernando Cacciola.
+optional - 任意值的可区别联合包装，来自 Fernando Cacciola.
+program_options - 存取来自命令行、配置文件或其它来源的配置数据，来自 Vladimir Prus.
+scope_exit - 在退出作用域时执行任意代码，来自 Alexander Nasonov.
+statechart - 任意复杂的有限状态机，可以实现为非常易读和易维护的C++代码，来自 Andreas Huber.
+swap - 增强的泛型 swap 函数，来自 Joseph Gauterin.
+system - 操作系统支持，包括即将成为 C++0x 标准库组成部分的诊断支持，来自 Beman Dawes.
+timer - 事件定时器，进度计时器，以及进度显示类，来自 Beman Dawes.
+TR1 - 对C++库扩展技术报告的一个实现，以其它 Boost 库为基础，来自 John Maddock.
+tribool - 三态布尔类型库，来自 Doug Gregor.
+typeof - 模拟 typeof 操作符，来自 Arkadiy Vertleyb 和 Peder Holt.
+units - 零开销的量纲分析和单位/数量操作和转换，来自 Matthias Schabel 和 Steven Watanabe. 
+utility - 类 noncopyable 和 checked_delete(), checked_array_delete(), next(),  prior() 函数模板，再加上 base-from-member idiom, 来自 Dave Abrahams 和其它人.
+value_initialized - 统一语法的数值初始化包装，来自 Fernando Cacciola, 基于 David Abrahams 的原作.

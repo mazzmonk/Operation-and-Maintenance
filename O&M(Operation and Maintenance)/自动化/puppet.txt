@@ -1,0 +1,226 @@
+puppet用于自动化更新工具
+使用ruby开发
+
+1.安装
+版本：
+facter-2.2.0.tar.gz
+puppet-2.7.26.tar.gz
+
+puppet的3.0以后的版本使用起来有错误提示
+软件采用server/client的模式开发，因此也需要在server及client安装配置
+
+首先需要做一个时间同步，所有的机器，因为最后生成的证书在时间上有校验
+/usr/sbin/ntpdate -u asia.pool.ntp.org
+
+安装ruby开发环境
+#yum -y install ruby*
+
+修改所有机器的hosts文件
+192.168.1.1 server.example.com server
+192.168.1.2 client.example.com client
+
+2.安装
+server 
+
+#tar zxvf facter-2.2.0.tar.gz
+#cd facter-2.2.0
+#ruby install.rb
+
+#tar zxvf puppet-2.7.26.tar.gz
+#cd puppet-2.7.26
+#ruby install.rb
+#cp conf/auth.conf /etc/puppet/
+#cp conf/redhat/fileserver.conf /etc/puppet/
+#cp conf/redhat/puppet.conf /etc/puppet/
+#mkdir -p /etc/puppet/manifests
+
+当作服务启动
+#cp conf/redhat/server.init /etc/init.d/puppetmaster
+#chmod +x /etc/init.d/puppetmaster
+#chkconfig --add puppetmaster
+#chkconfig puppetmaster on
+
+生成pupput用户:
+#puppetmasterd --mkusers
+
+启动puppetmaster服务（端口：8140）:
+#service puppetmaster start
+
+client
+
+#tar zxvf facter-2.2.0.tar.gz
+#cd facter-2.2.0
+#ruby install.rb
+
+#tar zxvf puppet-2.7.26.tar.gz
+#cd puppet-2.7.26
+#ruby install.rb
+
+#cp conf/auth.conf /etc/puppet/
+#cp conf/namespaceauth.conf /etc/puppet/
+#cp conf/redhat/puppet.conf /etc/puppet/
+
+设置开机启动脚本：
+#cp conf/redhat/client.init /etc/init.d/puppet
+#chmod +x /etc/init.d/puppet
+#chkconfig --add puppet
+#chkconfig puppet on
+
+修改配置文件
+#vi /etc/puppet/puppet.conf
+在[agent]条目下添加以下内容：
+-------
+Listen = true
+Server = server.example.com
+
+#vi /etc/puppet/namespaceauth.conf
+修改成以下内容：
+---------
+[fileserver]
+allow *
+[puppetmaster]
+allow *
+[puppetrunner]
+allow *
+[puppetbucket]
+allow *
+[puppetreports]
+allow *
+[resource]
+allow *
+---------
+
+生成pupput用户:
+#puppetmasterd --mkusers
+
+启动puppet服务（端口：8140）:
+#/etc/init.d/puppet start
+
+3.认证
+(client):
+
+客户端发送请求
+# puppetd --test --server server.example.com
+
+报错：
+--------------------
+err: Could not retrieve catalog from remote server: SSL_connect returned=1 errno=0
+
+state=SSLv3 read server certificate B: certificate verify failed
+warning: Not using cache on failed catalog
+err: Could not retrieve catalog; skipping run
+--------------------
+解决方法：
+这可能是换了不同的两台puppetmaster服务器引起的。解决方法，删除现有ssl证书。
+# find /var/lib/puppet -type f -print0 |xargs -0r rm
+
+重新发送请求：
+# puppetd --test --server server.example.com
+-------------------
+info: Creating a new SSL key for client.example.com
+warning: peer certificate won't be verified in this SSL session
+info: Caching certificate for ca
+warning: peer certificate won't be verified in this SSL session
+warning: peer certificate won't be verified in this SSL session
+info: Creating a new SSL certificate request for client.example.com
+info: Certificate Request fingerprint (md5):
+
+32:E8:CD:32:BF:62:86:64:B3:98:A4:EB:8A:71:D2:99
+warning: peer certificate won't be verified in this SSL session
+warning: peer certificate won't be verified in this SSL session
+warning: peer certificate won't be verified in this SSL session
+Exiting; no certificate found and waitforcert is disabled
+-------------------
+发送成功。
+
+(server)：
+
+服务器端查看是否有请求证书的客户端服务器
+# puppetca --list
+------------------
+client.example.com (32:E8:CD:32:BF:62:86:64:B3:98:A4:EB:8A:71:D2:99)
+------------------
+收到客户端认证信息
+
+服务器端对client.example.com签名
+# puppetca -s client.example.com
+
+或对所有客户端全部签名
+# puppetca -s -a
+
+查看验证签名,注意前面的+号，说明已经签名
+# puppetca -a --list
+---------------------
++ client.example.com (19:6F:4C:84:B1:69:16:3C:A1:38:C2:2E:6F:B6:67:12)
+---------------------
+
+md5验证服务器端收到的证书是否正确
+(server)：
+# md5sum /var/lib/puppet/ssl/ca/signed/client.example.com.pem
+---------------------
+1ebfd47775ec8f3e2ae112d75ccba132 /var/lib/puppet/ssl/ca/signed/client.example.com.pem
+---------------------
+(client)：
+# md5sum /var/lib/puppet/ssl/certs/client.example.com.pem
+---------------------
+1ebfd47775ec8f3e2ae112d75ccba132  /var/lib/puppet/ssl/certs/client.example.com.pem
+---------------------
+MD5值相同，说明我们的puppetmaster和客户端的puppet已经成功建立通信
+
+注：出现修改主机名问题引起无法认证，需要重新申请证书，操作可以按照如下两个步骤：
+(server)：
+# rm -rf /var/lib/puppet/ssl/ca/signed/*.pem  // "*.pem"为修改过主机名的证书
+(client)：
+# rm -rf /var/lib/puppet/ssl/
+
+配置完毕，开始验证分发效果：
+
+(server)：
+修改server端配置文件：
+# vi /etc/puppet/manifests/site.pp
+-----------------
+node default{
+  file { "/tmp/test":
+          content=> "this is a test file";
+}
+}
+-----------------
+
+重启puppetmaster，更新配置文件信息。
+# service puppetmaster restart
+
+(client):
+
+重启puppet（可不用重启）
+# service puppet restart
+
+同步文件：
+# puppetd --server server.example.com  --test
+------------------
+warning: peer certificate won't be verified in this SSL session
+info: Caching certificate for client.example.com
+info: Caching certificate_revocation_list for ca
+info: Caching catalog for client.example.com
+info: Applying configuration version '1369124449'
+notice: /Stage[main]//Node[default]/File[/tmp/test]/ensure: defined content as '{md5}100b144907af2a4786003758a0a6a563'
+info: Creating state file /var/lib/puppet/state/state.yaml
+notice: Finished catalog run in 0.02 seconds
+------------------
+
+查看/tmp/test文件及文件内容
+
+# cat /tmp/test
+-----------
+this is a test file
+-----------
+
+
+注意：上述只要是证书的错误等等，一般通过下述2个步骤来处理，在server及client端
+(server)：
+# rm -rf /var/lib/puppet/ssl/ca/signed/*.pem  // "*.pem"为修改过主机名的证书
+(client)：
+# rm -rf /var/lib/puppet/ssl/
+
+find /var/lib/puppet -type f -print0 |xargs -0r rm
+
+

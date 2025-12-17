@@ -1,0 +1,50 @@
+4.1
+Special Issues for C++
+Some users may get error messages such as
+SEEK_SET is #defined but must not be for the C++ binding of MPI
+The problem is that both stdio.h and the MPI C++ interface use SEEK SET,
+SEEK CUR, and SEEK END. This is really a bug in the MPI standard. You can
+try adding
+#undef SEEK_SET
+#undef SEEK_END
+#undef SEEK_CUR
+before mpi.h is included, or add the definition
+-DMPICH_IGNORE_CXX_SEEK
+to the command line (this will cause the MPI versions of SEEK SET etc. to
+be skipped).
+
+
+
+
+http://wiki.mpich.org/mpich/index.php/Using_the_Hydra_Process_Manager
+
+
+
+mpich2的eclipse的设置
+
+必须先安装好mpich2以后，并且设置好环境变量，保证cpicxx等等命令可以使用
+然后在c/c++ Build->Settings右侧的GCC C++ Compiler和GCC C++ Linker右侧的
+Command里写入mpicxx的绝对路径
+
+最后GCC C++ Linker->Libraries右侧的Libraries(-l)里写入mpich
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

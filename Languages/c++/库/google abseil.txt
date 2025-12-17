@@ -1,0 +1,14 @@
+abseil::Mutex mu
+mu.LockWhen(Condition(f, arg))
+mu.Lock(); mu.Await(Condition(f, arg))
+
+mu.Await(Condition(f, arg())
+mu.Unlock(); mu.LockWhen(condition(f,arg))
+
+
+if (mu.LockWhenWithTimeout(Condition(f, &cond_expr), 1000)) {
+  //mu held; cond_expr true
+} else {
+  //mu held; cond_expr false; 1000ms timeout expired
+}
+mu.Unlock();

@@ -1,0 +1,27 @@
+#1.设置（软）制表符宽度为4
+set tabstop=4
+set softtabstop=4
+
+#2.设置缩进的空格数为4
+set shiftwidth=4
+
+#3.设置自动缩进：即每行的缩进值与上一行相等；使用 noautoindent 取消设置：
+set autoindent
+
+#4.使用 C/C++ 语言的自动缩进方式
+set cindent
+
+#5.设置C/C++语言的具体缩进方式（以我的windows风格为例）：
+set cinoptions={0,1s,t0,n-2,p2s,(03s,=.5s,>1s,=1s,:1s
+
+#6.显示行号
+set nu
+
+#7.显示标尺
+set ruler
+
+#8.将搜索内容反白
+set hlsearch
+
+#9.可以删除任意值
+set backspace=2

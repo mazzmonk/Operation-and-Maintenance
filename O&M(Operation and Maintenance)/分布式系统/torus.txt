@@ -1,0 +1,62 @@
+torus是coreos出品的一个分布式存储
+使用go语言开发，使用etcd作为通讯
+
+官方链接：
+https://github.com/coreos/torus
+
+1.etcd 需要3.0以上版本
+2.由于torus直接是二进制文件，因此直接可以运行，目前使用的是
+torus_v0.1.2_linux_amd64.tar.gz
+
+3.安装配置（服务端）
+目录结构
+torus/{bin,logs}
+bin/{torusblk,torusctl,torusd}
+
+服务端启动（每一个做服务端的都执行）
+/home/blue/apps/kubernetes/torus/bin/torusd --etcd 172.17.43.7:4001 --peer-address http://0.0.0.0:40000 --data-dir /home/blue/share/ --size 20GiB >> /home/blue/apps/kubernetes/torus/logs/torusd.log 2>&1 &
+
+这里有个需要注意的地方，就是--etcd这个参数，目前不支持集群，如果是集群的话，只能写其中一个节点，另外--data-dir是指使用的存储的路径，--size指这个存储的大小
+
+初始化存储，如果不添加--etcd参数，将会从本地的etcd中读取信息，此操作可以从任一服务端操作，但是只能一次
+bin/torusctl --etcd 172.17.43.7:4001 init
+
+把所有的服务端节点加入到peer-list中，就是集群中
+bin/torusctl peer add --all-peers
+
+单独添加一个
+bin/torusctl peer add $PEER_ADDRESS [$PEER_UUID...]
+从如下的例子中可以看出，可以使用UUID，或者ADDRESS，比如：
+bin/torusctl peer add http://10.101.101.1:40000 --etcd 172.17.55.3:4001
+
+查看
+bin/torusctl list-peers --etcd 172.17.43.7:4001
+例子：
+$ ./torusctl list-peers --etcd 172.17.43.7:4001
+ADDRESS                     UUID                                  SIZE    USED  MEMBER  UPDATED        REB/REP DATA
+http://172.17.43.5:40000    1b576f03-8ead-11e6-a3d9-0242ac112b05  20 GiB  0 B   OK      2 seconds ago  0 B/sec
+http://172.17.10.6:40000    1ba227d7-8ead-11e6-80ad-0242ac110a06  20 GiB  0 B   OK      3 seconds ago  0 B/sec
+http://192.168.81.91:40000  5a6c2f26-8dd0-11e6-8537-0026b9353ee4  20 GiB  0 B   OK      2 seconds ago  0 B/sec
+http://172.17.55.4:40000    86770f36-8ead-11e6-8e53-0242ac113704  20 GiB  0 B   OK      7 seconds ago  0 B/sec
+http://192.168.81.92:40000  d5508c85-8dd0-11e6-b258-0026b9354046  20 GiB  0 B   OK      2 seconds ago  0 B/sec
+
+移除peer
+bin/torusctl peer remove $PEER_ADDRESS
+
+创建卷
+bin/torusctl volume create-block myVolume 10GiB
+
+
+由于tours使用NBD设备，有个问题
+NBD设备使用采用传统的S/C模式
+在服务端安装好nbd-server以后，生成一个块文件，把块文件作为网络存储文件提供出来，
+然后客户端安装好nbd-client以后，挂载到本地的/dev/nbd0设备上，然后按照需求，格式化此设备为ext4,或者ext3等等，然后torus客户端使用此设备，
+这里将导致单点
+
+同时在docker容器中安装ndb设备繁琐
+
+
+
+
+
+

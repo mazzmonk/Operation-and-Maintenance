@@ -1,0 +1,155 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<html>
+<head>
+	<meta http-equiv="content-type" content="text/html; charset=utf-8"/>
+	<title></title>
+	<meta name="generator" content="LibreOffice 6.4.7.2 (Linux)"/>
+	<meta name="created" content="00:00:00"/>
+	<meta name="changed" content="2022-01-07T18:18:26.519063449"/>
+	<style type="text/css">
+		@page { size: 29.7cm 21cm; margin-left: 2cm; margin-right: 1cm; margin-top: 1cm; margin-bottom: 1cm }
+		p { margin-bottom: 0.25cm; line-height: 115%; background: transparent }
+		a:link { color: #000080; so-language: zxx; text-decoration: underline }
+		a:visited { color: #800000; so-language: zxx; text-decoration: underline }
+	</style>
+</head>
+<body lang="zh-CN" link="#000080" vlink="#800000" dir="ltr"><p style="margin-bottom: 0cm; line-height: 100%">
+    <font face="Liberation Serif, serif"><span lang="en-US">&lt;nav
+role=&quot;navigation&quot; class=&quot;navbar navbar-static-top
+navbar-default&quot;&gt;     # nav </span></font>开头表示是一个导航栏<font face="Liberation Serif, serif"><span lang="en-US">,</span></font>这里会产生一个导航栏条<font face="Liberation Serif, serif"><span lang="en-US">,</span></font></p>
+<p style="margin-bottom: 0cm; line-height: 100%">        <font face="Liberation Serif, serif"><span lang="en-US">&lt;div
+class=&quot;container&quot;&gt;		            #
+</span></font>把导航栏放到一个<font face="Liberation Serif, serif"><span lang="en-US">container</span></font>里<font face="Liberation Serif, serif"><span lang="en-US">,</span></font>可能是<font face="Liberation Serif, serif"><span lang="en-US">container-fluid
+</span></font>
+</p>
+<p style="margin-bottom: 0cm; line-height: 100%">            <font face="Liberation Serif, serif"><span lang="en-US">&lt;div
+class=&quot;navbar-header&quot;&gt;		# </span></font>可以在导航栏上放东西</p>
+<p style="margin-bottom: 0cm; line-height: 100%">               
+<font face="Liberation Serif, serif"><span lang="en-US">&lt;button
+type=&quot;button&quot; class=&quot;navbar-toggle&quot;
+data-toggle=&quot;collapse&quot; data-target=&quot;.navbar-collapse&quot;&gt;	
+ # </span></font>在这里产生一个一个按钮<font face="Liberation Serif, serif"><span lang="en-US">,</span></font>可以点击<font face="Liberation Serif, serif"><span lang="en-US">,</span></font>后面是图标<font face="Liberation Serif, serif"><span lang="en-US">,</span></font>看下面的图</p>
+<p style="margin-bottom: 0cm; line-height: 100%">                   
+<font face="Liberation Serif, serif"><span lang="en-US">&lt;span
+class=&quot;icon-bar&quot;&gt;&lt;/span&gt;</span></font></p>
+<p style="margin-bottom: 0cm; line-height: 100%">                   
+<font face="Liberation Serif, serif"><span lang="en-US">&lt;span
+class=&quot;icon-bar&quot;&gt;&lt;/span&gt;</span></font></p>
+<p style="margin-bottom: 0cm; line-height: 100%">                   
+<font face="Liberation Serif, serif"><span lang="en-US">&lt;span
+class=&quot;icon-bar&quot;&gt;&lt;/span&gt;</span></font></p>
+<p style="margin-bottom: 0cm; line-height: 100%">               
+<font face="Liberation Serif, serif"><span lang="en-US">&lt;/button&gt;</span></font></p>
+<p style="margin-bottom: 0cm; line-height: 100%">                <font face="Liberation Serif, serif"><span lang="en-US">&lt;a
+class=&quot;navbar-brand&quot; href=&quot;index.html&quot;&gt;Project
+name&lt;/a&gt;       # </span></font>可以点击的链接</p>
+<p style="margin-bottom: 0cm; line-height: 100%">            <font face="Liberation Serif, serif"><span lang="en-US">&lt;/div&gt;</span></font></p>
+<p style="margin-bottom: 0cm; line-height: 100%"><br/>
+
+</p>
+<p style="margin-bottom: 0cm; line-height: 100%">            <font face="Liberation Serif, serif"><span lang="en-US">&lt;ul
+class=&quot;nav navbar-nav&quot;&gt;		# </span></font>将<font face="Liberation Serif, serif"><span lang="en-US">3</span></font>个选项放在一起<font face="Liberation Serif, serif"><span lang="en-US">,</span></font>供点击</p>
+<p style="margin-bottom: 0cm; line-height: 100%">                <font face="Liberation Serif, serif"><span lang="en-US">&lt;li
+class=&quot;active&quot;&gt;&lt;a href=&quot;index.html&quot;&gt;Home&lt;/a&gt;&lt;/li&gt;</span></font></p>
+<p style="margin-bottom: 0cm; line-height: 100%">               
+<font face="Liberation Serif, serif"><span lang="en-US">&lt;li&gt;&lt;a
+href=&quot;#&quot;&gt;Link&lt;/a&gt;&lt;/li&gt;</span></font></p>
+<p style="margin-bottom: 0cm; line-height: 100%">               
+<font face="Liberation Serif, serif"><span lang="en-US">&lt;li&gt;&lt;a
+href=&quot;#&quot;&gt;Link&lt;/a&gt;&lt;/li&gt;</span></font></p>
+<p style="margin-bottom: 0cm; line-height: 100%">            <font face="Liberation Serif, serif"><span lang="en-US">&lt;/ul&gt;</span></font></p>
+<p style="margin-bottom: 0cm; line-height: 100%"><br/>
+
+</p>
+<p style="margin-bottom: 0cm; line-height: 100%">        <font face="Liberation Serif, serif"><span lang="en-US">&lt;/div&gt;</span></font></p>
+<p style="margin-bottom: 0cm; line-height: 100%">    <font face="Liberation Serif, serif"><span lang="en-US">&lt;/nav&gt;</span></font></p>
+<p style="margin-bottom: 0cm; line-height: 100%"><br/>
+
+</p>
+<p style="margin-bottom: 0cm; line-height: 100%"><br/>
+
+</p>
+<p style="margin-bottom: 0cm; line-height: 100%"><br/>
+
+</p>
+<p style="margin-bottom: 0cm; line-height: 100%">下面简单解释一下以上代码<font face="Liberation Serif, serif"><span lang="en-US">:</span></font></p>
+<p style="margin-bottom: 0cm; line-height: 100%">按钮中的
+<font face="Liberation Serif, serif"><span lang="en-US">navbar-toggle
+</span></font>类用于应用 <font face="Liberation Serif, serif"><span lang="en-US">CSS
+</span></font>样式<font face="Liberation Serif, serif"><span lang="en-US">;</span></font></p>
+<p style="margin-bottom: 0cm; line-height: 100%">后面的数据属性
+<font face="Liberation Serif, serif"><span lang="en-US">data-toggle </span></font>和
+<font face="Liberation Serif, serif"><span lang="en-US">data-target </span></font>是
+<font face="Liberation Serif, serif"><span lang="en-US">Bootstrap </span></font>的
+<font face="Liberation Serif, serif"><span lang="en-US">JavaScript
+</span></font>插件要用的<font face="Liberation Serif, serif"><span lang="en-US">,</span></font>分别表示预期行为和预期目标<font face="Liberation Serif, serif"><span lang="en-US">(</span></font>即
+<font face="Liberation Serif, serif"><span lang="en-US">collapse </span></font>和类名为
+<font face="Liberation Serif, serif"><span lang="en-US">navbar-collapse
+</span></font>的元素<font face="Liberation Serif, serif"><span lang="en-US">,</span></font>这个元素后面会添加<font face="Liberation Serif, serif"><span lang="en-US">);</span></font></p>
+<p style="margin-bottom: 0cm; line-height: 100%">类名为 <font face="Liberation Serif, serif"><span lang="en-US">icon-bar
+</span></font>的 <font face="Liberation Serif, serif"><span lang="en-US">span
+</span></font>元素是 <font face="Liberation Serif, serif"><span lang="en-US">CSS
+</span></font>用来创建按钮中的三道杠按钮用的。</p>
+<p style="margin-bottom: 0cm; line-height: 100%"><br/>
+
+</p>
+<p style="margin-bottom: 0cm; line-height: 100%">接下来把导航项包装在一个收起的
+<font face="Liberation Serif, serif"><span lang="en-US">div </span></font>中<font face="Liberation Serif, serif"><span lang="en-US">,</span></font>即用带有适当
+<font face="Liberation Serif, serif"><span lang="en-US">Bootstrap </span></font>类的
+<font face="Liberation Serif, serif"><span lang="en-US">div </span></font>把
+<font face="Liberation Serif, serif"><span lang="en-US">ul</span></font></p>
+<p style="margin-bottom: 0cm; line-height: 100%"><font face="Liberation Serif, serif"><span lang="en-US">class=&quot;nav
+navbar-nav&quot;&gt; </span></font>包装起来<font face="Liberation Serif, serif"><span lang="en-US">:</span></font></p>
+<p style="margin-bottom: 0cm; line-height: 100%"><font face="Liberation Serif, serif"><span lang="en-US">&lt;div
+class=&quot;navbar-collapse collapse&quot;&gt;</span></font></p>
+<p style="margin-bottom: 0cm; line-height: 100%"><font face="Liberation Serif, serif"><span lang="en-US">&lt;ul
+class=&quot;nav navbar-nav&quot;&gt;</span></font></p>
+<p style="margin-bottom: 0cm; line-height: 100%"><font face="Liberation Serif, serif"><span lang="en-US">&lt;li
+class=&quot;active&quot;&gt;&lt;a href=&quot;index.html&quot;&gt;Home&lt;/a&gt;&lt;/li&gt;</span></font></p>
+<p style="margin-bottom: 0cm; line-height: 100%"><font face="Liberation Serif, serif"><span lang="en-US">&lt;li&gt;&lt;a
+href=&quot;#&quot;&gt;Link&lt;/a&gt;&lt;/li&gt;</span></font></p>
+<p style="margin-bottom: 0cm; line-height: 100%"><font face="Liberation Serif, serif"><span lang="en-US">&lt;li&gt;&lt;a
+href=&quot;#&quot;&gt;Link&lt;/a&gt;&lt;/li&gt;</span></font></p>
+<p style="margin-bottom: 0cm; line-height: 100%"><font face="Liberation Serif, serif"><span lang="en-US">&lt;/ul&gt;</span></font></p>
+<p style="margin-bottom: 0cm; line-height: 100%"><font face="Liberation Serif, serif"><span lang="en-US">&lt;/div&gt;&lt;!--/.nav-collapse
+--&gt;</span></font></p>
+<p style="margin-bottom: 0cm; line-height: 100%">在前面两步中<font face="Liberation Serif, serif"><span lang="en-US">,</span></font>我们把代码分隔成两部分<font face="Liberation Serif, serif"><span lang="en-US">,</span></font>而且都位于
+<font face="Liberation Serif, serif"><span lang="en-US">&lt;div
+class=&quot;container&quot;&gt; </span></font>中。</p>
+<p style="margin-bottom: 0cm; line-height: 100%"><br/>
+
+</p>
+<p style="margin-bottom: 0cm; line-height: 100%"><img src="bootstrap%203.0%20%E5%AD%A6%E4%B9%A0%E8%AE%B0%E5%BD%95_docx_1d28780d46136f69.gif" name="图像1" align="left" width="559" height="260" border="0"/>
+<img src="bootstrap%203.0%20%E5%AD%A6%E4%B9%A0%E8%AE%B0%E5%BD%95_docx_d73e0829a3c9c670.gif" name="图像2" align="left" width="441" height="434" border="0"/>
+<br/>
+
+</p>
+<p style="margin-bottom: 0cm; line-height: 100%"><br/>
+
+</p>
+<p style="margin-bottom: 0cm; line-height: 100%"><br/>
+
+</p>
+<p style="margin-bottom: 0cm; line-height: 100%"><br/>
+
+</p>
+<p style="margin-bottom: 0cm; line-height: 100%"><br/>
+
+</p>
+<p style="margin-bottom: 0cm; line-height: 100%"><br/>
+
+</p>
+<p style="margin-bottom: 0cm; line-height: 100%"><br/>
+
+</p>
+<p style="margin-bottom: 0cm; line-height: 100%"><br/>
+
+</p>
+<p style="margin-bottom: 0cm; line-height: 100%"><br/>
+
+</p>
+<p style="margin-bottom: 0cm; line-height: 100%"><br/>
+
+</p>
+</body>
+</html>

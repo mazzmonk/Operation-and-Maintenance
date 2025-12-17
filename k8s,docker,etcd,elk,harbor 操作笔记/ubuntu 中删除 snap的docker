@@ -1,0 +1,27 @@
+ubuntu 23.10 中的 docker 默认安装是使用 snap 的模式安装, 无法配合 kubernetes 使用, 需要删掉
+
+# 系统在启动时，会自动启动Snap相关服务，我们先禁用掉这些服务
+
+systemctl disable snapd.service
+systemctl disable snapd.socket
+systemctl disable snapd.seeded.service
+
+# 查询当前系统上snap安装了哪些app
+snap list
+
+# 移除snap-store
+snap remove snap-store
+# 移除firefox
+snap remove firefox
+# 移除gnome-3-38-2004
+snap remove gnome-3-38-2004
+# 移除 docker 
+snap remove docker
+# 移除 core18
+snap remove core18
+# 移除 lxd
+snap remove lxd
+# 移除 core20
+snap remove core20
+# 移除 snapd
+snap remove snapd

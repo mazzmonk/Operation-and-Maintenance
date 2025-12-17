@@ -1,0 +1,45 @@
+mutt是一个linux下命令行发邮件的工具，类似mail这个工具
+mutt是软件本身，msmtp是用来帮助发件的工具
+
+1.安装配置
+OS version：ubuntu 18.04
+
+#apt-get -y install mutt msmtp
+
+需要配置两个文件，一个是~/.muttrc用来配置Mutt本身，一个是~/.msmtprc用来配置发件人的
+.msmtprc 
+##########################
+account          SOHU		# 可以理解是一个别名
+host                smtp.sohu.com		# smtp服务器
+port                465			# 端口
+tls                   on			# 开启ssl验证
+tls_starttls       off			# 关闭STARTTLS(纯文本通信协议扩张)，在设置邮件客户端的时候，会有此选项，和SSL/TLS是互斥
+tls_certcheck   off			# 关闭证书验证，在邮件客户端，可能有SSL验证对端，SSL验证主机的选项
+from               yuyuan_tech@sohu.com	# 在smtp服务器上验证的邮箱
+auth                login			# 验证方式
+user                yuyuan_tech		# 用户
+password       Y0DAB5QWFNC6	# 这里不是邮件登陆的密码，而是在邮箱帐户开启smtp时，得到的验证码
+account default : SOHU		# 默认帐户，和第一行对应
+logfile ~/.msmtp.log		# 日志
+
+ .muttrc 
+##########################
+set sendmail="/usr/bin/msmtp"	# 用于发邮件的程序
+set use_from=yes
+set realname="yuyuan_tech"		# 在邮件中显示的用户名称
+set from="yuyuan_tech@sohu.com"
+set envelope_from=yes
+set editor="vim -nw"
+
+2.使用命令行发邮件
+$echo "content" |mutt -s "title" abc@163.com
+
+参考于：
+https://www.jianshu.com/p/8a4caf8b8667
+http://coolnull.com/82.html
+
+关于msmtp的说明，如下:
+https://wiki.archlinux.org/index.php/Msmtp#Using_msmtp_offline
+https://marlam.de/msmtp/msmtp.html#A-user-configuration-file
+
+

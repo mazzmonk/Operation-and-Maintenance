@@ -1,0 +1,125 @@
+ACE下载配置
+http://www.riverace.com/downloads.htm
+
+发布文件的顶级目录名是ACE_wrapper。我们指称这个顶级目录为“ACE_ROOT”。
+设置一个环境变量为"ACE_ROOT"
+ACE源文件和头文件位于$ACE_ROOT/ace中。
+$ACE_ROOT/ACE-INSTALL.html文件中有生成ACE的全部指令
+$ACE_ROOT/examples包含例子
+
+安装开发环境 
+apt-get install build-essential
+
+具体如下：
+1.设置环境变量
+#export ACE_ROOT=/home/jack/apps/ACE_wrappers
+
+2.添加config.h文件
+#touch $ACE_ROOT/ace/config.h
+添加内容：
+#include "ace/config-linux.h"
+
+3.添加platform_macros.GNU文件
+#touch $ACE_ROOT/include/makeinclude/platform_macros.GNU
+添加内容：
+include $(ACE_ROOT)/include/makeinclude/platform_linux.GNU
+INSTALL_PREFIX=/usr
+
+4.设置环境变量
+#export LD_LIBRARY_PATH=$ACE_ROOT/lib:$LD_LIBRARY_PATH
+
+5.编译安装
+#cd $ACE_ROOT
+#make
+#make install
+
+
+				ACE_Addr
+
++ sap_any : ACE_Addr
+# addr_type_ : int
+# addr_size_ : int
+
++ ACE_Addr (type : int = -1, size : int = -1)
++ operator == (sap : const ACE_Addr&) : int
++ operator != (sap : const ACE_Addr&) : int
++ hash () : int
+                    ^
+                    |
+				ACE_INET_Add
+
+- inet_addr_ : sockaddr_in
+
++ ACE_INET_Addr (port: unsigned short, host : const char *)
++ set (port: unsigned short, host: const char *) : int
++ string_to_addr (address : const char *): int
++ addr_to_string (s : char *, max : size_t, ipfmt : int = 1) :int
++ get_port_number () : u_short
++ get_host_name (buff : char *, max : size_t) : int
+
+operator==()  比较“地址的相等性”
+operator!=()  比较“地址的不等性”
+hash()        比较某个地址的散列(hash)值
+
+ACE_Addr类定义了一个静态数据成员sap_any。如果客户端和服务器程序不在意他们被分配何种地址，
+可以将sap_any用作“通配符”。如：
+1.客户程序可以用sap_any来创建“OS分配的”的临时端口号，即所谓“短暂端口”;在连接关闭之后，这些
+端口可以再利用。
+2.服务器程序可以通过sap_any类选择他们的端口号，只要他们通过某种定位机制(例如,命名或交易服务)向
+客户端输出了被分配的端口号。
+
+在每一种IPC机制(譬如，“Internet领域” socket和“UNIX领域” socket)中，其具体的“地址”类都派生自
+ACE_Addr，还增加了他们自己在地址方面的要求。例如，TCP/IP和UDP/IP的地址信息是用ACE_INET_Addr
+来表示的，ACE_INET_Addr除实现了ACE_Addr基本接口之外，还提供了如下的主要方法。
+	方法						说明
+ACE_INET_Addr() 	通过主机名、IP地址和(或）端口号初始化ACE_INET_Addr。
+set()						
+string_to_addr()	将字符串转换为ACE_INET_Addr。
+addr_to_string()	将ACE_INET_Addr转换为字符串。
+get_port_number()   以“主机字节顺序”返回端口号。
+get_host_name()		返回主机名。
+
+
+原始IPC API中使用的I/O句柄会造成“可移植性”方面的问题。ACE通过以下方式解决I/O句柄的“可移植性”问题：
+1.提供了ACE_HANDLE类型定义，在每一个OS平台上指定了合适的句柄类型。
+2.定义了可移植的ACE_INVALID_HANDLE宏，应用程序可用来检测错误。
+
+更合适的编程抽象应该是某种“I/O句柄”类，ACE提供ACE_IPC_SAP来处理。
+ACE_IPC_SAP类是ACE IPC wrapper facade继承结构的根(root).
+主要方法如下：
+enable()      启动或禁止各种“I/O句柄”选项，例如，启用/禁止“非阻塞”I/O。
+disable()  
+
+set_handle()  设置(set)或得到(get)底层I/O句柄。
+get_handle()
+
+ACE_IPC_SAP的目的并不是供应用程序直接使用。它是供子类使用的。为了防止ACE_IPC_SAP被直接实例化，
+此类的构造函数声明在protected部分，使其成为一个抽象类。没有定义为纯虚方法，每个子类实例就不需要一个
+虚拟指针。
+
+		ACE_IPC_SAP
+- handle_ : ACE_HANDLE
+
++ enable (value : int)
++ disable (vale : int)
++ get_handle () : ACE_HANDLE
++ set_handle (h : ACE_HANDLE)
+
+            ^
+            |
+
+		ACE_SOCK
++ open (type : int, proto_family : int,
+		protocol : int, reuse_addr : int) : int
++ close () : int
++ get_option (level : int, option : int,
+			  optval : void *, optlen : int *) : int
++ set_option (level : int, options: int, 
+              optval : void *, optlen : int) : int
++ get_local_addr (addr : ACE_Addr&) : int
++ get_remote_addr (addr: ACE_Addr&) : int
+
+
+					
+
+

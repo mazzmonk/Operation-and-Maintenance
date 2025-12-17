@@ -1,0 +1,46 @@
+针对kubernets的1.3版本
+1.kubectl get xx
+xx为以下能得到的资源
+pods (po), services (svc), deployments,
+replicasets (rs), replicationcontrollers (rc), nodes (no), events (ev), limitranges (limits),
+persistentvolumes (pv), persistentvolumeclaims (pvc), resourcequotas (quota), namespaces (ns),
+serviceaccounts (sa), ingresses (ing), horizontalpodautoscalers (hpa), daemonsets (ds), configmaps,
+componentstatuses (cs), endpoints (ep), and secrets.
+
+注意：
+1.其中上述的参数都可以在后边加入--all-namespaces，得到所有的namespace的资源，或者使用--namespace="aa"，得到某个namespace的资源
+2.ev能看到操作的执行记录
+3.cs可以看到，就是kubernets依赖的程序及库的状态
+kubectl get cs 
+NAME                 STATUS    MESSAGE              ERROR
+scheduler            Healthy   ok                   
+controller-manager   Healthy   ok                   
+etcd-0               Healthy   {"health": "true"}   
+etcd-1               Healthy   {"health": "true"}   
+etcd-2               Healthy   {"health": "true"}   
+
+2.命令：
+kubectl get pods -L xxx   	#xxx是标签名称
+kubectl get pods -o ymal  	#可以看到所有配置pods时候的yaml信息
+kubectl get ep portal  	#可以查看所有的相关的容器的地址及对应端口
+kubectl exec mysql-813184592-pgrk9 -- printenv |grep SERVICE # 查看容器对应的环境变量
+如下：
+************************
+
+KUBERNETES_SERVICE_PORT_HTTPS=443
+ABC_DUBBO_SERVICE_HOST=10.0.92.239
+ABC_DUBBO_SERVICE_PORT=8080
+ABC_PORTAL_SERVICE_PORT=8080
+ABC_PORTAL_SERVICE_HOST=10.0.20.251
+ABC_MANAGER_SERVICE_PORT=8080
+KUBERNETES_SERVICE_PORT=443
+ABC_MANAGER_SERVICE_HOST=10.0.173.254
+KUBERNETES_SERVICE_HOST=10.0.0.1
+*************************
+但是，这里显示不光是指针对此容器的环境变量，导致此现象的原因是先创建的rc，后创建的svc，因此如果要解决上述的问题，要么先建立services，或者先把pods的数量缩减到0，在扩充到指定的数量。
+
+$kubectl scale deployment mysql --replicas=0; kubectl scale deployment mysql --replicas=2;
+$kubectl exec abc-dubbo-j8i67 -- nslookup abc-dubbo   #查看dns解析的情况abc-dubbo是services名称
+
+
+services与rc的关联来自services中的spce.selector，这里的值取之rc或者deployment的metadata。

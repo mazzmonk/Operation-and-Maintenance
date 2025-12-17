@@ -1,0 +1,21 @@
+yes 命令是专门为在某些场合中自动回复 yes 的地方
+直接键入 yes 命令以后,会重复的打印 y 这个字母
+比如:
+test.sh
+------------
+#/bin/bash
+#set -xe
+
+read AN
+if [ ${AN} = 'y' ]; then
+	echo "right"
+fi
+---------------
+
+$ ./test.sh
+y
+right
+
+# 将 yes 命令传入管道,直接代替了手动输入 y 
+$ yes |./test.sh
+right

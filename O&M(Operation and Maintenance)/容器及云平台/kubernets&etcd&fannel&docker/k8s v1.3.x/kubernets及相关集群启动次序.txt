@@ -1,0 +1,135 @@
+一.kubernets客户端启动
+1.启动docker服务，此时会生成docker0这个网络设备 
+2.启动flannel服务，此时会生成flannel0这个网络设备
+3.将flannel0的网络覆盖到docker0上
+4.重启docker服务
+5.设置docker的pid，socket
+6.启动kubelet
+7.启动kube-proxy
+
+说明：目前使用的docker-1.12版本有个很奇怪的现象，就当docker进程重新启动以后会重置docker0的地址，使用-b这个参数制定网桥的时候，仍然会这样，因此，使用了--bip 172.17.55.1/24这种方式指定地址。上述的1和2，3步骤就酌情而定。
+
+1.启动docker服务
+************************** srv.docker ******************************************
+
+#!/bin/bash
+#autor:jack
+#date:20160722
+#setup docker daemon
+#############################
+
+/usr/bin/docker  daemon --exec-root="/home/blue/apps/docker/var/run/docker" -g "/home/blue/apps/docker/var/lib/docker" -p "/home/blue/apps/docker/var/run/docker.pid" --storage-opt dm.basesize=30G -H "unix:///home/blue/apps/docker/var/run/socket" --insecure-registry="192.168.81.97:5000" >> /home/blue/apps/docker/logs/docker.log 2>&1 &
+
+************************** srv.docker ******************************************
+
+2.启动flannel服务
+************************** srv.flannel ******************************************
+
+#!/bin/bash
+#autor:jack
+#date:20160725
+###################
+
+/home/blue/apps/kubernetes/flannel/bin/flanneld -etcd-endpoints="http://192.168.81.4:4001,http://192.168.81.5:4001,http://192.168.81.6:4001" &
+
+************************** srv.flannel ******************************************
+
+3.覆盖docker0
+************************** setDocker0.sh ******************************************
+#!/bin/bash
+#autor:jack
+#date:20160725
+########################
+
+/home/blue/apps/kubernetes/flannel/bin/mk-docker-opts.sh -i
+source /run/flannel/subnet.env
+ifconfig docker0 ${FLANNEL_SUBNET}
+
+************************** setDocker0.sh ******************************************
+
+4.重启docker服务    #根据docker1.20-rc5版本，重启docker以后，docker0会消失，因此，这里的操作根据后续描述方式操作
+
+5.设置pid，socket
+************************** setSocket.sh ******************************************
+
+#!/bin/bash
+#autor:jack
+#date:20160725
+#######################
+
+ln -s /home/blue/apps/docker/var/run/socket /var/run/docker.sock
+ln -s /home/blue/apps/docker/var/run/docker.pid /var/run/
+
+************************** setSocket.sh ******************************************
+
+6.启动kubelet
+************************** srv.kubernetes_kubelet ******************************************
+#!/bin/bash
+#autor:jack
+#date:20160725
+#####################
+
+/home/blue/apps/kubernetes/client/bin/kubelet --address=0.0.0.0 --api-servers="http://192.168.81.3:8080" --port=10250 --cert-dir="/home/blue/apps/kubernetes/client/var/run/kubernetes" --config="/home/blue/apps/kubernetes/kubelet/etc" --container-hints="/home/blue/apps/kubernetes/client/etc/cadvisor/container_hints.json" --container-runtime="docker" --docker-endpoint="unix:///home/blue/apps/docker/var/run/socket" --docker-root="/home/blue/apps/docker" --hostname-override="192.168.81.97" --healthz-bind-address=0.0.0.0 --healthz-port=10248 --kubeconfig="/home/blue/apps/kubernetes/kubelet/etc/kubeconfig" --machine-id-file="/home/blue/apps/kubernetes/kubelet/etc/machine-id" --network-plugin-dir="/home/blue/apps/kubernetes/kubelet/plugins/net/exec"  --pod-infra-container-image="docker.io/kubernetes/pause:latest" --root-dir="/home/blue/apps/kubernetes/kubelet" --seccomp-profile-root="/home/a
+spire/apps/kubernetes/kubelet/seccomp" --volume-plugin-dir="/home/blue/apps/kubernetes/kubelet/plugins/volume/exec"  --v=0 --log-dir="/home/blue/apps/kubernetes/client/logs"   >> /home/blue/apps/kubernetes/client/logs/kubernetes_kubelet.log  2>&1 &
+
+************************** srv.kubernetes_kubelet ******************************************
+
+7启动kube-proxy
+************************** srv.kubernetes_kube_proxy ******************************************
+#!/bin/bash
+#autor:jack
+#date:20160725
+###########################
+
+/home/blue/apps/kubernetes/client/bin/kube-proxy --bind-address=0.0.0.0 --healthz-bind-address=0.0.0.0 --master="http://192.168.81.3:8080"  --healthz-port=10249 --hostname-override="192.168.81.97" --kubeconfig="/home/blue/apps/kubernetes/kube-proxy/etc/kubeconfig" --v=0 --log-dir="/home/blue/apps/kubernetes/client/logs" >> /home/blue/apps/kubernetes/client/logs/kubernetes_kube-proxy.log  2>&1 &
+
+************************** srv.kubernetes_kube_proxy ******************************************
+
+
+二.kubernets服务端启动
+
+1.启动apiserver
+************************** srv.kubernetes_apiserver **************************
+#!/bin/bash
+#autor:jack
+#date:20160803
+####################
+
+/home/blue/apps/kubernetes/server/bin/kube-apiserver --insecure-bind-address=0.0.0.0 --insecure-port=8080 --v=0 --log-dir="/home/aspir
+e/apps/kubernetes/server/logs" --service-cluster-ip-range=10.0.0.0/16 --etcd-servers="http://192.168.81.4:4001,http://192.168.81.5:4001,
+http://192.168.81.6:4001" --cert-dir="/home/blue/apps/kubernetes/server/var/run/kubernetes"  >> /home/blue/apps/kubernetes/server/lo
+gs/kubernetes_server.log  2>&1 &
+
+************************** srv.kubernetes_apiserver **************************
+
+
+2.启动kube-controller-manager
+************************** srv.kubernetes_controller_manager *****************
+#!/bin/bash
+
+/home/blue/apps/kubernetes/server/bin/kube-controller-manager --v=0 --log-dir="/home/blue/apps/kubernetes/server/logs" --master=127.
+0.0.1:8080 >> /home/blue/apps/kubernetes/server/logs/kubernetes_controller_manager.log  2>&1 &
+
+************************** srv.kubernetes_controller_manager *****************
+
+
+3.启动kube-scheduler
+************************** srv.kubernetes_scheduler **************************
+#!/bin/bash
+
+/home/blue/apps/kubernetes/server/bin/kube-scheduler --v=0 --log-dir="/home/blue/apps/kubernetes/server/logs" --master=127.0.0.1:808
+0 >> /home/blue/apps/kubernetes/server/logs/kubernetes_scheduler.log  2>&1 &
+
+************************** srv.kubernetes_scheduler **************************
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,1656 @@
+安装
+
+https://istio.io/zh/docs/setup/kubernetes/quick-start/
+
+这里采用的是istio 1.1.6版本
+
+
+$ for i in install/kubernetes/helm/istio-init/files/crd*yaml; do kubectl apply -f $i; done
+$ kubectl apply -f install/kubernetes/istio-demo.yaml
+
+校验安装
+
+$ kubectl get svc -n istio-syste
+$kubectl get pods -n istio-system
+
+命令安装
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+#Bookinfo解析
+
+Bookinfo应用分为四个单独的微服务:
+
+productpage:productpage微服务会调用details和reviews两个微服务,用来生成页面.
+details:这个微服务包含了书籍的信息.
+reviews:这个微服务包含了书籍相关的评论.它还会调用ratings微服务.
+ratings:ratings微服务中包含了由书籍评价组成的评级信息.
+reviews微服务有3个版本:
+
+v1版本不会调用ratings服务.
+v2版本会调用ratings服务,并使用1到5个黑色星形图标来显示评分信息.
+v3版本会调用ratings服务,并使用1到5个红色星形图标来显示评分信息.
+
+
+
+1.部署4个服务
+#bookinfo.yaml文件包含k8s的service,deployment内容,包含4个微服务
+#Reviews服务包含1个service及3个deployment(对应3个版本)
+#注意service的selector和3个deployment的labels
+
+
+
+启动应用容器:
+* 如果集群用的是手工 Sidecar 注入,使用如下命令:
+$ kubectl apply -f <(istioctl kube-inject -f samples/bookinfo/platform/kube/bookinfo.yaml)
+istioctl kube-inject 命令用于在在部署应用之前修改 bookinfo.yaml.
+
+* 如果集群使用的是自动 Sidecar 注入,为 default 命名空间打上标签 istio-injection=enabled.
+$ kubectl label namespace default istio-injection=enabled
+
+使用 kubectl 部署简单的服务
+$ kubectl apply -f samples/bookinfo/platform/kube/bookinfo.yaml
+
+
+
+
+bookinfo.yaml内容
+-----------------------------------------
+apiVersion:v1
+kind:Service
+metadata:
+  name:details
+  labels:
+    app:details
+spec:
+  ports:
+  - port:8888
+    name:http
+  selector:
+    app:details
+---
+apiVersion:extensions/v1beta1
+kind:Deployment
+metadata:
+  name:details-v1
+spec:
+  replicas:1
+  template:
+    metadata:
+      labels:
+        app:details
+        version:v1
+    spec:
+      containers:
+      - name:details
+        image:istio/examples-bookinfo-details-v1:1.8.0
+        imagePullPolicy:IfNotPresent
+        ports:
+        - containerPort:8888
+---
+apiVersion:v1
+kind:Service
+metadata:
+  name:ratings
+  labels:
+    app:ratings
+spec:
+  ports:
+  - port:8888
+    name:http
+  selector:
+    app:ratings
+---
+apiVersion:extensions/v1beta1
+kind:Deployment
+metadata:
+  name:ratings-v1
+spec:
+  replicas:1
+  template:
+    metadata:
+      labels:
+        app:ratings
+        version:v1
+    spec:
+      containers:
+      - name:ratings
+        image:istio/examples-bookinfo-ratings-v1:1.8.0
+        imagePullPolicy:IfNotPresent
+        ports:
+        - containerPort:8888
+---
+apiVersion:v1
+kind:Service
+metadata:
+  name:reviews
+  labels:
+    app:reviews
+spec:
+  ports:
+  - port:8888
+    name:http
+  selector:
+    app:reviews
+---
+apiVersion:extensions/v1beta1
+kind:Deployment
+metadata:
+  name:reviews-v1
+spec:
+  replicas:1
+  template:
+    metadata:
+      labels:
+        app:reviews
+        version:v1
+    spec:
+      containers:
+      - name:reviews
+        image:istio/examples-bookinfo-reviews-v1:1.8.0
+        imagePullPolicy:IfNotPresent
+        ports:
+        - containerPort:8888
+---
+apiVersion:extensions/v1beta1
+kind:Deployment
+metadata:
+  name:reviews-v2
+spec:
+  replicas:1
+  template:
+    metadata:
+      labels:
+        app:reviews
+        version:v2
+    spec:
+      containers:
+      - name:reviews
+        image:istio/examples-bookinfo-reviews-v2:1.8.0
+        imagePullPolicy:IfNotPresent
+        ports:
+        - containerPort:8888
+---
+apiVersion:extensions/v1beta1
+kind:Deployment
+metadata:
+  name:reviews-v3
+spec:
+  replicas:1
+  template:
+    metadata:
+      labels:
+        app:reviews
+        version:v3
+    spec:
+      containers:
+      - name:reviews
+        image:istio/examples-bookinfo-reviews-v3:1.8.0
+        imagePullPolicy:IfNotPresent
+        ports:
+        - containerPort:8888
+---
+apiVersion:v1
+kind:Service
+metadata:
+  name:productpage
+  labels:
+    app:productpage
+spec:
+  ports:
+  - port:8888
+    name:http
+  selector:
+    app:productpage
+---
+apiVersion:extensions/v1beta1
+kind:Deployment
+metadata:
+  name:productpage-v1
+spec:
+  replicas:1
+  template:
+    metadata:
+      labels:
+        app:productpage
+        version:v1
+    spec:
+      containers:
+      - name:productpage
+        image:istio/examples-bookinfo-productpage-v1:1.8.0
+        imagePullPolicy:IfNotPresent
+        ports:
+        - containerPort:8888
+
+-----------------------------------------
+注意:review只有一个service,对应了3个的deployment,3个deployment中都有labels:app:reviews,而service中的selector:app:reviews内容与之对应,就是说正常情况下,外部访问此service时候,会随机的访问到任意一个deployment
+
+
+2.给应用定义Ingressgateway
+# 这是istio自有的gateway,用于接受来自外界的访问,类似负载均衡
+# Ingress Gateway描述了负载平衡器,用于接收传入的HTTP/TCP连接.它配置暴露的端口,协议等,但与Kubernetes Ingress Resources不同,它不包括任何流量路由配# 置.流入流量的流量路由使用Istio路由规则进行配置,与内部服务请求完全相同.
+
+$ kubectl apply -f samples/bookinfo/networking/bookinfo-gateway.yaml
+
+bookinfo-gateway.yaml内容
+-----------------------------------------
+apiVersion:networking.istio.io/v1alpha3
+kind:Gateway
+metadata:
+  name:bookinfo-gateway
+spec:
+  selector:
+    istio:ingressgateway # use istio default controller
+  servers:
+  - port:
+      number:80
+      name:http
+      protocol:HTTP
+    hosts:
+    - "*"
+---
+apiVersion:networking.istio.io/v1alpha3
+kind:VirtualService
+metadata:
+  name:bookinfo
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - bookinfo-gateway
+  http:
+  - match:
+    - uri:
+        exact:/productpage
+    - uri:
+        exact:/login
+    - uri:
+        exact:/logout
+    - uri:
+        prefix:/api/v1/products
+    route:
+    - destination:
+        host:productpage
+        port:
+          number:8888
+
+-----------------------------------------
+
+
+
+这里举例描述Gateway的功能
+
+Gateway在HTTP 80端口上配置流量
+a.创建一个Istio Gateway:
+-----------------------------------------
+cat <<EOF | istioctl create -f -
+apiVersion:networking.istio.io/v1alpha3
+kind:Gateway
+metadata:
+  name:httpbin-gateway
+spec:
+  selector:
+    istio:ingressgateway # use Istio default gateway implementation
+  servers:
+  - port:
+      number:80
+      name:http
+      protocol:HTTP
+    hosts:
+    - "httpbin.example.com"
+EOF
+-----------------------------------------
+
+b.为通过Gateway进入的流量配置路由
+-----------------------------------------
+cat <<EOF | istioctl create -f -
+apiVersion:networking.istio.io/v1alpha3
+kind:VirtualService
+metadata:
+  name:httpbin
+spec:
+  hosts:
+  - "httpbin.example.com"
+    gateways:
+  - httpbin-gateway
+    http:
+  - match:
+    - uri:
+        prefix:/status
+    - uri:
+        prefix:/delay
+    route:
+    - destination:
+        port:
+          number:8000
+        host:httpbin
+EOF
+-----------------------------------------
+
+创建了一个虚拟服务配置 httpbin,其中包含两条路由规则,允许路径/status和路径的流量/delay(可以访问的url)
+该网关列表指定,只有通过我们的要求httpbin-gateway是允许的.所有其他外部请求将被拒绝,并返回404响应.
+
+请注意,在此配置中,来自网格中其他服务的内部请求不受这些规则约束,而是简单地默认为循环路由.要将这些(或其他规则)应用于内部调用,我们可以将特殊值mesh添加到gateways的列表中.
+
+c.使用curl访问httpbin服务
+
+$ curl -I -HHost:httpbin.example.com http://$INGRESS_HOST:$INGRESS_PORT/status/200
+
+请注意,这里使用该-H标志将Host HTTP Header设置为“httpbin.example.com”.这以操作是必需的,因为上面的Ingress Gateway被配置为处理“httpbin.example.com”,但在测试环境中没有该主机的DNS绑定,只是将请求发送到Ingress IP
+
+d.访问任何未明确公开的其他 URL,应该会看到一个 HTTP 404 错误
+
+$ curl -I -HHost:httpbin.example.com http://$INGRESS_HOST:$INGRESS_PORT/headers
+
+
+通过浏览器访问Ingress服务
+
+在浏览器中输入httpbin服务的地址是不会生效的,我们没有办法让浏览器像curl一样装作访问httpbin.example.com.实际情况中,有正常配置的主机和DNS记录,这种做法就能够成功了——只要简单的在浏览器中访问由域名构成的URL即可,例如https://httpbin.example.com/status/200
+
+为了能使用IP:PORT或者任意域名的方式来访问,可以在Gateway和VirutualService配置中为主机使用通配符值*
+-----------------------------------------
+cat <<EOF | istioctl replace -f -
+apiVersion:networking.istio.io/v1alpha3
+kind:Gateway
+metadata:
+  name:httpbin-gateway
+spec:
+  selector:
+    istio:ingressgateway # use Istio default gateway implementation
+  servers:
+  - port:
+      number:80
+      name:http
+      protocol:HTTP
+    hosts:
+    - "*"
+---
+apiVersion:networking.istio.io/v1alpha3
+kind:VirtualService
+metadata:
+  name:httpbin
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - httpbin-gateway
+    http:
+  - match:
+    - uri:
+        prefix:/headers
+    route:
+    - destination:
+        port:
+          number:8000
+        host:httpbin
+EOF
+-----------------------------------------
+
+接下来就可以在浏览器的URL中使用$INGRESS_HOST:$INGRESS_PORT(也就是 192.168.99.100:31380)进行访问,输入 http://192.168.99.100:31380/headers网址之后,应该会显示浏览器发送的请求Header
+
+
+3.确认外部访问模式
+
+$ kubectl get svc istio-ingressgateway -n istio-system
+
+如果EXTERNAL-IP设置了值,则要求您的环境具有可用于Ingress网关的外部负载均衡器.如果EXTERNAL-IP值是<none>(或一直是<pending>),则说明可能您的环境不支持为ingress网关提供外部负载均衡器的功能.在这种情况下,您可以使用Service的nodeport方式访问网关.
+
+使用外部负载均衡器时确定IP和端口
+$ kubectl -n istio-system get service istio-ingressgateway -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+$ kubectl -n istio-system get service istio-ingressgateway -o jsonpath='{.spec.ports[?(@.name=="http")].port}'
+$ kubectl -n istio-system get service istio-ingressgateway -o jsonpath='{.spec.ports[?(@.name=="https")].port}'
+
+使用Node Port时的ingress IP和端口
+$ kubectl -n istio-system get service istio-ingressgateway -o jsonpath='{.spec.ports[?(@.name=="http")].nodePort}'
+$ kubectl -n istio-system get service istio-ingressgateway -o jsonpath='{.spec.ports[?(@.name=="https")].nodePort}'
+$ kubectl get po -l istio=ingressgateway -n istio-system -o 'jsonpath={.items[0].status.hostIP}'
+
+
+4.路由设置
+# 网关设置了外部请求的负载均衡,但是具体访问到那个应用,需要路由来将访问导向不同的版本或者不同应用等等
+
+由于Bookinfo示例部署了三个版本的reviews微服务,因此我们需要设置默认路由.否则,如果您当多次访问应用程序,您会注意到有时输出包含星级评分,有时又没有.这是因为没有为应用明确指定缺省路由时,Istio 会将请求随机路由到该服务的所有可用版本上
+
+此任务假定您尚未设置任何路由.如果您已经为示例应用程序创建了存在冲突的路由规则,则需要在下面的命令中使用replace代替create.请注意:本文档假设还没有设置任何路由规则.如果
+1.将所有微服务的默认版本设置为v1
+
+$ istioctl create -f samples/bookinfo/networking/destination-rule-all.yaml
+
+destination-rule-all.yaml 
+-----------------------------------------
+apiVersion:networking.istio.io/v1alpha3
+kind:DestinationRule
+metadata:
+  name:productpage
+spec:
+  host:productpage
+  subsets:
+  - name:v1
+    labels:
+      version:v1
+---
+apiVersion:networking.istio.io/v1alpha3
+kind:DestinationRule
+metadata:
+  name:reviews
+spec:
+  host:reviews
+  subsets:
+  - name:v1
+    labels:
+      version:v1
+  - name:v2
+    labels:
+      version:v2
+  - name:v3
+    labels:
+      version:v3
+---
+apiVersion:networking.istio.io/v1alpha3
+kind:DestinationRule
+metadata:
+  name:ratings
+spec:
+  host:ratings
+  subsets:
+  - name:v1
+    labels:
+      version:v1
+  - name:v2
+    labels:
+      version:v2
+  - name:v2-mysql
+    labels:
+      version:v2-mysql
+  - name:v2-mysql-vm
+    labels:
+      version:v2-mysql-vm
+---
+apiVersion:networking.istio.io/v1alpha3
+kind:DestinationRule
+metadata:
+  name:details
+spec:
+  host:details
+  subsets:
+  - name:v1
+    labels:
+      version:v1
+  - name:v2
+    labels:
+      version:v2
+
+-----------------------------------------
+
+
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+
+
+*************************************************************************
+
+
+Istio 流量管理相关的基础概念与配置示例
+
+VirtualService 在Istio服务网格中定义路由规则,控制流量路由到服务上的各种行为
+DestinationRule 是VirtualService路由生效后,配置应用与请求的策略集
+ServiceEntry 通常用于在Istio服务网格之外启用的服务请求
+Gateway 为HTTP/TCP流量配置负载均衡器,最常见的是在网格边缘的操作,以启用应用程序的入口流量
+EnvoyFilter 描述了针对代理服务的过滤器,用来定制由Istio Pilot生成的代理配置一定要谨慎使用此功能错误的配置内容一旦完成传播,可能会令整个服务网格陷入瘫痪状态这一配置是用于对Istio网络系统内部实现进行变更的
+
+
+I VirtualService 故名思义,就是虚拟服务,在Istio 1.0以前叫做RouteRule.VirtualService中定义了一系列针对指定服务的流量路由规则.每个路由规则都是针对特定协议的匹配规则.如果流量符合这些特征,就会根据规则发送到服务注册表中的目标服务(或者目标服务的子集或版本)
+
+示例
+
+下面的例子中配置了一个名为reviews的VirtualService,该配置的作用是将所有发送给reviews服务的流量发送到v1版本的子集.
+
+apiVersion:networking.istio.io/v1alpha3
+kind:VirtualService
+metadata:
+  name:reviews
+spec:
+  hosts:
+  - reviews
+  http:
+  - route:
+    - destination:
+        host:reviews
+        subset:v1
+
+该配置中流量的目标主机是reviews,如果该服务和规则部署在Kubernetes的default namespace下的话,对应于Kubernetes中的服务的DNS名称就是 reviews.default.svc.cluster.local.
+我们在hosts配置了服务的名字只是表示该配置是针对reviews.default.svc.cluster.local的服务的路由规则,但是具体将对该服务的访问的流量路由到哪些服务的哪些实例上,就是要通过destination的配置了.
+我们看到上面的VirtualService的HTTP路由中还定义了一个destination.destination用于定义在网络中可寻址的服务,请求或连接在经过路由规则的处理之后,就会被发送给destination.destination.host应该明确指向服务注册表中的一个服务.Istio的服务注册表除包含平台服务注册表中的所有服务(例如 Kubernetes服务、Consul 服务)之外,还包含了ServiceEntry资源所定义的服务.VirtualService中只定义流量发送给哪个服务的路由规则,但是并不知道要发送的服务的地址是什么,这就需要 DestinationRule来定义了.
+subset配置流量目的地的子集,下文会讲到.VirtualService中其实可以除了hosts字段外其他什么都不配置,路由规则可以在DestinationRule中单独配置来覆盖此处的默认规则.
+
+
+II subset是服务端点的集合,可以用于A/B测试或者分版本路由等场景.另外在subset中可以覆盖服务级别的即VirtualService中的定义的流量策略.
+
+
+III DestinationRule所定义的策略,决定了经过路由处理之后的流量的访问策略.这些策略中可以定义负载均衡配置、连接池大小以及外部检测(用于在负载均衡池中对不健康主机进行识别和驱逐)配置.
+
+例子1:
+------
+apiVersion:networking.istio.io/v1alpha3
+kind:DestinationRule
+metadata:
+  name:reviews
+spec:
+  host:reviews
+  subsets:
+  - name:v1
+    labels:
+      version:v1
+
+例子2:
+-----
+apiVersion:networking.istio.io/v1alpha3
+kind:DestinationRule
+metadata:
+  name:bookinfo-redis
+spec:
+  host:myredissrv.prod.svc.cluster.local
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections:100
+        connectTimeout:30ms
+
+例子3:
+-----
+每一条路由规则都会对应到一个或多个服务版本上(可以参考本文顶端的名词解释).每个版本的权重决定了这一版本会收到的流量的多少.例如下面的规则会将reviews服务的流量进行拆分,其中25%进入v2版本,其余部分(也就是 75%)进入v1.
+
+apiVersion:networking.istio.io/v1alpha3
+kind:VirtualService
+metadata:
+  name:reviews-route
+spec:
+  hosts:
+  - reviews.prod.svc.cluster.local
+  http:
+  - route:
+    - destination:
+        host:reviews.prod.svc.cluster.local
+        subset:v2
+      weight:25
+    - destination:
+        host:reviews.prod.svc.cluster.local
+        subset:v1
+      weight:75
+
+对应的 DestinationRule:
+
+apiVersion:networking.istio.io/v1alpha3
+kind:DestinationRule
+metadata:
+  name:reviews-destination
+spec:
+  host:reviews.prod.svc.cluster.local
+  subsets:
+  - name:v1
+    labels:
+      version:v1
+  - name:v2
+    labels:
+      version:v2
+-----
+从这个例子里看出,在gateway中定义的destination部分,可以被DestinationRule覆盖.但是DestinationRule必须有,否则会有503错误
+更多的在DestinationRule中可以定义的内容如下:
+https://istio.io/zh/docs/reference/config/istio.networking.v1alpha3/
+
+
+IV Istio服务网格内部会维护一个与平台无关的使用通用模型表示的服务注册表,当你的服务网格需要访问外部服务的时候,就需要使用ServiceEntry来添加服务注册.
+
+V Gateway为HTTP/TCP流量配置了一个负载均衡,多数情况下在网格边缘进行操作,用于启用一个服务的入口(ingress)流量,相当于前端代理.与Kubernetes的Ingress不同,Istio Gateway只配置四层到六层的功能(例如开放端口或者 TLS 配置),而Kubernetes的Ingress是七层的.将VirtualService绑定到Gateway上,用户就可以使用标准的Istio规则来控制进入的HTTP和TCP流量.
+
+Gateway 设置了一个集群外部流量访问集群中的某些服务的入口,而这些流量究竟如何路由到那些服务上则需要通过配置VirtualServcie来绑定.下面仍然以 productpage这个服务来说明.
+
+apiVersion:networking.istio.io/v1alpha3
+kind:Gateway
+metadata:
+  name:bookinfo-gateway
+spec:
+  selector:
+    istio:ingressgateway # 使用默认的控制器
+  servers:
+  - port:
+      number:80
+      name:http
+      protocol:HTTP
+    hosts:
+    - "*"
+---
+apiVersion:networking.istio.io/v1alpha3
+kind:VirtualService
+metadata:
+  name:bookinfo
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - bookinfo-gateway
+  http:
+  - match:
+    - uri:
+        exact:/productpage
+    - uri:
+        exact:/login
+    - uri:
+        exact:/logout
+    - uri:
+        prefix:/api/v1/products
+    route:
+    - destination:
+        host:productpage
+        port:
+          number:8888
+
+上面的例子中bookinfo这个VirtualService中绑定到了bookinfo-gateway.bookinfo-gateway使用了标签选择器选择对应的Kubernetes pod,即下图中的pod.
+
+我们再看下istio-ingressgateway的YAML安装配置.
+
+# Deployment 配置
+---
+apiVersion:extensions/v1beta1
+kind:Deployment
+metadata:
+  name:istio-ingressgateway
+  namespace:istio-system
+  labels:
+    app:ingressgateway
+    chart:gateways-1.0.0
+    release:RELEASE-NAME
+    heritage:Tiller
+    app:istio-ingressgateway
+    istio:ingressgateway
+spec:
+  replicas:1
+  template:
+    metadata:
+      labels:
+        app:istio-ingressgateway
+        istio:ingressgateway
+      annotations:
+        sidecar.istio.io/inject:"false"
+        scheduler.alpha.kubernetes.io/critical-pod:""
+    spec:
+      serviceAccountName:istio-ingressgateway-service-account
+      containers:
+        - name:ingressgateway
+          image:"gcr.io/istio-release/proxyv2:1.0.0" # 容器启动命令入口是 /usr/local/bin/pilot-agent,后面跟参数 proxy 就会启动一个 Envoy 进程
+          imagePullPolicy:IfNotPresent
+          ports:
+            - containerPort:80
+            - containerPort:443
+            - containerPort:31400
+            - containerPort:15011
+            - containerPort:8060
+            - containerPort:15030
+            - containerPort:15031
+          args:
+          - proxy
+          - router
+          - -v
+          - "2"
+          - --discoveryRefreshDelay
+          - '1s' #discoveryRefreshDelay
+          - --drainDuration
+          - '45s' #drainDuration
+          - --parentShutdownDuration
+          - '1m0s' #parentShutdownDuration
+          - --connectTimeout
+          - '10s' #connectTimeout
+          - --serviceCluster
+          - istio-ingressgateway
+          - --zipkinAddress
+          - zipkin:9411
+          - --statsdUdpAddress
+          - istio-statsd-prom-bridge:9125
+          - --proxyAdminPort
+          - "15000"
+          - --controlPlaneAuthPolicy
+          - NONE
+          - --discoveryAddress
+          - istio-pilot.istio-system:8080
+          resources:
+            requests:
+              cpu:10m           
+          env:
+          - name:POD_NAME
+            valueFrom:
+              fieldRef:
+                apiVersion:v1
+                fieldPath:metadata.name
+          - name:POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                apiVersion:v1
+                fieldPath:metadata.namespace
+          - name:INSTANCE_IP
+            valueFrom:
+              fieldRef:
+                apiVersion:v1
+                fieldPath:status.podIP
+          - name:ISTIO_META_POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath:metadata.name
+          volumeMounts:
+            ...
+# 服务配置
+---
+apiVersion:v1
+kind:Service
+metadata:
+  name:istio-ingressgateway
+  namespace:istio-system
+  annotations:
+  labels:
+    chart:gateways-1.0.0
+    release:RELEASE-NAME
+    heritage:Tiller
+    app:istio-ingressgateway
+    istio:ingressgateway
+spec:
+  type:NodePort
+  selector:
+    app:istio-ingressgateway
+    istio:ingressgateway
+  ports:
+    - name:http2 # 将ingressgateway的80端口映射到节点的31380端口以代理HTTP请求
+      nodePort:31380
+      port:80
+      targetPort:80
+    - name:https
+      nodePort:31390
+      port:443
+    - name:tcp
+      nodePort:31400
+      port:31400
+    - name:tcp-pilot-grpc-tls
+      port:15011
+      targetPort:15011
+    - name:tcp-citadel-grpc-tls
+      port:8060
+      targetPort:8060
+    - name:http2-prometheus
+      port:15030
+      targetPort:15030
+    - name:http2-grafana
+      port:15031
+      targetPort:15031
+
+我们看到ingressgateway使用的是proxyv2镜像,该镜像容器的启动命令入口是/usr/local/bin/pilot-agent,后面跟参数proxy就会启动一个Envoy进程,因此Envoy 既作为sidecar也作为边缘代理,egressgateway的情况也是类似,只不过它控制的是集群内部对外集群外部的请求.这正好验证了本文开头中所画的Istio Pilot架构图.请求/productpage 、/login、/logout、/api/v1/products这些URL的流量转发给productpage服务的8888端口,而这些流量进入集群内又是经过ingressgatewaypod代理的,通过访问ingressgateway pod所在的宿主机的31380端口进入集群内部的.
+
+
+重要:
+1. 当需要在外部访问的时候,必须按照如下的流程来创建整个系统,每个组件都必须创建
+ingressgateway -> Gateway -> VirtualService -> DestinationRule
+
+2. 整个istio系统的配置原理 
+* ingressgateway就像是一个入口服务器,所有的请求都从这里进入,默认使用31380(http),31390(https)访问,这里可以自己定义,不过,需要所有的istio-demo.yaml中的组件,如果尝试分离其中的部分, 将会非常困难.
+* gateway通过selector来关联使用那一个ingressgateway,关键的地方通过如下的例子说明
+
+***********************************************
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: mytomcat-gateway
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 80
+      name: http2
+      protocol: HTTP2
+    hosts:
+    - "*"
+***********************************************
+重要:
+所有的从ingressgateway过来的请求都必须经过特定的筛选,路由到固定的地方,当gateway与ingressgateway关联以后,gateway就会从对应的ingressgateway中筛选出符合自己规则的流量,规则使用hosts这个字段来匹配,这个字段很重要
+另外这个字段应该是可以在k8s中DNS解析的域名,类似mytomcat.default.svc.cluster.local这样的内容
+"*"					表示所有的流量,这里如果在多个gateway中定义,绝对会出现冲突,导致很诡异的问题
+*.abc.com		表示abc.com域的所有流量,如果是域名,必须是可以识别
+protocol			必须是固定的几个值
+
+number这个字段则是和gateway有关,因为gateway是一个L4-L6(对应协议,端口,域名)的负载均衡,因此设置的端口可以理解为负载均衡的端口,如果有多个也可以设置,目前来看,似乎没有什么特别的地方在用.
+
+* VirtualService则是对上述的gateway中的流量进行对应的精准匹配,类似L7效果,比如对应到域名后的详细路径,跳转等等.
+***********************************************
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: mytomcat
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - mytomcat-gateway
+  http:
+  - match:
+    - uri:
+        prefix: /
+    route:
+    - destination:
+        host: mytomcat.default.svc.cluster.local
+        port:
+          number: 8888
+
+***********************************************
+重要:
+gateway		对应上述gateway
+hosts			对应gateway中的hosts,一定是gateway中hosts的子集,或者相等,可以有多个,也可以使用类似mytomcat.default.svc.cluster.local的内容,在比较复杂的环境中,这个值可能是www.abc.com,web.abc.com这样的情况
+uri				具体访问的路径,比如:http://www.abc.com/share/index.php中的/share/index.php
+route			目的地,最终的请求发往具体的节点,host字段必须是详细的节点信息,mytomcat.default.svc.cluster.local表示的是k8s中的一个service,port对应这个service的端口(clusterIP:port),也可以是具体某一个pod,取决于访问策略(rule规则).因为这里用的是多版本的rule,因此,访问的详细规则及权重等等都放到了DestinationRule中,这里的route的目标就是能访问到k8s中的service
+
+
+* DestinationRule是对应到权重,不同版本,负载均衡等等规则
+***********************************************
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+metadata:
+  name: mytomcat
+spec:
+  host: mytomcat.default.svc.cluster.local
+  subsets:
+  - name: v1
+    labels:
+      version: v1
+  - name: v2
+    labels:
+      version: v2
+***********************************************
+hosts		对应于规则应用的目的地,和VirtualService中的对应
+subsets	使用多版本规则,必须和在k8s上应用部署时候用的Service及Deployment对应.如下
+
+***********************************************
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mytomcat
+  labels:
+    app: mytomcat										# 尽量使用
+    service: mytomcat								# 尽量使用
+spec:
+  ports:
+  - port: 8888
+    name: http
+    targetPort: 8080									#  必须要,否则会出现istio注入失败的情况,及在容器启动的过程中,出现proxy 503的错误,
+  selector:
+    app: mytomcat										# 和Deployment中的对应,通过这里来关联deployment,可以看到v1,v2版本中都有app:mytomcat
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: mytomcat-v1
+  labels:
+    app: mytomcat										# 必须使用
+    version: v1												# 必须使用
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: mytomcat									# 必须使用,和service中的selector对应,并且多版本Deployment对应
+        version: v1											# 必须使用,rule中通过此字段来对于与不同版本的应用
+    spec:
+      containers:
+      - name: mytomcat
+        image: tomcat:7.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: mytomcat-v2
+  labels:
+    app: mytomcat
+    version: v2
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: mytomcat
+        version: v2
+    spec:
+      containers:
+      - name: mytomcat
+        image: tomcat:8.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+
+***********************************************
+ 
+
+*************************************************************************
+
+# 基本命令
+# 显示已创建的路由规则
+$ istioctl get virtualservices -o yaml
+
+# 确认规则已创建
+$ istioctl get virtualservice reviews -o yaml
+	
+# 显示路由规则对应的 subset 定义
+$ istioctl get destinationrules -o yaml
+
+# 查看Envoy运行日志:
+$ kubectl logs <your pod name> istio-proxy
+
+$ istioctl get gateway           
+$ istioctl get virtualservices   
+
+# 使用kubectl代理来查看pod中的应用
+# 80端口是容器中应用的端口,18080为临时使用的端口,原理是在本地物理端口上开启18080端口映射到容器中的80端口
+# 主要用于测试经常用
+$ kubectl port-forward --address 0.0.0.0 deployment/nginx-v1 18080:80
+
+查看ingress gateway端入口的日志 (重要)
+# kubectl logs -f istio-telemetry-8759dc6b7-kfslt -c mixer -n istio-system
+
+
+FAQ
+1.请注意,为了利用Istio的L7路由功能,Kubernetes中的服务(如本任务中使用的Bookinfo服务)必须遵守某些特定限制.参考sidecar注入文档了解详情
+
+要成为服务网格的一部分,Kubernetes集群中的Pod和服务必须满足以下几个要求:
+
+需要给端口正确命名:服务端口必须进行命名.端口名称只允许是<协议>[-<后缀>-]模式,其中<协议>部分可选择范围包括http、http2、grpc、mongo以及redis,Istio可以通过对这些协议的支持来提供路由能力.例如name:http2-foo 和 name:http都是有效的端口名,但name:http2foo就是无效的.如果没有给端口进行命名,或者命名没有使用指定前缀,那么这一端口的流量就会被视为普通TCP流量(除非显式的用 Protocol:UDP声明该端口是UDP端口).
+
+关联服务:Pod必须关联到Kubernetes服务,如果一个Pod属于多个服务,这些服务不能再同一端口上使用不同协议,例如HTTP和TCP.
+
+Deployment应带有app以及version标签:在使用Kubernetes Deployment进行Pod部署的时候,建议显式的为Deployment加上app以及 version标签.每个Deployment都应该有一个有意义的app标签和一个用于标识Deployment版本的version标签.app标签在分布式跟踪的过程中会被用来加入上下文信息.Istio还会用app和version标签来给遥测指标数据加入上下文信息.
+
+2.在部署应用的时候,Deployment必须有类似targetPort: 8080 这部分,否则会出现
+Readiness probe failed: HTTP probe failed with statuscode: 503
+这种诡异的问题
+
+
+诊断问题
+proxy-status 命令能够用来获取网格的概要情况.如果怀疑某个 Sidecar 无法获取配置,或者同步失败,就可以用这个命令来进行验证.
+
+************************************************************************************************************************************************
+# istioctl proxy-status
+NAME                                                   CDS        LDS        EDS               RDS          PILOT                            VERSION
+details-v1-65b966b497-vvl76.default                    SYNCED     SYNCED     SYNCED (50%)      SYNCED       istio-pilot-6dd5b8f74c-7dspl     1.1.3
+istio-egressgateway-7dbbb87698-647tn.istio-system      SYNCED     SYNCED     SYNCED (100%)     NOT SENT     istio-pilot-6dd5b8f74c-7dspl     1.1.3
+istio-ingressgateway-565b894b5f-kxklg.istio-system     SYNCED     SYNCED     SYNCED (100%)     SYNCED       istio-pilot-6dd5b8f74c-7dspl     1.1.3
+mytomcat-v1-7c95968c8c-fvh6j.default                   SYNCED     SYNCED     SYNCED (50%)      SYNCED       istio-pilot-6dd5b8f74c-7dspl     1.1.3
+mytomcat-v2-78d6788d99-ft27d.default                   SYNCED     SYNCED     SYNCED (50%)      SYNCED       istio-pilot-6dd5b8f74c-7dspl     1.1.3
+productpage-v1-79458795bc-flfvt.default                SYNCED     SYNCED     SYNCED (50%)      SYNCED       istio-pilot-6dd5b8f74c-7dspl     1.1.3
+ratings-v1-5b7cd6c58f-whkfv.default                    SYNCED     SYNCED     SYNCED (50%)      SYNCED       istio-pilot-6dd5b8f74c-7dspl     1.1.3
+reviews-v1-54c7c79486-snqjt.default                    SYNCED     SYNCED     SYNCED (50%)      SYNCED       istio-pilot-6dd5b8f74c-7dspl     1.1.3
+reviews-v2-7dc5785684-mqzp8.default                    SYNCED     SYNCED     SYNCED (50%)      SYNCED       istio-pilot-6dd5b8f74c-7dspl     1.1.3
+reviews-v3-6c464d7bf4-rxnvx.default                    SYNCED     SYNCED     SYNCED (50%)      SYNCED       istio-pilot-6dd5b8f74c-7dspl     1.1.3
+
+************************************************************************************************************************************************
+如果一个代理没有出现在这个列表上,就说明该代理目前没有连接到 Pilot 实例上,不会接到任何配置.
+
+* SYNCED:Envoy 已经接收到了 Pilot 发送的最新配置.
+* SYNCED (100%):Envoy 成功的同步了集群内的所有端点.
+* NOT SENT:Pilot 尚未向 Envoy 发送任何数据,这通常是因为 Pilot 没有需要发送的内容.
+* STALE:Pilot 已经向 Envoy 发出了更新,但是还没有收到响应.这很可能意味着 Envoy 和 Pilot 之间的网络存在故障,或者是 Istio 自身的 Bug.
+
+
+proxy-status 命令还可以通过一个 Proxy ID 作为输入,来获取 Envoy 已经载入的配置和 Pilot 将要发送的配置之间的差异,这有助于识别同步失败的问题,并且对原因分析也有帮助.
+
+************************************************************************************************************************************************
+# istioctl proxy-status mytomcat-v1-7c95968c8c-fvh6j.default
+Clusters Match
+Listeners Match
+Routes Match (RDS last loaded at Thu, 30 May 2019 02:53:11 UTC)
+# istioctl proxy-status istio-ingressgateway-565b894b5f-kxklg.istio-system
+Clusters Match
+Listeners Match
+Routes Match (RDS last loaded at Thu, 30 May 2019 02:54:02 UTC)
+
+************************************************************************************************************************************************
+这是正常的情况
+
+************************************************************************************************************************************************
+$ istioctl proxy-status details-v1-6dcc6fbb9d-wsjz4.default
+--- Pilot Clusters
++++ Envoy Clusters
+@@ -374,36 +374,14 @@
+             "edsClusterConfig": {
+                "edsConfig": {
+                   "ads": {
+
+                   }
+                },
+                "serviceName": "outbound|443||public-cr0bdc785ce3f14722918080a97e1f26be-alb1.kube-system.svc.cluster.local"
+-            },
+-            "connectTimeout": "1.000s",
+-            "circuitBreakers": {
+-               "thresholds": [
+-                  {
+-
+-                  }
+-               ]
+-            }
+-         }
+-      },
+-      {
+-         "cluster": {
+-            "name": "outbound|53||kube-dns.kube-system.svc.cluster.local",
+-            "type": "EDS",
+-            "edsClusterConfig": {
+-               "edsConfig": {
+-                  "ads": {
+-
+-                  }
+-               },
+-               "serviceName": "outbound|53||kube-dns.kube-system.svc.cluster.local"
+             },
+             "connectTimeout": "1.000s",
+             "circuitBreakers": {
+                "thresholds": [
+                   {
+
+                   }
+
+Listeners Match
+Routes Match
+************************************************************************************************************************************************
+这些内容中不难发现,监听器和路由都是匹配的,但是集群定义未能同步.
+
+
+proxy-config 命令能够用来查看某个 Envoy 实例的配置.通过对 Istio 配置和自定义资源的查看不能确诊问题时,这个命令会大有帮助.要获取网格中一个 Pod 的集群、监听器和路由的概要信息,只要使用如下命令(可以根据需要把 clusters 替换为 listeners 或者 routes):
+
+************************************************************************************************************************************************
+# istioctl proxy-config clusters -n istio-system istio-ingressgateway-565b894b5f-kxklg.istio-system
+SERVICE FQDN                                                               PORT      SUBSET          DIRECTION     TYPE
+BlackHoleCluster                                                           -         -               -             STATIC
+PassthroughCluster                                                         -         -               -             ORIGINAL_DST
+details.default.svc.cluster.local                                          8888      -               outbound      EDS
+details.default.svc.cluster.local                                          8888      v1              outbound      EDS
+details.default.svc.cluster.local                                          8888      v2              outbound      EDS
+grafana.istio-system.svc.cluster.local                                     3000      -               outbound      EDS
+istio-citadel.istio-system.svc.cluster.local                               8060      -               outbound      EDS
+istio-citadel.istio-system.svc.cluster.local                               15014     -               outbound      EDS
+istio-egressgateway.istio-system.svc.cluster.local                         80        -               outbound      EDS
+istio-egressgateway.istio-system.svc.cluster.local                         443       -               outbound      EDS
+istio-egressgateway.istio-system.svc.cluster.local                         15443     -               outbound      EDS
+istio-galley.istio-system.svc.cluster.local                                443       -               outbound      EDS
+istio-galley.istio-system.svc.cluster.local                                9901      -               outbound      EDS
+istio-galley.istio-system.svc.cluster.local                                15014     -               outbound      EDS
+istio-ingressgateway.istio-system.svc.cluster.local                        80        -               outbound      EDS
+istio-ingressgateway.istio-system.svc.cluster.local                        443       -               outbound      EDS
+istio-ingressgateway.istio-system.svc.cluster.local                        15020     -               outbound      EDS
+istio-ingressgateway.istio-system.svc.cluster.local                        15029     -               outbound      EDS
+istio-ingressgateway.istio-system.svc.cluster.local                        15030     -               outbound      EDS
+istio-ingressgateway.istio-system.svc.cluster.local                        15031     -               outbound      EDS
+istio-ingressgateway.istio-system.svc.cluster.local                        15032     -               outbound      EDS
+istio-ingressgateway.istio-system.svc.cluster.local                        15443     -               outbound      EDS
+istio-ingressgateway.istio-system.svc.cluster.local                        31400     -               outbound      EDS
+istio-pilot.istio-system.svc.cluster.local                                 8080      -               outbound      EDS
+istio-pilot.istio-system.svc.cluster.local                                 15010     -               outbound      EDS
+istio-pilot.istio-system.svc.cluster.local                                 15011     -               outbound      EDS
+istio-pilot.istio-system.svc.cluster.local                                 15014     -               outbound      EDS
+istio-policy.istio-system.svc.cluster.local                                9091      -               outbound      EDS
+istio-policy.istio-system.svc.cluster.local                                15004     -               outbound      EDS
+istio-policy.istio-system.svc.cluster.local                                15014     -               outbound      EDS
+istio-sidecar-injector.istio-system.svc.cluster.local                      443       -               outbound      EDS
+istio-telemetry.istio-system.svc.cluster.local                             9091      -               outbound      EDS
+istio-telemetry.istio-system.svc.cluster.local                             15004     -               outbound      EDS
+istio-telemetry.istio-system.svc.cluster.local                             15014     -               outbound      EDS
+istio-telemetry.istio-system.svc.cluster.local                             42422     -               outbound      EDS
+jaeger-collector.istio-system.svc.cluster.local                            14267     -               outbound      EDS
+jaeger-collector.istio-system.svc.cluster.local                            14268     -               outbound      EDS
+jaeger-query.istio-system.svc.cluster.local                                16686     -               outbound      EDS
+kiali.istio-system.svc.cluster.local                                       20001     -               outbound      EDS
+kube-dns.kube-system.svc.cluster.local                                     53        -               outbound      EDS
+kube-dns.kube-system.svc.cluster.local                                     9153      -               outbound      EDS
+kubernetes-dashboard.kube-system.svc.cluster.local                         443       -               outbound      EDS
+kubernetes.default.svc.cluster.local                                       443       -               outbound      EDS
+mytomcat.default.svc.cluster.local                                         8888      -               outbound      EDS
+mytomcat.default.svc.cluster.local                                         8888      v1              outbound      EDS
+mytomcat.default.svc.cluster.local                                         8888      v2              outbound      EDS
+outbound_.14267_._.jaeger-collector.istio-system.svc.cluster.local         -         -               -             EDS
+outbound_.14268_._.jaeger-collector.istio-system.svc.cluster.local         -         -               -             EDS
+outbound_.15004_._.istio-policy.istio-system.svc.cluster.local             -         -               -             EDS
+outbound_.15004_._.istio-telemetry.istio-system.svc.cluster.local          -         -               -             EDS
+outbound_.15010_._.istio-pilot.istio-system.svc.cluster.local              -         -               -             EDS
+outbound_.15011_._.istio-pilot.istio-system.svc.cluster.local              -         -               -             EDS
+outbound_.15014_._.istio-citadel.istio-system.svc.cluster.local            -         -               -             EDS
+outbound_.15014_._.istio-galley.istio-system.svc.cluster.local             -         -               -             EDS
+outbound_.15014_._.istio-pilot.istio-system.svc.cluster.local              -         -               -             EDS
+outbound_.15014_._.istio-policy.istio-system.svc.cluster.local             -         -               -             EDS
+outbound_.15014_._.istio-telemetry.istio-system.svc.cluster.local          -         -               -             EDS
+outbound_.15020_._.istio-ingressgateway.istio-system.svc.cluster.local     -         -               -             EDS
+outbound_.15029_._.istio-ingressgateway.istio-system.svc.cluster.local     -         -               -             EDS
+outbound_.15030_._.istio-ingressgateway.istio-system.svc.cluster.local     -         -               -             EDS
+outbound_.15031_._.istio-ingressgateway.istio-system.svc.cluster.local     -         -               -             EDS
+outbound_.15032_._.istio-ingressgateway.istio-system.svc.cluster.local     -         -               -             EDS
+outbound_.15443_._.istio-egressgateway.istio-system.svc.cluster.local      -         -               -             EDS
+outbound_.15443_._.istio-ingressgateway.istio-system.svc.cluster.local     -         -               -             EDS
+outbound_.16686_._.jaeger-query.istio-system.svc.cluster.local             -         -               -             EDS
+outbound_.20001_._.kiali.istio-system.svc.cluster.local                    -         -               -             EDS
+outbound_.3000_._.grafana.istio-system.svc.cluster.local                   -         -               -             EDS
+outbound_.31400_._.istio-ingressgateway.istio-system.svc.cluster.local     -         -               -             EDS
+outbound_.42422_._.istio-telemetry.istio-system.svc.cluster.local          -         -               -             EDS
+outbound_.443_._.istio-egressgateway.istio-system.svc.cluster.local        -         -               -             EDS
+outbound_.443_._.istio-galley.istio-system.svc.cluster.local               -         -               -             EDS
+outbound_.443_._.istio-ingressgateway.istio-system.svc.cluster.local       -         -               -             EDS
+outbound_.443_._.istio-sidecar-injector.istio-system.svc.cluster.local     -         -               -             EDS
+outbound_.443_._.kubernetes-dashboard.kube-system.svc.cluster.local        -         -               -             EDS
+outbound_.443_._.kubernetes.default.svc.cluster.local                      -         -               -             EDS
+outbound_.53_._.kube-dns.kube-system.svc.cluster.local                     -         -               -             EDS
+outbound_.8060_._.istio-citadel.istio-system.svc.cluster.local             -         -               -             EDS
+outbound_.8080_._.istio-pilot.istio-system.svc.cluster.local               -         -               -             EDS
+outbound_.80_._.istio-egressgateway.istio-system.svc.cluster.local         -         -               -             EDS
+outbound_.80_._.istio-ingressgateway.istio-system.svc.cluster.local        -         -               -             EDS
+outbound_.80_._.tracing.istio-system.svc.cluster.local                     -         -               -             EDS
+outbound_.8888_._.mytomcat.default.svc.cluster.local                       -         -               -             EDS
+outbound_.8888_.v1_.mytomcat.default.svc.cluster.local                     -         -               -             EDS
+outbound_.8888_.v2_.mytomcat.default.svc.cluster.local                     -         -               -             EDS
+outbound_.8888_._.details.default.svc.cluster.local                        -         -               -             EDS
+outbound_.8888_._.productpage.default.svc.cluster.local                    -         -               -             EDS
+outbound_.8888_._.ratings.default.svc.cluster.local                        -         -               -             EDS
+outbound_.8888_._.reviews.default.svc.cluster.local                        -         -               -             EDS
+outbound_.8888_.v1_.details.default.svc.cluster.local                      -         -               -             EDS
+outbound_.8888_.v1_.productpage.default.svc.cluster.local                  -         -               -             EDS
+outbound_.8888_.v1_.ratings.default.svc.cluster.local                      -         -               -             EDS
+outbound_.8888_.v1_.reviews.default.svc.cluster.local                      -         -               -             EDS
+outbound_.8888_.v2-mysql-vm_.ratings.default.svc.cluster.local             -         -               -             EDS
+outbound_.8888_.v2-mysql_.ratings.default.svc.cluster.local                -         -               -             EDS
+outbound_.8888_.v2_.details.default.svc.cluster.local                      -         -               -             EDS
+outbound_.8888_.v2_.ratings.default.svc.cluster.local                      -         -               -             EDS
+outbound_.8888_.v2_.reviews.default.svc.cluster.local                      -         -               -             EDS
+outbound_.8888_.v3_.reviews.default.svc.cluster.local                      -         -               -             EDS
+outbound_.9090_._.prometheus.istio-system.svc.cluster.local                -         -               -             EDS
+outbound_.9091_._.istio-policy.istio-system.svc.cluster.local              -         -               -             EDS
+outbound_.9091_._.istio-telemetry.istio-system.svc.cluster.local           -         -               -             EDS
+outbound_.9153_._.kube-dns.kube-system.svc.cluster.local                   -         -               -             EDS
+outbound_.9411_._.zipkin.istio-system.svc.cluster.local                    -         -               -             EDS
+outbound_.9901_._.istio-galley.istio-system.svc.cluster.local              -         -               -             EDS
+productpage.default.svc.cluster.local                                      8888      -               outbound      EDS
+productpage.default.svc.cluster.local                                      8888      v1              outbound      EDS
+prometheus.istio-system.svc.cluster.local                                  9090      -               outbound      EDS
+prometheus_stats                                                           -         -               -             STATIC
+ratings.default.svc.cluster.local                                          8888      -               outbound      EDS
+ratings.default.svc.cluster.local                                          8888      v1              outbound      EDS
+ratings.default.svc.cluster.local                                          8888      v2              outbound      EDS
+ratings.default.svc.cluster.local                                          8888      v2-mysql        outbound      EDS
+ratings.default.svc.cluster.local                                          8888      v2-mysql-vm     outbound      EDS
+reviews.default.svc.cluster.local                                          8888      -               outbound      EDS
+reviews.default.svc.cluster.local                                          8888      v1              outbound      EDS
+reviews.default.svc.cluster.local                                          8888      v2              outbound      EDS
+reviews.default.svc.cluster.local                                          8888      v3              outbound      EDS
+tracing.istio-system.svc.cluster.local                                     80        -               outbound      EDS
+xds-grpc                                                                   -         -               -             STRICT_DNS
+zipkin                                                                     -         -               -             STRICT_DNS
+zipkin.istio-system.svc.cluster.local                                      9411      -               outbound      EDS
+
+************************************************************************************************************************************************
+要对 Envoy 进行除错,首先要了解一下 Envoy 的集群、监听器、路由、端点的概念,以及这些对象之间的交互过程.我们会使用 proxy-config 命令的 -o json 参数,并对结果进行过滤,来追踪 Envoy 对请求(从 productpage Pod 发向 reviews Pod 上的 reviews:8888)的决策过程:
+
+1. 如果查询一个 Pod 的监听器概要信息,会看到 Istio 生成了如下的监听器:
+
+* 0.0.0.0:15001 的监听器会接收所有出入 Pod 的流量,然后将请求转交给一个虚拟监听器.
+* 服务 IP 的虚拟监听器,用于 TCP/HTTPS 的非 HTTP 出站流量.
+* Pod IP 的虚拟监听器,用于暴露入站流量的端口.
+* 0.0.0.0 的虚拟监听器用于出站的 HTTP 流量.
+
+************************************************************************************************************************************************
+# istioctl proxy-config listeners mytomcat-v1-7c95968c8c-fvh6j.default
+ADDRESS          PORT      TYPE
+10.0.84.219      15443     TCP
+10.0.24.2        443       TCP
+10.0.160.60      15443     TCP
+10.0.179.183     15011     TCP
+10.0.169.147     443       TCP
+10.0.246.42      14267     TCP
+10.0.0.10        53        TCP
+10.0.84.219      443       TCP
+10.0.160.60      15030     TCP
+10.0.0.10        9153      TCP
+10.0.75.22       16686     TCP
+10.0.160.60      15020     TCP
+10.0.160.60      443       TCP
+10.0.160.60      15031     TCP
+10.0.160.60      15032     TCP
+10.0.0.1         443       TCP
+10.0.246.42      14268     TCP
+10.0.196.236     443       TCP
+10.0.160.60      31400     TCP
+10.0.160.60      15029     TCP
+10.0.130.171     42422     TCP
+0.0.0.0          9091      HTTP
+0.0.0.0          8060      HTTP
+0.0.0.0          15014     HTTP
+0.0.0.0          80        HTTP
+0.0.0.0          9090      HTTP
+0.0.0.0          9411      HTTP
+0.0.0.0          8080      HTTP
+0.0.0.0          20001     HTTP
+0.0.0.0          3000      HTTP
+0.0.0.0          15010     HTTP
+0.0.0.0          8888      HTTP
+0.0.0.0          15004     HTTP
+0.0.0.0          9901      HTTP
+192.168.1.74     15020     TCP
+0.0.0.0          15001     TCP
+0.0.0.0          8888      HTTP
+192.168.1.74     8080      HTTP
+0.0.0.0          15090     HTTP
+
+************************************************************************************************************************************************
+
+2. 由上边的概要信息可以看出,每个 Sidecar 都有一个绑定到 0.0.0.0:15001 的监听器,IP tables 会路由 Pod 中所有的入站和出站流量到这一地址.这个监听器的 useOriginalDst 设置为 True,表明他会根据原始目的地来选择监听器,并将流量转发给最合适的监听器.如果找不到匹配的虚拟监听器,就会把请求发送给 BlackHoleCluster,它会返回一个 404.
+
+************************************************************************************************************************************************
+# istioctl proxy-config listeners mytomcat-v1-7c95968c8c-fvh6j.default --port 15001 -o json
+[
+    {
+        "name": "virtual",
+        "address": {
+            "socketAddress": {
+                "address": "0.0.0.0",
+                "portValue": 15001
+            }
+        },
+        "filterChains": [
+            {
+                "filters": [
+                    {
+                        "name": "envoy.tcp_proxy",
+                        "config": {
+                            "access_log": [
+                                {
+                                    "config": {
+                                        "format": "[%START_TIME%] \"%REQ(:METHOD)% %REQ(X-ENVOY-ORIGINAL-PATH?:PATH)% %PROTOCOL%\" %RESPONSE_CODE% %RESPONSE_FLAGS% \"%DYNAMIC_METADATA(istio.mixer:status)%\" %BYTES_RECEIVED% %BYTES_SENT% %DURATION% %RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)% \"%REQ(X-FORWARDED-FOR)%\" \"%REQ(USER-AGENT)%\" \"%REQ(X-REQUEST-ID)%\" \"%REQ(:AUTHORITY)%\" \"%UPSTREAM_HOST%\" %UPSTREAM_CLUSTER% %UPSTREAM_LOCAL_ADDRESS% %DOWNSTREAM_LOCAL_ADDRESS% %DOWNSTREAM_REMOTE_ADDRESS% %REQUESTED_SERVER_NAME%\n",
+                                        "path": "/dev/stdout"
+                                    },
+                                    "name": "envoy.file_access_log"
+                                }
+                            ],
+                            "cluster": "PassthroughCluster",
+                            "stat_prefix": "PassthroughCluster"
+                        }
+                    }
+                ]
+            }
+        ],
+        "useOriginalDst": true
+    }
+]
+
+************************************************************************************************************************************************
+
+3 .我们的请求是一个出站的 HTTP 请求,目标是 8888,因此这个请求应该提交给 0.0.0.0:8888 虚拟监听器.这个监听器会在它的 RDS 中查找路由配置,这个例子中,就是在 Pilot(通过 ADS)配置的 RDS 信息中查找 8888.
+
+************************************************************************************************************************************************
+# istioctl proxy-config listeners mytomcat-v1-7c95968c8c-fvh6j.default -o json --address 0.0.0.0 --port 8888
+[
+    {
+        "name": "0.0.0.0_8888",
+        "address": {
+            "socketAddress": {
+                "address": "0.0.0.0",
+                "portValue": 8888
+            }
+        },
+        "filterChains": [
+            {
+                "filters": [
+                    {
+                        "name": "envoy.http_connection_manager",
+                        "config": {
+                            "access_log": [
+                                {
+                                    "config": {
+                                        "format": "[%START_TIME%] \"%REQ(:METHOD)% %REQ(X-ENVOY-ORIGINAL-PATH?:PATH)% %PROTOCOL%\" %RESPONSE_CODE% %RESPONSE_FLAGS% \"%DYNAMIC_METADATA(istio.mixer:status)%\" %BYTES_RECEIVED% %BYTES_SENT% %DURATION% %RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)% \"%REQ(X-FORWARDED-FOR)%\" \"%REQ(USER-AGENT)%\" \"%REQ(X-REQUEST-ID)%\" \"%REQ(:AUTHORITY)%\" \"%UPSTREAM_HOST%\" %UPSTREAM_CLUSTER% %UPSTREAM_LOCAL_ADDRESS% %DOWNSTREAM_LOCAL_ADDRESS% %DOWNSTREAM_REMOTE_ADDRESS% %REQUESTED_SERVER_NAME%\n",
+                                        "path": "/dev/stdout"
+                                    },
+                                    "name": "envoy.file_access_log"
+                                }
+                            ],
+                            "generate_request_id": true,
+                            "http_filters": [
+                                {
+                                    "config": {
+                                        "default_destination_service": "default",
+                                        "forward_attributes": {
+                                            "attributes": {
+                                                "source.uid": {
+                                                    "string_value": "kubernetes://mytomcat-v1-7c95968c8c-fvh6j.default"
+                                                }
+                                            }
+                                        },
+                                        "mixer_attributes": {
+                                            "attributes": {
+                                                "context.reporter.kind": {
+                                                    "string_value": "outbound"
+                                                },
+                                                "context.reporter.uid": {
+                                                    "string_value": "kubernetes://mytomcat-v1-7c95968c8c-fvh6j.default"
+                                                },
+                                                "source.namespace": {
+                                                    "string_value": "default"
+                                                },
+                                                "source.uid": {
+                                                    "string_value": "kubernetes://mytomcat-v1-7c95968c8c-fvh6j.default"
+                                                }
+                                            }
+                                        },
+                                        "service_configs": {
+                                            "default": {
+                                                "disable_check_calls": true
+                                            }
+                                        },
+                                        "transport": {
+                                            "check_cluster": "outbound|9091||istio-policy.istio-system.svc.cluster.local",
+                                            "network_fail_policy": {
+                                                "base_retry_wait": "0.080s",
+                                                "max_retry_wait": "1s",
+                                                "policy": "FAIL_CLOSE"
+                                            },
+                                            "report_cluster": "outbound|9091||istio-telemetry.istio-system.svc.cluster.local"
+                                        }
+                                    },
+                                    "name": "mixer"
+                                },
+                                {
+                                    "name": "envoy.cors"
+                                },
+                                {
+                                    "name": "envoy.fault"
+                                },
+                                {
+                                    "name": "envoy.router"
+                                }
+                            ],
+                            "rds": {
+                                "config_source": {
+                                    "ads": {}
+                                },
+                                "route_config_name": "8888"
+                            },
+                            "stat_prefix": "0.0.0.0_8888",
+                            "stream_idle_timeout": "0s",
+                            "tracing": {
+                                "client_sampling": {
+                                    "value": 100
+                                },
+                                "operation_name": "EGRESS",
+                                "overall_sampling": {
+                                    "value": 100
+                                },
+                                "random_sampling": {
+                                    "value": 100
+                                }
+                            },
+                            "upgrade_configs": [
+                                {
+                                    "upgrade_type": "websocket"
+                                }
+                            ],
+                            "use_remote_address": false
+                        }
+                    }
+                ]
+            }
+        ],
+        "deprecatedV1": {
+            "bindToPort": false
+        }
+    }
+]
+
+root@ip-172-31-31-217:~/web/nginx-istio# istioctl proxy-config listeners mytomcat-v1-7c95968c8c-fvh6j.default -o json --address 0.0.0.0 --port 8080
+[
+    {
+        "name": "0.0.0.0_8080",
+        "address": {
+            "socketAddress": {
+                "address": "0.0.0.0",
+                "portValue": 8080
+            }
+        },
+        "filterChains": [
+            {
+                "filters": [
+                    {
+                        "name": "envoy.http_connection_manager",
+                        "config": {
+                            "access_log": [
+                                {
+                                    "config": {
+                                        "format": "[%START_TIME%] \"%REQ(:METHOD)% %REQ(X-ENVOY-ORIGINAL-PATH?:PATH)% %PROTOCOL%\" %RESPONSE_CODE% %RESPONSE_FLAGS% \"%DYNAMIC_METADATA(istio.mixer:status)%\" %BYTES_RECEIVED% %BYTES_SENT% %DURATION% %RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)% \"%REQ(X-FORWARDED-FOR)%\" \"%REQ(USER-AGENT)%\" \"%REQ(X-REQUEST-ID)%\" \"%REQ(:AUTHORITY)%\" \"%UPSTREAM_HOST%\" %UPSTREAM_CLUSTER% %UPSTREAM_LOCAL_ADDRESS% %DOWNSTREAM_LOCAL_ADDRESS% %DOWNSTREAM_REMOTE_ADDRESS% %REQUESTED_SERVER_NAME%\n",
+                                        "path": "/dev/stdout"
+                                    },
+                                    "name": "envoy.file_access_log"
+                                }
+                            ],
+                            "generate_request_id": true,
+                            "http_filters": [
+                                {
+                                    "config": {
+                                        "default_destination_service": "default",
+                                        "forward_attributes": {
+                                            "attributes": {
+                                                "source.uid": {
+                                                    "string_value": "kubernetes://mytomcat-v1-7c95968c8c-fvh6j.default"
+                                                }
+                                            }
+                                        },
+                                        "mixer_attributes": {
+                                            "attributes": {
+                                                "context.reporter.kind": {
+                                                    "string_value": "outbound"
+                                                },
+                                                "context.reporter.uid": {
+                                                    "string_value": "kubernetes://mytomcat-v1-7c95968c8c-fvh6j.default"
+                                                },
+                                                "source.namespace": {
+                                                    "string_value": "default"
+                                                },
+                                                "source.uid": {
+                                                    "string_value": "kubernetes://mytomcat-v1-7c95968c8c-fvh6j.default"
+                                                }
+                                            }
+                                        },
+                                        "service_configs": {
+                                            "default": {
+                                                "disable_check_calls": true
+                                            }
+                                        },
+                                        "transport": {
+                                            "check_cluster": "outbound|9091||istio-policy.istio-system.svc.cluster.local",
+                                            "network_fail_policy": {
+                                                "base_retry_wait": "0.080s",
+                                                "max_retry_wait": "1s",
+                                                "policy": "FAIL_CLOSE"
+                                            },
+                                            "report_cluster": "outbound|9091||istio-telemetry.istio-system.svc.cluster.local"
+                                        }
+                                    },
+                                    "name": "mixer"
+                                },
+                                {
+                                    "name": "envoy.cors"
+                                },
+                                {
+                                    "name": "envoy.fault"
+                                },
+                                {
+                                    "name": "envoy.router"
+                                }
+                            ],
+                            "rds": {
+                                "config_source": {
+                                    "ads": {}
+                                },
+                                "route_config_name": "8080"
+                            },
+                            "stat_prefix": "0.0.0.0_8080",
+                            "stream_idle_timeout": "0s",
+                            "tracing": {
+                                "client_sampling": {
+                                    "value": 100
+                                },
+                                "operation_name": "EGRESS",
+                                "overall_sampling": {
+                                    "value": 100
+                                },
+                                "random_sampling": {
+                                    "value": 100
+                                }
+                            },
+                            "upgrade_configs": [
+                                {
+                                    "upgrade_type": "websocket"
+                                }
+                            ],
+                            "use_remote_address": false
+                        }
+                    }
+                ]
+            }
+        ],
+        "deprecatedV1": {
+            "bindToPort": false
+        }
+    }
+]
+************************************************************************************************************************************************
+
+
+4. 8888 路由配置在每个服务中只有一个虚拟主机.
+************************************************************************************************************************************************
+# istioctl proxy-config routes mytomcat-v1-7c95968c8c-fvh6j.default --name 8888 -o json
+[
+    {
+        "name": "8888",
+        "virtualHosts": [
+            {
+                "name": "mytomcat.default.svc.cluster.local:8888",
+                "domains": [
+                    "mytomcat.default.svc.cluster.local",
+                    "mytomcat.default.svc.cluster.local:8888",
+                    "mytomcat",
+                    "mytomcat:8888",
+                    "mytomcat.default.svc.cluster",
+                    "mytomcat.default.svc.cluster:8888",
+                    "mytomcat.default.svc",
+                    "mytomcat.default.svc:8888",
+                    "mytomcat.default",
+                    "mytomcat.default:8888",
+                    "10.0.168.106",
+                    "10.0.168.106:8888"
+                ],
+                "routes": [
+                    {
+                        "match": {
+                            "prefix": "/"
+                        },
+                        "route": {
+                            "cluster": "outbound|8888||mytomcat.default.svc.cluster.local",
+                            "timeout": "0s",
+                            "retryPolicy": {
+                                "retryOn": "connect-failure,refused-stream,unavailable,cancelled,resource-exhausted,retriable-status-codes",
+                                "numRetries": 2,
+                                "retryHostPredicate": [
+                                    {
+                                        "name": "envoy.retry_host_predicates.previous_hosts"
+                                    }
+                                ],
+                                "hostSelectionRetryMaxAttempts": "3",
+                                "retriableStatusCodes": [
+                                    503
+                                ]
+                            },
+                            "maxGrpcTimeout": "0s"
+                        },
+                        "decorator": {
+                            "operation": "mytomcat.default.svc.cluster.local:8888/*"
+                        },
+                        "perFilterConfig": {
+                            "mixer": {
+                                "disable_check_calls": true,
+                                "forward_attributes": {
+                                    "attributes": {
+                                        "destination.service.host": {
+                                            "string_value": "mytomcat.default.svc.cluster.local"
+                                        },
+                                        "destination.service.name": {
+                                            "string_value": "mytomcat"
+                                        },
+                                        "destination.service.namespace": {
+                                            "string_value": "default"
+                                        },
+                                        "destination.service.uid": {
+                                            "string_value": "istio://default/services/mytomcat"
+                                        }
+                                    }
+                                },
+                                "mixer_attributes": {
+                                    "attributes": {
+                                        "destination.service.host": {
+                                            "string_value": "mytomcat.default.svc.cluster.local"
+                                        },
+                                        "destination.service.name": {
+                                            "string_value": "mytomcat"
+                                        },
+                                        "destination.service.namespace": {
+                                            "string_value": "default"
+                                        },
+                                        "destination.service.uid": {
+                                            "string_value": "istio://default/services/mytomcat"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                ]
+            },
+            {
+                "name": "allow_any",
+                "domains": [
+                    "*"
+                ],
+                "routes": [
+                    {
+                        "match": {
+                            "prefix": "/"
+                        },
+                        "route": {
+                            "cluster": "PassthroughCluster"
+                        },
+                        "perFilterConfig": {
+                            "mixer": {
+                                "disable_check_calls": true,
+                                "forward_attributes": {
+                                    "attributes": {}
+                                },
+                                "mixer_attributes": {
+                                    "attributes": {}
+                                }
+                            }
+                        }
+                    }
+                ]
+            }
+        ],
+        "validateClusters": false
+    }
+]
+************************************************************************************************************************************************
+
+5. 这个集群被配置从 Pilot(通过 ADS)获取端点列表.所以 Envoy 会使用 serviceName 字段作为关键字在端点列表中进行查找,然后将请求转发给查出来的端点中的一个.
+# istioctl proxy-config clusters mytomcat-v1-7c95968c8c-fvh6j.default --fqdn mytomcat.default.svc.cluster.local -o json
+
+6. 可以使用 proxy-config endpoints 命令来查看当前集群的可用端点.
+# istioctl proxy-config endpoints mytomcat-v1-7c95968c8c-fvh6j.default
+
+Envoy 自身还有一些启动配置
+# istioctl proxy-config bootstrap -n istio-system istio-ingressgateway-565b894b5f-kxklg
+

@@ -1,0 +1,30 @@
+boost网络通信
+头文件
+
+#include <boost/asio.hpp>
+名空间
+using namespace boost::asio;
+            
+ASIO库能够使用TCP、UDP、ICMP、串口来发送/接收数据，下面先介绍TCP协议的读写操作，对于读写方式，ASIO支持同步和异步两种方式
+所有的操作都要完成或出错才会返回，被大家称之为阻塞。
+
+在服务器端，我会做个socket交给acceptor对象，让它一直等客户端连进来，连上以后再通过这个socket与客户端通信， 而所有的通信都是以阻塞方式进行的，读完或写完才会返回。
+
+在客户端也一样，这时我会拿着socket去连接服务器，当然也是连上或出错了才返回，最后也是以阻塞的方式和服务器通信。
+
+可以通过多线程来避免，比如在服务器端让其中一个线程负责等待客户端连接，连接进来后把socket交给另外的线程去 和客户端通信，这样与一个客户端通信的同时也能接受其它客户端的连接，主线程也完全被解放了出来。
+
+eclipse
+Settings->GCC C++Linker->Libraries
+Libraries(-l)
+crypto
+tcmalloc
+profiler
+pthread
+boost_system
+boost_thread
+
+Library search path(-L)
+/usr/local/lib
+
+

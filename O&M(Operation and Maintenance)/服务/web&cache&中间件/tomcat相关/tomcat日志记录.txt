@@ -1,0 +1,13 @@
+pattern="%{X-Real-IP}i|%{yyyy-MM-dd HH:mm:ss}t|%{client-type}i|%{c-ver}i|%{mcsid}i|%{ind-ua}i|%r|%s|%b|%{User-Agent}i|%{X-Up-Calling-Line-ID}i|%{resp_log}o|%{client-spec}i|%{actioncode}i|%{Accept}i|%{topid}i|%D|%S|%{User-Info}o"
+
+proxy_pass http://main;
+proxy_set_header Host $host;
+proxy_set_header X-Real-IP      $remote_addr;                  
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+
+前端nginx转发，tomcat记录真实访问ip
+主要是proxy_set_header X-Real-IP      $remote_addr; 和tomcat server.xml的日志格式中的%{X-Real-IP}%
+
+
+%{User-Info}o 这里是配合程序里需要的特殊head里有这个字段，需要开发端构造这个User-Info字段

@@ -1,0 +1,31 @@
+TCP数据包分析
+
+使用抓包软件捕捉到的TCP数据包的原型：
+
+src>dst：flags data-seqno ack window urgent options
+
+src 源IP
+dst 目标IP
+flags 数据包类型，可能是如下一个或者几个的组合，S（SYN），F（FIN），P（PUSH），R（RST），U（URG），W（ECN，CWR），E（ECN-Echo）or '.' or 'none'
+data-seqno 数据包分片的序列号，就是自己的序列号
+ack 预期收到的本地数据包分片的序列号，就是应该返回来的序列号
+window 接收缓存中的可用字节数
+urg 数据包中的urgen数据
+options 是一些封闭在<>中的tcp参数比如：<mss 1024>
+头三个是必须的，剩下的都不是
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

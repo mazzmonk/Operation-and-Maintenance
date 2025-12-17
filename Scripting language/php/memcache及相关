@@ -1,0 +1,12 @@
+## memcache #######
+
+memcache 是php的扩展
+memcached 是增强的php扩展，区别于memcached服务器端程序
+需要先安装libmemcached，然后再安装memcached
+
+./configure --enable-memcached --with-php-config=/usr/local/php/bin/php-config --with-libmemcached-dir=/usr/local/libmemcached/
+下载如下：
+http://pecl.php.net/package/memcached
+
+memcached安装见如下
+http://www.cnblogs.com/wenanry/archive/2011/05/11/2042942.html

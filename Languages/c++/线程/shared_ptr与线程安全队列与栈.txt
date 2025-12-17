@@ -1,0 +1,192 @@
+建立线程安全的队列或者栈中的一个很重要的要点,就是pop
+pop的主要目标就是pop出来的数据要如何处理
+1.返回弹出的数据
+2.传入同类型的实例,将弹出的数据存储在此实例中
+
+
+template<typename T>
+std::queue<T>
+
+因此有7种方式来定义pop
+1.返回类型为T的指针	#T* 不可用  shared_ptr 可用	
+2.返回类型为T引用	#T& 不可用
+3.直接返回T类型		#T 为一个小的对象,并且必须支持拷贝构造,否则不可用
+
+4.传入参数为T的指针	#不可用
+5.传入参数为T的引用	#T为一个小型对象,并且支持赋值操作
+6.传入参数为T类型	#shared_ptr可用
+
+7.传入指针的引用
+
+如下分别说明:
+1.指针有2种,T*及shared_ptr<T>
+T* pop() {
+  T* ptr = front();
+  pop();
+  return ptr;
+}
+
+在函数中会构造一个T*指针ptr,然后返回此指针时候,指针会复制一个副本ptr_copy,然后返回的是副本,当函数执行完毕的时候,原指针会销毁(因为是局部变量),副本并没有指向原来的数据.
+
+注意:复制指针并不会使得副本指向同一个对象.因此无法使用
+
+
+std::shared_ptr<T> pop() {
+  std::shared_ptr<T> ptr(std::make_shared<T>(front()));
+  pop();
+  return ptr;
+}
+
+这种模式和普通的指针运行方式一样,返回的是局部指针的副本,但是得益于shared_ptr这种神奇的指针,副本和原指针指向同一对象.
+
+注意:复制指针和副本指向同一个对象.因此可以使用
+
+2.
+T& pop() {
+  T data = front();
+  pop();
+  re& = data;
+  return re;
+}
+
+由于引用指向的原型是局部变量,返回的时候,局部变量会销毁,引用也和原型一样会销毁掉.
+
+3.
+T pop() {
+  T data = front();
+  pop();
+  return data;
+}
+
+返回的是一个局部变量data的副本,如果data是自定义或者很大的对象,比如:vector<string> v[10000]等等,将会导致巨大的资源分配
+其次,此类型必须要能支持拷贝构造,有些对象是不支持拷贝构造的.
+
+4.指针有2种,T*及shared_ptr<T>
+void pop(T* ptr) {
+  ptr = (T*)(q.front());
+  q.pop();
+  return ptr;
+}
+
+
+void pop(std::shared_ptr<T> ptr) {
+  ptr = (std::make_shared<T>(q.front());
+  q.pop();
+  return ptr;
+}
+
+
+不论使用那种指针都会导致传入指针的复制,就是说,函数体中的指针是传入指针参数的副本,由于参数在赋值之前都没有指向任何对象(指针为空或者0,取决是那种指针),因此,函数体中的副本在具体指向对象之前也就为空或者0,当指向具体对象以后,实际与传入的指针已经没有任何关系了,这点即使是传入shared_ptr也一样,当返回的时候,由于也是副本,故普通指针会和对象一起销毁,shared_ptr指针会返回函数体中局部指针的副本,但是已经和参数传入的指针没有任何关系了.
+
+但是如果传入的是一个shared_ptr的引用,保证指针不被复制,则可以保证进入的指针参数和返回的指针是同一个对象.就是第7种模式.
+
+5.
+void pop(T& data) {
+  data = q.front();
+  q.pop();
+}
+
+参数是一个引用类型,就是说必须在调用函数之前,必须构造一个T类型的实例,同样,如果这个实例是一个很大的类型或者是自定义类型,这将是一个很昂贵的操作
+其次,此类型必须支持赋值,并不是所有的类型都支持此操作,特别是自定义类型
+
+6.
+void pop(T data) {
+  data = q.front();
+  q.pop();
+}
+
+参数是一个T类型的实例,由于是传值,因此传入的参数是实例的副本,如果T是很大类型或者自定义类型,复制这个T类型数据,将是一个很昂贵的操作,同时此类型必须支持复制构造,这个操作并不是所有类型都支持.
+
+
+7.
+void pop(std::shared_ptr<T>& ptr) {
+  ptr = std::make_shared<T>(q.front());
+  q.pop();
+}
+
+这种模式使用T的指针的引用,这和引用类型很像,区别在于,不用事先构造一个T类型实例
+
+
+
+shared_ptr和普通指针做为函数返回值和参数有些不同的特点
+例子:T*  shared_ptr<T>
+
+做为参数时候,如果T*和shared_ptr<T>都是没有赋值的空指针,进入到函数体中的行为都一致,复制指针的副本进行相应的操作
+如果2种指针都指向具体的实例,则函数体中指针副本,与原指针都指向同一个实例,这里有个很危险的操作,就是如果在函数体里销毁实例,则普通指针的原指针可能会变成一个悬垂指针,这里用shared_ptr可以解决这个问题.
+
+
+做为返回值的时候,因为指针都是在函数体中的局部变量,在函数完成的时候,指针及相应的实例都会销毁,返回的是指针的副本
+区别在于,普通指针和shared_ptr<T>变量和副本中存储的内容(实例的地址)都一样,但是给普通指针解引用的时候,值为空,说明函数体中的局部实例被销毁了,而shared_ptr<T>解引用的时候,仍然可以得到局部实例的值.
+
+ 
+# 普通指针 #######################################
+std::string* func(std::string str) {
+  str += str;
+  std::cout << "str is :" << str << std::endl;
+  std::string* ptr = &str;
+  std::cout << "ptr is: " << ptr << std::endl;
+  return ptr;
+}
+
+int main(int argc, char** argv) {
+  std::string str = "a";
+  std::string* ptr = func(str);
+  
+  std::cout << "out ptr is: " << ptr << std::endl;
+  std::cout << "out *ptr is: " << *ptr << std::endl;
+
+  return 0;
+}
+###################################################
+output:
+
+str is :aa
+ptr is: 0x7ffee7db7680
+out ptr is: 0x7ffee7db7680
+out *ptr is: 
+
+
+# shared_ptr<T>指针 #######################################
+std::shared_ptr<std::string> func1(std::string str) {
+  str += str;
+  std::cout << "str is :" << str << std::endl;
+  std::shared_ptr<std::string> ptr = std::make_shared<std::string>(str);
+  std::cout << "ptr is: " << ptr << std::endl;
+  return ptr;
+}
+
+
+
+int main(int argc, char** argv) {
+  std::string str = "a";
+  std::shared_ptr<std::string> ptr = func1(str);
+  
+  std::cout << "out ptr is: " << ptr << std::endl;
+  std::cout << "out *ptr is: " << *ptr << std::endl;
+
+  return 0;
+}
+
+###################################################
+output:
+
+str is :aa
+ptr is: 0x11c6088
+out ptr is: 0x11c6088
+out *ptr is: aa
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+

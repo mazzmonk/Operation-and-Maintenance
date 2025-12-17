@@ -1,0 +1,17 @@
+gperftools用于内存分配，线程库
+必须先安装libunwind
+
+版本：
+libunwind-1.1.tar.gz
+gperftools-2.4.tar.gz
+
+tar zxvf libunwind-1.1.tar.gz
+cd libunwind 
+./configure --prefix=/usr && make && make install
+
+tar zxvf gperftools-2.4.tar.gz
+cd gperftools 
+./configure --prefix=/usr && make && make install
+
+
+

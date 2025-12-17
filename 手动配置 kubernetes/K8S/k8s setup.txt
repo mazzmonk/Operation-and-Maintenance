@@ -1,0 +1,186 @@
+版本: kubernetes-server-linux-amd64.tar.gz
+
+环境:
+IP                                                        
+192.168.1.100            vip 
+192.168.1.101            master node
+192.168.1.102            master node
+192.168.1.103            master node
+10.0.0.1                 kubernetes cluster ip
+10.0.0.1/16              cluster ip ranges
+172.10.16.0/16           docker ip ranges   
+
+
+1. kube-apiserver 证书及启动
+使用与系统一起启动的方式
+
+具体内容见当前目录中的 ca-csr.json, ca-config.json, apiserver-csr.json, kube-apiserver.service
+
+# 生成证书
+# 从 ca-csr.json 文件生成 ca 证书
+$ ./cfssl gencert -initca ca-csr.json | ./cfssljson -bare ca
+
+# 从 apiserver-csr.json 文件生成 apiserver 证书
+# apiserver-csr.json 
+{
+    "CN": "kubernetes",
+    "hosts": [
+      "127.0.0.1",
+      "192.168.1.100",
+      "192.168.1.101",
+      "192.168.1.102",
+      "192.168.1.103",
+      "10.0.0.1",
+      "kubernetes",
+      "kubernetes.default",
+      "kubernetes.default.svc",
+      "kubernetes.default.svc.cluster",
+      "kubernetes.default.svc.cluster.local"
+    ],
+    "key": {
+        "algo": "rsa",
+        "size": 2048
+    },
+    "names": [
+        {
+	        "C": "US",
+          "L": "CA",
+          "O": "My Company",
+          "ST": "San Francisco",
+          "OU": "K8s Fans Club"
+        }
+    ]
+}
+
+
+$ ./cfssl gencert -ca=ca.pem -ca-key=ca-key.pem --config=ca-config.json \
+	-profile=kubernetes apiserver-csr.json | ./cfssljson -bare kube-apiserver
+
+# kube-apiserver.service 文件
+具体路径 
+
+/lib/systemd/system/kube-apiserver.service
+
+注意启动参数中的如下几项:
+--advertise-address="192.168.1.101"       # 每个 apiserver 填写自己的 IP 地址
+--etcd-servers="https://192.168.1.101:2379,https://192.168.1.102:2379,https://192.168.1.103:2379"
+--service-account-issuer=https://kubernetes.default.svc.cluster.local                                               # 新增
+--service-account-signing-key-file=/home/k8s-admin/apps/certificates/kubernetes/ca-key.pem    # 新增
+
+
+新增的参数如下原文有描述
+https://kubernetes.io/zh-cn/docs/tasks/configure-pod-container/configure-service-account/
+
+1.20 以上版本具有
+--service-account-issuer
+--service-account-signing-key-file
+
+# 启动服务
+当配置完上述文件以后,一定需要
+
+systemctl daemon-reload         
+
+用于查看上述文件中的配置错误,通过 journalctl --no-page -f 或者 journalctl --no-page -f -u kube-apiserver 查看错误
+
+systemctl start kube-apiserver
+systemctl enable kube-apiserver
+
+
+2. kube-controller-manager 证书及启动
+使用与系统一起启动的方式
+
+具体内容见当前目录中的 kube-controller-manager-csr.json, kube-controller-manager.service
+注意 kube-controller-manager-csr.json 文件中的
+
+"OU": "controller-manager"  修改为
+"OU": "System"
+
+# 生成启动证书
+./cfssl gencert -ca=ca.pem -ca-key=ca-key.pem --config=ca-config.json \
+	-profile=kubernetes controller-manager.json | ./cfssljson -bare kube-controller-manager
+
+# 生成启动配置文件, 注意指定 apiserver 的时候用的地址 127.0.0.1
+KUBECONFIG=kube-controller-manager.conf kubectl config set-cluster kubernetes \
+	--server=https://127.0.0.1:6443 --certificate-authority ca.pem --embed-certs
+KUBECONFIG=kube-controller-manager.conf kubectl config set-credentials system:kube-controller-manager \
+	--client-key kube-controller-manager-key.pem --client-certificate kube-controller-manager.pem \
+	--embed-certs
+KUBECONFIG=kube-controller-manager.conf kubectl config set-context system:kube-controller-manager@kubernetes \
+	--cluster kubernetes --user system:kube-controller-manager
+KUBECONFIG=kube-controller-manager.conf kubectl config use-context system:kube-controller-manager@kubernetes 
+
+# kube-controller-manager.service 文件
+具体路径 
+
+/lib/systemd/system/kube-controller-manager.service
+
+systemctl start kube-controller-manager
+systemctl enable kube-controller-manager
+
+
+3. kube-scheduler 证书及启动
+使用与系统一起启动的方式
+
+具体内容见当前目录中的 kube-scheduler-csr.json, kube-scheduler.service
+注意 kube-scheduler-csr.json 文件中的
+
+"O": "system:kube-scheduler",
+"OU": "System"
+
+# 生成证书
+./cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json \
+        -profile=kubernetes kube-scheduler-csr.json | ./cfssljson -bare kube-scheduler
+
+# 生成启动配置文件
+KUBECONFIG=kube-scheduler.conf kubectl config set-cluster kubernetes \
+        --server=https://127.0.0.1:6443 --certificate-authority ca.pem --embed-certs
+KUBECONFIG=kube-scheduler.conf kubectl config set-credentials system:kube-scheduler \
+        --client-key kube-scheduler-key.pem --client-certificate kube-scheduler.pem --embed-certs
+KUBECONFIG=kube-scheduler.conf kubectl config set-context system:kube-scheduler@kubernetes \
+        --cluster kubernetes --user system:kube-scheduler
+KUBECONFIG=kube-scheduler.conf kubectl config use-context system:kube-scheduler@kubernetes
+
+
+# kube-scheduler.service 文件
+具体路径 
+
+/lib/systemd/system/kube-scheduler.service
+
+systemctl start kube-scheduler
+systemctl enable kube-scheduler
+
+
+4. 创建admin证书,用于 kubectl 访问 master
+
+具体内容见当前目录中的 admin-csr.json
+注意 admin-csr.json 文件中,如下的内容,表示是在 k8s 集群里的属组,及角色
+
+ "O": "system:masters",
+ "OU": "System"
+
+# 生成证书文件
+./cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json \
+	-profile=kubernetes admin-csr.json | ./cfssljson -bare admin
+
+这里使用的 apiserver 地址是 127.0.0.1 因此,证书文件连接都是本机的 apiserver
+KUBECONFIG=admin.kubeconfig kubectl config set-cluster kubernetes \
+	--server=https://127.0.0.1:6443 --certificate-authority ca.pem --embed-certs
+KUBECONFIG=admin.kubeconfig kubectl config set-credentials admin \
+	--client-key admin-key.pem --client-certificate admin.pem --embed-certs
+KUBECONFIG=admin.kubeconfig kubectl config set-context default  \
+	--cluster kubernetes --user admin
+KUBECONFIG=admin.kubeconfig kubectl config use-context default
+
+# 拷贝到用户目录
+cp ~/src/k8s/admin.kubeconfig ~/.kube/config
+
+# 测试
+kubectl get cs  
+
+
+
+
+
+
+
+

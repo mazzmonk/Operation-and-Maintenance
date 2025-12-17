@@ -1,0 +1,33 @@
+codeviz是一个用于给gcc打补丁然后编译gcc的工具
+然后使用生成的gcc/g++等工具编译源文件，最后生成相应的.cdepn文件，然后通过genfull、gengraph来生成图
+而安装完codeviz以后，会生成上述的工具
+
+codeviz是2部分的工具，一部分是给gcc打补丁，然后安装好，一部分是安装上述的2个工具
+
+codeviz目前支持gcc-3.4.6和gcc-4.6.2这2个版本的补丁
+
+
+软件：
+codeviz-1.0.12.tar.gz
+gcc-4.6.2.tar.gz
+
+解压好codeviz，把gcc-4.6.2.tar.gz拷贝到codeviz里的compilers目录中
+然后修改compliers目录中的install_gcc-4.6.2.sh脚本
+
+这里很重要：
+确保patch这个命令能使用，由于脚本本身没有错误提示，即使这个命令没有，在脚本输出过程中也是一闪而过
+修改configure部分成
+CFLAGS="-fPIC" ../gcc-4.6.2/configure
+不然会有缺少-fPIC的错误提示，这是个bug。
+
+然后 cd codeviz-1.0.12中
+./configure && make && make install
+
+
+整个过程实际就是一个编译gcc的过程，因此需要优先安装
+mpc,mpfr,gmp
+
+
+
+
+

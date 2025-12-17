@@ -1,0 +1,63 @@
+1. 加载数据集
+通常加载的数据集包括训练集及实际应用的集
+加载的数据类型各有不同,图像,音频,文字等等,加载的方式也各有不同,从文本,图片,数据表等等
+
+运行机器学习实验时，最佳做法是将数据集拆成三份：训练、验证 和 测试。
+
+2. 构建模型,即神经网络模型
+2.1 设置层
+神经网络的基本组成部分是层。层会从向其输送的数据中提取表示形式。希望这些表示形式有助于解决手头上的问题。大多数深度学习都包括将简单的层链接在一起。大多数层（如 tf.keras.layers.Dense）都具有在训练期间才会学习的参数。
+
+model = tf.keras.models.Sequential([
+  tf.keras.layers.Flatten(input_shape=(28, 28)),
+  tf.keras.layers.Dense(128, activation='relu'),
+  tf.keras.layers.Dropout(0.2),
+  tf.keras.layers.Dense(10)
+])
+
+比如上述的模型之中就有 Flatten,Dense层
+
+通常对原始的数据(指被格式化好的数据)进行处理,比如将图像像素话,将文字词例化和向量化等等都需要用到不同的层
+tf.keras.layers.X
+当使用不同类型的层的时候,通常需要一些自定义函数来处理数据中的内容,比如如果文本中包含特殊图标需要去除等等
+
+2.2 编译模型
+编译模型
+在准备对模型进行训练之前，还需要再对其进行一些设置。以下内容是在模型的编译步骤中添加的：
+. 损失函数(loss) - 测量模型在训练期间的准确程度。你希望最小化此函数，以便将模型“引导”到正确的方向上。
+. 优化器(optimizer) - 决定模型如何根据其看到的数据和自身的损失函数进行更新。
+. 指标(metrics) - 用于监控训练和测试步骤。以下示例使用了准确率，即被正确分类的图像的比率。
+
+model.compile(optimizer='adam',
+              loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+              metrics=['accuracy'])
+
+3. 训练模型
+3.1 将训练数据输送给模型,通常就是上述提到的测试数据集,测试数据集包含了需要预测的数据及与之匹配的数据内容,比如,需要预测的图片及与图片对应的标签,比如标签是鞋子(假如此模型是用于对数据进行分类,其类型有鞋子,袜子,衣服,裤子等等)
+
+要开始训练，请调用 model.fit 方法，这样命名是因为该方法会将模型与训练数据进行“拟合”：
+使用 Model.fit 方法调整您的模型参数并最小化损失：
+model.fit(x_test, y_test, epochs=10)
+
+3.2 要求模型对测试集（在本例中为 test_images 数组）进行预测。评估准确率
+model.evaluate(x_test,  y_test, verbose=2)
+test_loss, test_acc = model.evaluate(test_images,  test_labels, verbose=2)
+print('\nTest accuracy:', test_acc)
+
+3.3 模型训练完成以后,进行预测
+模型经过训练后，您可以使用它对一些图像进行预测。
+predictions = probability_model.predict(test_images)
+
+3.4 验证预测是否匹配测试数据集中的内容
+
+4. 使用训练好的模型
+要获得对新样本的预测，只需调用 model.predict() 即可。
+examples = [
+  "The movie was great!",
+  "The movie was okay.",
+  "The movie was terrible..."
+]
+
+export_model.predict(examples)
+
+

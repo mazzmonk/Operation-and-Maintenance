@@ -1,0 +1,5 @@
+kubernetes-dashboard版本不同，yaml文件不同，一定需要针对性的下载版本及对应的yaml文件
+下载的地址：
+https://github.com/kubernetes/dashboard/releases
+
+目前使用的是v1.5.1版本的镜像，因此需要使用这个版本对应的yaml文件，上述链接有下载

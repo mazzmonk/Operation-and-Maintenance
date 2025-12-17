@@ -1,0 +1,50 @@
+# A headless service to create DNS records
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+  labels:
+    app: mysql
+spec:
+  ports:
+  - port: 3306
+    name: web
+    *.mysql.default.svc.cluster.my
+  clusterIP: None
+  selector:
+    app: mysql
+---
+apiVersion: apps/v1alpha1
+kind: PetSet
+metadata:
+  name: db
+spec:
+  serviceName: "mysql"
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: mysql
+      annotations:
+        pod.alpha.kubernetes.io/initialized: "true"
+    spec:
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: mysql
+        image: 192.168.81.97:5000/project/blue/portal
+        ports:
+        - containerPort: 3306
+          name: mysql
+        volumeMounts:
+        - name: db
+          mountPath: /usr/share/mysql/html
+  volumeClaimTemplates:
+  - metadata:
+      name: db
+      annotations:
+        volume.alpha.kubernetes.io/storage-class: anything
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi

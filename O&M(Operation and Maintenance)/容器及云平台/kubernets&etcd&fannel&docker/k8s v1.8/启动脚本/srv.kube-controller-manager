@@ -1,0 +1,80 @@
+#!/bin/bash
+# author:jack
+# date:20170209
+# startup kube-controller-manager service
+# FILENAME:srv.kube-controller-manager
+###########################
+set -e
+set -x
+
+if [ -e GLOBAL-ENV ];then
+  source GLOBAL-ENV
+else
+  echo 'File GLOBAL-ENV does not exist.'
+  echo -1
+fi
+
+LOGS_PATH="$KUBERNETES_PREFIX/server/logs"
+
+$KUBERNETES_PREFIX/server/bin/kube-controller-manager \
+--address="0.0.0.0" \
+--alsologtostderr="false" \
+--cidr-allocator-type="RangeAllocator"  \
+--cluster-cidr="172.16.0.0/16"  \
+--cluster-name="kubernetes"  \
+--concurrent-deployment-syncs="10"  \
+--concurrent-endpoint-syncs="10"  \
+--concurrent-gc-syncs="20"  \
+--concurrent-namespace-syncs="10"  \
+--concurrent-rc-syncs="10"  \
+--concurrent-replicaset-syncs="10"  \
+--concurrent-resource-quota-syncs="10"  \
+--concurrent-service-syncs="3"  \
+--concurrent-serviceaccount-token-syncs="5"  \
+--configure-cloud-routes="false"  \
+--contention-profiling="true"  \
+--controllers="*"  \
+--deployment-controller-sync-period="45s"  \
+--enable-dynamic-provisioning="true"  \
+--enable-garbage-collector="true"  \
+--flex-volume-plugin-dir="$KUBERNETES_PREFIX/kubelet-plugins/volume/exec/"  \
+--horizontal-pod-autoscaler-downscale-delay="5m0s"  \
+--horizontal-pod-autoscaler-sync-period="45s"  \
+--horizontal-pod-autoscaler-upscale-delay="3m0s"  \
+--kube-api-burst="30"  \
+--kube-api-content-type="application/vnd.kubernetes.protobuf"  \
+--large-cluster-size-threshold="50"  \
+--log-dir="$LOGS_PATH/"  \
+--log-flush-frequency="2s"  \
+--loglevel="0"  \
+--logtostderr="false"  \
+--master="http://127.0.0.1:8080"  \
+--min-resync-period="12h0m0s"  \
+--namespace-sync-period="5m"  \
+--node-cidr-mask-size="24"  \
+--node-eviction-rate="0.1"  \
+--node-monitor-grace-period="40s"  \
+--node-monitor-period="3s"  \
+--node-startup-grace-period="2m"  \
+--pod-eviction-timeout="3m0s"  \
+--profiling="true"  \
+--pvclaimbinder-sync-period="20s"  \
+--resource-quota-sync-period="5m0s"  \
+--secondary-node-eviction-rate="0.01"  \
+--service-cluster-ip-range="10.0.0.0/16"  \
+--service-sync-period="3m0s" \
+--stderrthreshold="4"  \
+--terminated-pod-gc-threshold="12500"  \
+--unhealthy-zone-threshold="0.55"  \
+--use-service-account-credentials="true"  \
+--v="4" \
+--cluster-signing-cert-file="$CERTIFICATE_PATH/ca.crt"  \
+--cluster-signing-key-file="$CERTIFICATE_PATH/ca.key"  \
+--root-ca-file="$CERTIFICATE_PATH/ca.crt"  \
+--service-account-private-key-file="$CERTIFICATE_PATH/ca.key"  
+
+
+#--master="127.0.0.1:6443"  \
+#--stderrthreshold="0"  \
+#--log-backtrace-at=":0" \
+

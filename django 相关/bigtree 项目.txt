@@ -1,0 +1,207 @@
+$ python3.8 -m venv bigtree-env
+$ cd bigtree-env/
+$ source  bin/activate
+$ pip install Django
+Collecting Django
+  Downloading Django-4.0-py3-none-any.whl (8.0 MB)
+     |████████████████████████████████| 8.0 MB 475 kB/s 
+Collecting sqlparse>=0.2.2
+  Using cached sqlparse-0.4.2-py3-none-any.whl (42 kB)
+Collecting backports.zoneinfo; python_version < "3.9"
+  Downloading backports.zoneinfo-0.2.1-cp38-cp38-manylinux1_x86_64.whl (74 kB)
+     |████████████████████████████████| 74 kB 1.7 MB/s 
+Collecting asgiref<4,>=3.4.1
+  Using cached asgiref-3.4.1-py3-none-any.whl (25 kB)
+Installing collected packages: sqlparse, backports.zoneinfo, asgiref, Django
+Successfully installed Django-4.0 asgiref-3.4.1 backports.zoneinfo-0.2.1 sqlparse-0.4.2
+
+# 目前支持是 4.0 版本,官方支持 python 3.8,3.9,3.10 
+
+$ cd bigtree-env/bigtree && mkdir bigtree
+$ django-admin startproject bigtree
+$ mkdir settings && touch touch settings/__init__.py
+$ mv settings.py settings/base.py
+$ touch settings/develop.py
+
+
+* 修改 settings/base.py 为如下的内容
+
+LANGUAGE_CODE = 'zh-hans'
+
+TIME_ZONE = 'Asia/Shanghai'
+
+并且将数据库的部分剪切到  develop.py 文件中,同时将 DEBUG=True 也剪切过来,完整的 develop.py 文件如下:
+
+from .base import * # NOQA
+
+
+DEBUG = True
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+    }
+}
+
+
+* 修改 bigtree-env/bigtree/manage.py 及 bigtree-env/bigtree/bigtree/wsgi.py  文件,将
+     
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'bigtree.settings')
+
+替换为
+
+     profile = os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'bigtree.settings')
+     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'bigtree.settings.%s' % profile)
+
+
+$ ./manage.py startapp projectmanagement
+$ ./manage.py startapp toolconfig
+$ ./manage.py startapp deploytarget
+
+
+# 修改 urls.py 文件, 如下:
+
+内容如下:
+**************************************************
+from django.urls import path, re_path, include
+from django.contrib import admin
+from django.urls import path
+
+urlpatterns = [
+    re_path(r'^$', IndexView.as_view(), name='index'),
+
+    path('admin/', admin.site.urls),
+]
+**************************************************
+
+
+# 修改 settings/base.py 文件,添加如下的内容
+
+INSTALLED_APPS = [
+    'bigtree',
+    'deploytarget',
+    'projectmanagement',
+    'toolconfig',
+
+# 与 settings 同级目录添加 templates/index.html
+
+内容如下:
+**************************************************
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>首页</title>
+</head>
+<body>
+
+<li><a href="{% url 'index' %}">首页</a></li>
+
+
+</body>
+</html>
+
+**************************************************
+
+# 与 urls.py 统计目录下创建 views.py 文件
+
+内容如下:
+**************************************************
+from django.shortcuts import render
+from django.views.generic import TemplateView
+
+
+class IndexView(TemplateView):
+    template_name = "index.html"
+
+**************************************************
+
+
+# 配置静态资源及 css
+1. 与 settings 同级目录下建立 themes/bootstrap/{static, templates}, themes/default/{static, templates}
+同时将 index.html 文件放到 themes/bootstrap/templates/ 下
+
+2. 修改 base.py 文件
+添加: 
+THEME = 'bootstrap'   # 指向 bootstrap 这个目录
+
+修改:
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [os.path.join(BASE_DIR, 'themes', THEME, 'templates')],
+        'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.debug',
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
+            ],
+        },
+    },
+]
+
+修改及添加:
+
+STATIC_URL = '/static/'
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, 'themes', THEME, "static"),
+]
+
+3. 引用 bootstrap 如下 index.html 页面的事例
+
+{% load static %}               <-- 必须在首行-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <--上3行必须在这里-->
+
+
+    <title>{% block title %}首页{% endblock %}- BigTree DevOps</title>
+    <link rel="stylesheet" href="{% static 'css/bootstrap.min.css' %}"
+          integrity="sha384-HSMxcRTRxnN+Bdg0JdbxYKrThecOKuH5zCYotlSAcp1+c8xmyTe9GYg1l9a69psu"
+          crossorigin="anonymous">
+</head>
+
+
+
+
+
+
+# 建立 toolconfig 的 model
+
+
+# 在 toolconfig的admin.py中关联上述的model,会在admin的页面中显示toolconfig中的内容
+
+
+./manage.py makemigrations
+./manage.py migrate
+
+
+
+修改了 model 的字段以后,有如下的报错
+It is impossible to add a non-nullable field 'compilation_tool_name' to compilationtools without specifying a default. This is because the database needs something to populate existing rows.
+
+在compilation_tool_name 这个字段后面加上 ull=True, blank=True ,表示不为空,或者 default='' 也可以
+
+
+在类中的  def __str__(self): 函数作用
+__str__( )函数和__init__( )函数一样，都是python中的特殊函数，一般来说，打印对象会返回对象的地址，而地址信息通常对我们没有什么用，通过__str__( )函数可以打印对象的属性信息，方便我们调试代码。
+
+
+手动清除数据
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,146 @@
+etcd
+当前使用的是etcd-v3.3.13-linux-amd64,etcd 3.x和2.0版本使用的api函数不同,客户端连接etcd服务的方式很不同,k8s目前默认支持的是3.x版本,而在早期的3.0版本安装模式比较繁琐,批量安装困难(主要是每个节点的安装模式都不同),而v3.2.15的版本,使用一种新的安装,适合批量安装,其主要的改变就是所有的节点可以使用同一个安装命令以及绝大多数的参数都可以通用
+
+
+mkdir -p $HOME_PATH/apps/etcd/{bin,data,wal,logs}
+etcd/bin/{etcd,etcdctl}
+
+启动脚本: 此脚本通用所有节点,每个节点修改--name为自己的名称即可,使用普通用户启动
+########################################################
+$HOME_PATH/apps/etcd/bin/etcd \
+--name $ETCD_NODE02 \
+--data-dir "$HOME_PATH/apps/etcd/data" \
+--wal-dir "$HOME_PATH/apps/etcd/wal" \
+--snapshot-count 100000 \
+--heartbeat-interval 100 \
+--election-timeout 1000 \
+--listen-peer-urls "http://0.0.0.0:2380" \
+--listen-client-urls "http://0.0.0.0:2379,http://0.0.0.0:4001" \
+--grpc-keepalive-min-time '10s' \
+--grpc-keepalive-interval '30m' \
+--grpc-keepalive-timeout '30s' \
+--initial-advertise-peer-urls "http://$LOCAL_IPADDRESS:2380" \
+--initial-cluster "$ETCD_NODE01=http://$ETCD_NODE01_IPADDRESS:2380,$ETCD_NODE02=http://$ETCD_NODE02_IPADDRESS:2380,$ETCD_NODE03=http://$ETCD_NODE03_IPADDRESS:2380" \
+--initial-cluster-token "etcd-cluster" \
+--advertise-client-urls "http://$LOCAL_IPADDRESS:2379,http://$LOCAL_IPADDRESS:4001" \
+--initial-cluster-state "new"
+
+########################################################
+变量说明:
+$HOME_PATH     							#HOME目录
+$ETCD_NODE02							#本节点的名称,这个值必须在所有节点统一
+$LOCAL_IPADDRESS 					#本地IP地址,必须有网关的地址
+$ETCD_NODE01,$ETCD_NODE01_IPADDRESS     #节点1的名称,IP地址
+$ETCD_NODE02,$ETCD_NODE02_IPADDRESS   	#节点2的名称,IP地址
+$ETCD_NODE03,$ETCD_NODE03_IPADDRESS		#节点3的名称,IP地址
+
+说明:
+1.这里使用的是3个节点,按照etcd的集群算法设计,节点数目必须是2n-1个,即奇数,3/5/7等,但是节点数目必须平衡冗余和性能,节点越多,冗余性越大,同时,性能会下降,反之,亦然
+2.这里有一个性能的指标,请参照,另外,etcd是一个磁盘I/O敏感性应用,磁盘越快,性能越好.
+https://github.com/coreos/etcd/blob/master/Documentation/op-guide/performance.md
+3.etcd 3.x的版本提供了proxy的功能,考虑到,性能的问题,以及节点数目并不多,没有采用.
+
+
+所有的参数分为2种,如下
+成员参数:
+--name											#方便理解的节点名称,默认为default,在集群中应该保持唯一,可以使用hostname
+--data-dir										#服务运行数据保存的路径,默认为 ${name}.etcd
+--wal-dir 										#wal目录路径
+--snapshot-count							#指定有多少事务(transaction)被提交时,触发截取快照保存到磁盘,默认100000
+--heartbeat-interval:leader 		#多久发送一次心跳到followers.默认值是 100ms
+--eletion-timeout							#重新投票的超时时间,如果follow在该时间间隔没有收到心跳包,会触发重新投票,默认为 1000 ms
+--listen-peer-urls							#和同伴通信的地址,比如http://ip:2380,如果有多个,使用逗号分隔.需要所有节点都能够访问,所以不要使用localhost！如果指定IP为0.0.0.0,则etcd监听所有接口上给定的端口,同时如果使用域名将无效.
+--listen-client-urls						#对外提供服务的地址:比如http://ip:2379,http://127.0.0.1:2379,客户端会连接到这里和etcd交互,可以是http或https.如果指定IP为0.0.0.0,则etcd监听所有接口上的给定端口,同时如果使用域名将无效.
+--max-snapshots							#保留的最大快照文件数量(0无限制),默认:5
+--max-wals										#要保留的最大wal文件数(0是无限的),默认:5
+--cors 												#用于CORS(跨域访问,主要用于客户端访问时候出现与服务端不同域的时候)逗号分离的白名单,默认:''
+--quota-backend-bytes				#当后端大小超过给定配额时发出警报(这里的配额指什么未知),默认:0
+--max-TXN-OPS								#一个事物中最大的操作数,默认:128
+--max-request-bytes					#服务器将接受的最大客户端请求大小(字节).默认值:1572864
+--grpc-keepalive-min-time			#在ping服务器之前,客户端应该等待的最短时间间隔.默认:5s
+--grpc-keepalive-interval			#服务器到客户端ping的频率持续时间,用于检查连接是否处于活动状态(0表示禁用).默认:2小时
+--grpc-keepalive-timeout			#关闭无响应连接之前的等待时间(0为禁用).默认:20s
+
+
+集群参数:
+--initial前缀标志用于引导（静态引导,发现服务引导或运行时重新配置）新成员,并在重新启动现有成员时被忽略.
+
+--initial-advertise-peer-urls		#该节点同伴监听地址,这个值会告诉集群中其他节点,至少有一个必须可路由到所有集群成员,可以包含域名.格式:http://10.0.0.1:2380
+--initial-cluster								#集群初始信息,格式为 node1=http://ip1:2380,注意:这里的 node1 是节点的--name指定的名字；后面的 ip1:2380 是 --initial-advertise-peer-urls 指定的值,如果是多个节点需要使用node1=http://ip1:2380,node2=http://ip2:2380,node3=http://ip3:2380,并且对应--initial-cluster-state值为new
+--initial-cluster-state					#新建集群的时候,这个值为 new；假如已经存在的集群,这个值为 existing;默认是:new
+--initial-cluster-token					#创建集群的 token,这个值每个集群保持唯一.这样的话,如果你要重新创建集群,即使配置和之前一样,也会再次生成新的集群和节点 uuid；否则会导致多个集群之间的冲突,造成未知的错误
+--advertise-client-urls					#对外公告的该节点客户端监听地址,这个值会告诉集群中其他节点,客户端连接地址,格式:http://10.0.0.1:2379
+
+--discovery在使用发现服务时需要设置前缀标志.(忽略)
+
+--discovery ''									#discovery URL used to bootstrap the cluster.
+--discovery-fallback 'proxy'		#expected behavior ('exit' or 'proxy') when discovery services fails."proxy" supports v2 API only.
+--discovery-proxy ''						#HTTP proxy to use for traffic to discovery service.
+--discovery-srv ''							#dns srv domain used to bootstrap the cluster.
+--strict-reconfig-check 				#拒绝会导致仲裁丢失的重新配置请求,默认: 'true'
+--auto-compaction-retention	#自动压缩保持长度. 0表示禁用自动压缩,默认'0'
+--auto-compaction-mode 			#解释 'auto-compaction-retention'模式,单选: periodic|revision. 'periodic' 表示以持续时间为基础,如果没有提供时间单位,则默认为小时 (e.g. '5m'). 'revision'表示以修订号为基础,默认:'periodic'
+--enable-v2 									#接受V2版本的客户端请求,默认:'true'	
+
+代理参数: (忽略)
+"proxy" 只支持 v2 API
+
+--proxy 'off'									#proxy mode setting ('off', 'readonly' or 'on').
+--proxy-failure-wait 5000			#time (in milliseconds) an endpoint will be held in a failed state.
+--proxy-refresh-interval 30000	#time (in milliseconds) of the endpoints refresh interval.
+--proxy-dial-timeout 1000			#time (in milliseconds) for a dial to timeout.
+--proxy-write-timeout 5000		#time (in milliseconds) for a write to timeout.
+--proxy-read-timeout 0				#time (in milliseconds) for a read to timeout.
+
+安全参数:
+--ca-file '' [弃用]							#path to the client server TLS CA file. '-ca-file ca.crt'被'-trusted-ca-file ca.crt -client-cert-auth'替换 and etcd will perform the same.
+--cert-file ''										#path to the client server TLS cert file.
+--key-file ''										#path to the client server TLS key file.
+--client-cert-auth 'false'				#enable client cert authentication.
+--client-crl-file ''							#path to the client certificate revocation list file.
+--trusted-ca-file ''							#path to the client server TLS trusted CA cert file.
+--auto-tls 'false'							#client TLS using generated certificates.
+--peer-ca-file '' [弃用]					#path to the peer server TLS CA file. '-peer-ca-file ca.crt' 被 '-peer-trusted-ca-file ca.crt -peer-client-cert-auth'替换 and etcd will perform the same.
+--peer-cert-file ''							#path to the peer server TLS cert file.
+--peer-key-file ''							#path to the peer server TLS key file.
+--peer-client-cert-auth 'false'		#enable peer client cert authentication.
+--peer-trusted-ca-file ''				#path to the peer server TLS trusted CA file.
+--peer-cert-allowed-cn ''				#Required CN for client certs connecting to the peer endpoint.
+--peer-auto-tls 'false'					#peer TLS 用自生证书,如果--peer-key-file 和 --peer-cert-file 没提供.
+--peer-crl-file ''								#path to the peer certificate revocation list file.
+--cipher-suites ''							#comma-separated list of supported TLS cipher suites between client/server and peers (empty will be auto-populated by Go).
+
+日志参数:
+--debug 											#启用debug日志,默认:'false'
+--log-package-levels					#为每个etcd包指定特定的日志级别 (eg: 'etcdmain=CRITICAL,etcdserver=DEBUG'),默认:''
+--log-output 									#指定'stdout'或'stderr'以跳过日志记录,即使在systemd下运行也是如此,默认:'default'	
+
+
+不安全参数:
+Please be CAUTIOUS when using unsafe flags because it will break the guarantees given by the consensus protocol.
+
+--force-new-cluster 'false'			#强制产生一个成员的集群
+
+剖析参数:
+--enable-pprof 'false'					#Enable runtime profiling data via HTTP server. Address is at client URL + "/debug/pprof/"
+--metrics 'basic'							#设置导出的指标的详细程度,指定“扩展”以包括直方图指标.
+--listen-metrics-urls ''					#要监听指标的URL列表
+
+auth flags:
+--auth-token 'simple'					#Specify a v3 authentication token type and its options ('simple' or 'jwt').
+
+实验参数: (忽略)
+--experimental-initial-corrupt-check 'false'	#enable to check data corruption before serving any client/peer traffic.
+--experimental-corrupt-check-time '0s'			#duration of time between cluster corruption check passes.
+--experimental-enable-v2v3 ''							#serve v2 requests through the v3 backend under a given prefix.
+
+
+注意:使用的--force-new-cluster参数,强迫新建集群使用新的配置
+这里有个诡异的情况,就是直接用上述的脚本,所有日志都无法写入日志文件,因此用nohup x.sh &方式
+
+
+
+
+
+
+

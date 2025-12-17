@@ -1,0 +1,23 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  namespace: own-project
+  name: elasticsearch
+  labels:
+    name: elasticsearch
+spec:
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        name: elasticsearch
+    spec:
+      containers:
+      - name: elasticsearch
+        image: 192.168.81.97:5000/elasticsearch:latest
+        ports:
+        - containerPort: 9200
+        securityContext:
+          privileged: true
+
+

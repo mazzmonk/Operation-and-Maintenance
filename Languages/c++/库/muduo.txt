@@ -1,0 +1,55 @@
+1.安装配置
+目前用的muduo-1.0.6版本
+解压文件，编辑目录中的build.sh文件，修改如下：
+将INSTALL_DIR=/usr/local/muduo
+
+./build.sh -j2
+./build.sh install
+
+最终安装到/usr/local/muduo下
+
+2.eclipse配置
+c/c++ Build->settings->GCC C Compiler->includes右侧设置/usr/local/muduo/include/muduo
+c/c++ Build->settings->GCC C++ Compiler->includes右侧设置/usr/local/muduo/include/muduo
+c/c++ Build->settings->GCC C++ Linker->Libraries(-l)设置 muduo_net muduo_base pthread，路径设置成/usr/local/muduo/lib
+
+同时把/usr/local/muduo/include/muduo链接到/usr/include/下
+
+
+Reactor释义“反应堆”，是一种事件驱动机制。和普通函数调用的不同之处在于：应用程序不是主动的调用某个API完成处理，而是恰恰相反，Reactor逆置了事件处理流程，应用程序需要提供相应的接口并注册到Reactor上，如果相应的时间发生，Reactor将主动调用应用程序注册的接口，这些接口又称为“回调函数”.
+
+muduo主要通过3个类来实现Reactor模式：EventLoop，Channel，Poller。
+
+1. EventLoop
+事件循环。moduo的线程模型为one loop per thread,即每个线程只能有一个EventLoop对象。EventLoop对象的生命周期通常和其所属的线程一样长。
+
+数据成员：
+const pid_t threadId_;保存当前EventLoop所属线程id
+boost::scoped_ptr poller_; 实现I/O复用 boost::scoped_ptr timerQueue_;
+int wakeupFd_;
+boost::scoped_ptr wakeupChannel_; 用于处理wakeupFd_上的可读事件，将事件分发到handlRead() 
+ChannelList activeChannels_; 有事件就绪的              
+Channel Channel* currentActiveChannel_;
+MutexLock mutex_; pendingFunctors_回暴露给其他线程，所以需要加锁
+std::vector<Functor> pendingFunctors_;
+
+2. Channel
+事件分发器。每个Channel只属于一个EventLoop,每个Channel只负责一个文件描述符fd的IO事件分发，但其不拥有fd。
+
+数据成员：
+int fd_文件描述符，
+int events_ 文件描述符注册事件，
+int revents_文件描述符的就绪事件，由Poller::poll设置
+readCallback_,writeCallback...各种事件回调，会在拥有该Channel类的构造函数中被注册，例如TcpConnction会在构造函数中TcpConnection::handlRead()注册给Channel::readCallback
+
+3. Poller
+Poller是IO multiplexing的封装，封装了poll和epoll。Poller是EventLoop的间接成员，只供拥有该Poller的EventLoop在IO线程调用。生命期与EventLoop相等。
+
+数据成员：
+vector pollfds_事件结构体数组用于poll的第一个参数;
+map<int,channel*> channels_用于文件描述符fd到Channel的映射便于快速查找到相应的Channel
+
+
+
+
+

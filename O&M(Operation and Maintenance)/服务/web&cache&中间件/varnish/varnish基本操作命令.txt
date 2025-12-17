@@ -1,0 +1,102 @@
+显示varsnih发送到后端的top请求
+varnishtop -i BereqURL  
+
+显示前端发送到varnish的请求
+varnishtop -i ReqURL    //客户端请求，不论后端或者缓存
+
+显示请求头中的匹配项
+varnishtop -C -I ReqHeader:User-Agent //请求头中匹配User-Agent的项
+
+varnishtop -C -I RespHeader:^ //返回头中的所有的RespHeader信息
+
+varnishtop -C //显示请求和返回头信息
+
+example:
+    0.58 ReqHeader	User-Agent: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:45.0) Gecko/20100101 Firefox/45.0
+
+
+显示后端交互
+varnishtop -b
+
+显示客户端交互
+varnishtop -c
+
+
+当启动varnish服务的时候如果有错误，可以通过加上-d参数来显示debug信息
+
+
+使用./varnishadm -T 127.0.0.1:8888管理平台时候，需要认证信息Authentication required，此时需要指定密钥文件，如下：
+Authentication required
+在默认情况下，启动varnish时候如果不指定密钥文件，此时连接管理平台时也需要，只有限制使用时候，才不需要认证。因此在启动服务器的时候需要指定密钥
+文件，如下:其中的-S参数是指定密钥文件
+/home/blue/apps/varnish/sbin/varnishd -f /home/blue/apps/varnish/etc/varnish/default.vcl -S /home/blue/apps/varnish/etc/varnish/secret -s file,/home/blue/apps/varnish/var/varnish_cache,10G -T 127.0.0.1:8888 -a 0.0.0.0:8090
+
+关键的地方是如何生成密钥文件，如果文件是空的话，启动的时候，会有文件为空的提示，因此使用如下的方式
+
+一个创建密钥文件的好方法是：
+
+dd if=/dev/random of=/home/blue/apps/varnish/etc/varnish/secret count=1
+
+如果你要禁用 -S/PSK认证，指定'-S'一个空的参数给varnishd：
+
+varnishd [...] -S "" [...]
+
+如此就可以通过./varnishadm -T 127.0.0.1:8888 -S /home/blue/apps/varnish/etc/varnish/secret 登录管理平台
+
+
+这里在响应头里添加一个字段，可以在头中查询是否缓存命中
+
+sub vcl_deliver {
+     if (obj.hits > 0) {
+        set resp.http.X-Cache = "Hit from"+" "+server.ip;
+    } else {
+        set resp.http.X-Cache = "Miss via"+" "+server.ip;
+    }
+}
+
+x-cache这个字段可以随便填写
+
+从浏览器的调试信息中查看返回头信息：
+
+Age: 16
+Connection: keep-alive
+Content-Type: image/png
+Date: Tue, 22 Mar 2016 03:38:02 GMT
+Etag: "56efa178-1d726"
+Last-Modified: Mon, 21 Mar 2016 07:23:36 GMT
+Server: nginx/1.9.9
+Via: 1.1 varnish-v4
+X-Cache: Hit from 10.101.33.84
+X-Varnish: 32770 3
+
+Accept-Ranges: bytes
+Age: 0
+Connection: keep-alive
+Content-Length: 379022
+Content-Type: image/png
+Date: Tue, 22 Mar 2016 03:39:14 GMT
+Etag: "56efa176-5c88e"
+Last-Modified: Mon, 21 Mar 2016 07:23:34 GMT
+Server: nginx/1.9.9
+Via: 1.1 varnish-v4
+X-Cache: Miss via 10.101.33.84
+X-Varnish: 10
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

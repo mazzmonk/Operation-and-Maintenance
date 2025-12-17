@@ -1,0 +1,162 @@
+// 禁止使用拷贝构造函数和赋值操作的宏
+// 应在类的 private:中使用
+#define DISALLOW_COPY_AND_ASSIGN(TypeName) \
+TypeName(const TypeName&); \
+void operator=(const TypeName&)
+
+class Foo {
+public:
+Foo(int f);
+~Foo();
+private:
+DISALLOW_COPY_AND_ASSIGN(Foo);
+};
+
+如果不定义拷贝构造函数和赋值操作的宏，如上，因为如果不自己禁止，编译器会自动生成一个。宏 DISALLOW_COPY_AND_ASSIGN 置于 private:块之后,作为类的最后部分。
+
+
+仅在输入参数类型不同、功能相同时使用重载函数(含构造函数),不要使用函数重载模仿缺省函数参数。
+定义:可以定义一个函数参数类型为 const string&,并定义其重载函数类型为 const char*。
+class MyClass {
+public:
+void Analyze(const string &text);
+void Analyze(const char *text, size_t textlen);
+};
+
+
+禁止使用变长数组和 alloca()。使用安全的分配器(allocator),如 scoped_ptr/scoped_array。
+
+
+使用 C++ 风格而不要使用 C 风格类型转换。
+1) static_cast:和 C 风格转换相似可做值的强制转换,或指针的父类到子类的明确的向上转换;
+2) const_cast:移除 const 属性;
+3) reinterpret_cast:指针类型和整型或其他指针间不安全的相互转换,仅在你对所做一切了然于心时使用;
+4) dynamic_cast:除测试外不要使用,除单元测试外,如果你需要在运行时确定类型信息,说明设计有缺陷(参考 RTTI)。
+
+
+对于迭代器和其他模板对象使用前缀形式(++i)的自增、自减运算符。对简单数值(非对象)来说,两种都无所谓,对迭代器和模板类型来说,要使用前置自增(自减)。
+
+整数用 0,实数用 0.0,指针用 NULL,字符(串)用'\0'。
+
+
+1. 不在构造函数中做太多逻辑相关的初始化;
+2. 编译器提供的默认构造函数不会对变量进行初始化,如果定义了其他构造函数,编译器不再提供,需要编码者自行提供默认构造函数;
+3. 为避免隐式转换,需将单参数构造函数声明为 explicitexplicit;
+4. 为避免拷贝构造函数、赋值操作的滥用和编译器自动生成,可目前声明其为 private且无需实现;
+5. 仅在作为数据集合时使用 struct
+6. 组合>实现继承>接口继承>私有继承，子类重载的虚函数也要声明 virtual 关键字，虽然编译器允许不这样做;
+7. 避免使用多重继承,使用时,除一个基类含有实现外,其他基类均为纯接口;
+8. 接口类类名以 Interface 为后缀,除提供带实现的虚析构函数、静态成员函数外,其他均为纯虚函数,不定义非静态数据成员,不提供构造函数,提供的话,声明为protected
+9. 为降低复杂性,尽量不重载操作符,模板、标准类中使用时提供文档说明;
+10. 存取函数一般内联在头文件中;
+11. 声明次序:public->protected->private;
+12. 函数体尽量短小、紧凑,功能单一。
+
+1. 对于智能指针,安全第一、方便第二,尽可能局部化(scoped_ptr);
+2. 引用形参加上 const,否则使用指针形参;
+3. 函数重载的使用要清晰、易读;
+4. 鉴于容易误用,禁止使用缺省函数参数(值得商榷);
+5. 禁止使用变长数组;
+6. 合理使用友元;
+7. 为了方便代码管理,禁止使用异常(值得商榷);
+8. 禁止使用 RTTI,否则重新设计代码吧;
+9. 使用 C++ 风格的类型转换,除单元测试外不要使用 dynamic_cast;
+10. 使用流还 printf + read/write it is a problem;
+11. 能用前置自增/减不用后置自增/减;
+12. const 能用则用,提倡 const 在前;
+13. 使用确定大小的整型,除位组外不要使用无符号型;
+14. 格式化输出及结构对齐时,注意 32 位和 64 位的系统差异;
+15. 除字符串化、连接外尽量避免使用宏;
+16. 整数用 0,实数用 0.0,指针用 NULL,字符(串)用'\0'
+17. 用 sizeof(varname)代替 sizeof(type);
+18. 只使用 Boost 中被认可的库。
+
+
+类型命名(Names)
+类型命名每个单词以大写字母开头,不包含下划线:MyExcitingClass、MyExcitingEnum。
+所有类型命名——类、结构体、类型定义(typedef)、枚举——使用相同约定,例如:
+// classes and structs
+class UrlTable { ...
+class UrlTableTester { ...
+struct UrlTableProperties { ...
+// typedefs
+typedef hash_map<UrlTableProperties *, string> PropertiesMap;
+// enums
+enum UrlTableErrors { ...
+
+变量命名(Variable Names)
+变量名一律小写,单词间以下划线相连,类的成员变量以下划线结尾,如my_exciting_local_variable、my_exciting_member_variable_。
+普通变量命名:
+举例:
+string table_name; // OK - uses underscore.
+string tablename; // OK - all lowercase.
+string tableName; // Bad - mixed case.
+类数据成员:
+结构体的数据成员可以和普通变量一样,不用像类那样接下划线:
+struct UrlTableProperties {
+string name;
+int num_entries;
+}
+全局变量:
+对全局变量没有特别要求,少用就好,可以以 g_或其他易与局部变量区分的标志为前缀。
+
+常量命名(Constant Names)
+在名称前加 k:kDaysInAWeek。
+所有编译时常量(无论是局部的、全局的还是类中的)和其他变量保持些许区别,k 后接大写字母开头的单词:
+const int kDaysInAWeek = 7;
+( Function Names
+)
+
+函数命名(Names)
+普通函数(regular functions,译者注,这里与访问函数等特殊函数相对)大小写混合,存取函数(accessors and mutators)则要求与变量名匹配:MyExcitingFunction()、MyExcitingMethod()、my_exciting_member_variable()、set_my_exciting_member_variable()。
+普通函数:
+函数名以大写字母开头,每个单词首字母大写,没有下划线:
+AddTableEntry()
+DeleteUrl()
+存取函数:
+存取函数要与存取的变量名匹配,这儿摘录一个拥有实例变量 num_entries_的类:
+class MyClass {
+public:
+...
+int num_entries() const { return num_entries_; }
+void set_num_entries(int num_entries) { num_entries_ = num_entries; }
+private:
+int num_entries_;
+};
+其他短小的内联函数名也可以使用小写字母,例如,在循环中调用这样的函数甚至都不需要缓存其值,小写命名就可以接受。
+
+命名空间(Names)
+命名空间的名称是全小写的,其命名基于项目名称和目录结构:google_awesome_project。
+
+枚举命名(Names)
+枚举值应全部大写,单词间以下划线相连:MY_EXCITING_ENUM_VALUE。
+枚举名称属于类型,因此大小写混合:UrlTableErrors。
+enum UrlTableErrors {
+OK = 0,
+ERROR_OUT_OF_MEMORY,ERROR_MALFORMED_INPUT,
+};
+( Macro Names
+)
+
+宏命名(Names)
+你并不打算使用宏,对吧?如果使用,像这样:MY_MACRO_THAT_SCARES_SMALL_CHILDREN。
+参考第四篇预处理宏,通常是不使用宏的,如果绝对要用,其命名像枚举命名一样全部大写 、
+使用下划线:
+#define ROUND(x) ...
+#define PI_ROUNDED 3.0
+MY_EXCITING_ENUM_VALUE
+( Exceptions to Naming Rules
+)
+
+命名规则例外(Rules)
+当命名与现有 C/C++实体相似的对象时,可参考现有命名约定:
+bigopen()
+函数名,参考 open()
+uint
+typedef 类型定义
+bigpos
+struct 或 class,参考 pos
+sparse_hash_map
+STL 相似实体;参考 STL 命名约定
+LONGLONG_MAX
+常量,类似 INT_MAX

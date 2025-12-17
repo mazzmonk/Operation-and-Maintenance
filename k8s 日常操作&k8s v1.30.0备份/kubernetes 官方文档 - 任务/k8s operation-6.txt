@@ -1,0 +1,1257 @@
+索引:
+----------------------------------------------------------------------------------------------------------------
+第六部分(6/16)
+
+# 给应用注入数据
+给你的工作负载 Pod 指定配置和其他数据.
+
+## 为容器设置启动时要执行的命令和参数 - 重要,在 pod 下设置容器启动用的命令和参数,最通用的方式
+本章节将展示如何为 Pod 中容器设置启动时要执行的命令及其参数.
+
+* 创建 Pod 时设置命令及参数
+创建 Pod 时,可以为其下的容器设置启动时要执行的命令及其参数.如果要设置命令,就填写在配置文件的 command 字段下,如果要设置命令的参数,就填写在配置文件的 args 字段下.一旦 Pod 创建完成,该命令及其参数就无法再进行更改了.
+
+如果在配置文件中设置了容器启动时要执行的命令及其参数,那么容器镜像中自带的命令与参数将会被覆盖而不再执行.如果配置文件中只是设置了参数,却没有设置其对应的命令,那么容器镜像中自带的命令会使用该新参数作为其执行时的参数.
+
+说明: 
+command 字段对应于 ENTRYPOINT,而 args 字段对应于某些容器运行时的 CMD.
+
+本示例中,将创建一个只包含单个容器的 Pod.在此 Pod 配置文件中设置了一个命令与两个参数: 
+
+commands.yaml
+-----------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: command-demo
+  labels:
+    purpose: demonstrate-command
+spec:
+  containers:
+  - name: command-demo-container
+    image: debian
+    command: ["printenv"]
+    args: ["HOSTNAME","KUBERNETES_PORT"]
+  restartPolicy: OnFailure
+-----------------------
+
+1. 基于 YAML 文件创建一个 Pod: 
+$ kubectl apply -f commands.yaml
+
+^^^^^^^^^^^^^^^^^^^^
+# 错误测试,尝试使用 server-side apply 的方式强行修改正在运行的配置
+
+由于 image 的 pull 错误,因此将上述的 yaml 文件中添加了一行
+
+ - name: command-demo-container
+    image: debian
+    imagePullPolicy: Never    # 添加此行
+    command: ["printenv"]
+
+# 执行
+$ kubectl apply -f commands.yaml  --server-side --dry-run=server --force-conflicts
+
+出现错误:
+The Pod "command-demo" is invalid: spec: Forbidden: pod updates may not change fields other than `spec.containers[*].image`,`spec.initContainers[*].image`,`spec.activeDeadlineSeconds`,`spec.tolerations` (only additions to existing tolerations),`spec.terminationGracePeriodSeconds` (allow it to be set to 1 if it was previously negative),`spec.containers[*].resources` (for CPU/memory only)
+  core.PodSpec{
+  	Volumes:        {{Name: "kube-api-access-v6rc6",VolumeSource: {Projected: &{Sources: {{ServiceAccountToken: &{ExpirationSeconds: 3607,Path: "token"}},{ConfigMap: &{LocalObjectReference: {Name: "kube-root-ca.crt"},Items: {{Key: "ca.crt",Path: "ca.crt"}}}},{DownwardAPI: &{Items: {{Path: "namespace",FieldRef: &{APIVersion: "v1",FieldPath: "metadata.namespace"}}}}}},DefaultMode: &420}}}},
+  	InitContainers: nil,
+  	Containers: []core.Container{
+  		{
+  			... // 17 identical fields
+  			TerminationMessagePath:   "/dev/termination-log",
+  			TerminationMessagePolicy: "File",
+- 			ImagePullPolicy:          "Always",
++ 			ImagePullPolicy:          "Never",
+  			SecurityContext:          nil,
+  			Stdin:                    false,
+  			... // 2 identical fields
+  		},
+  	},
+  	EphemeralContainers: nil,
+  	RestartPolicy:       "OnFailure",
+  	... // 28 identical fields
+  }
+
+说明: server-side apply 对于不能修改的字段与 apply -f 相同.
+
+vvvvvvvvvvvvvvvvvvvv
+
+2. 获取正在运行的 Pod: 
+$ kubectl get pods
+
+查询结果显示在 command-demo 这个 Pod 下运行的容器已经启动完成.
+
+3. 如果要获取容器启动时执行命令的输出结果,可以通过 Pod 的日志进行查看: 
+$ kubectl logs command-demo
+
+日志中显示了 HOSTNAME 与 KUBERNETES_PORT 这两个环境变量的值: 
+
+command-demo
+tcp://10.3.240.1:443
+
+* 使用环境变量来设置参数
+在上面的示例中,我们直接将一串字符作为命令的参数.除此之外,我们还可以将环境变量作为命令的参数.
+
+env:
+- name: MESSAGE
+  value: "hello world"
+command: ["/bin/echo"]
+args: ["$(MESSAGE)"]
+
+这意味着你可以将那些用来设置环境变量的方法应用于设置命令的参数,其中包括了 ConfigMap 与 Secret.
+
+说明: 
+环境变量需要加上括号,类似于 "$(VAR)".这是在 command 或 args 字段使用变量的格式要求.
+
+* 在 Shell 来执行命令
+有时候,你需要在 Shell 脚本中运行命令.例如,你要执行的命令可能由多个命令组合而成,或者它就是一个 Shell 脚本.这时,就可以通过如下方式在 Shell 中执行命令: 
+
+command: ["/bin/sh"]
+args: ["-c","while true; do echo hello; sleep 10;done"]
+
+## 定义相互依赖的环境变量 - 重要,描述了环境变量的相互依赖,特别是定义时候有先后顺序的要求
+本章节展示了如何为 Kubernetes Pod 中的容器定义相互依赖的环境变量.
+
+* 为容器定义相互依赖的环境变量
+当创建一个 Pod 时,你可以为运行在 Pod 中的容器设置相互依赖的环境变量.若要设置相互依赖的环境变量,你可以在配置清单文件的 env 的 value 中使用 $(VAR_NAME).
+
+在本练习中,你会创建一个单容器的 Pod.此 Pod 的配置文件定义了一个已定义常用用法的相互依赖的环境变量.下面是此 Pod 的配置清单: 
+
+dependent-envars.yaml
+---------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: dependent-envars-demo
+spec:
+  containers:
+    - name: dependent-envars-demo
+      args:
+        - while true; do echo -en '\n'; printf UNCHANGED_REFERENCE=$UNCHANGED_REFERENCE'\n'; printf SERVICE_ADDRESS=$SERVICE_ADDRESS'\n';printf ESCAPED_REFERENCE=$ESCAPED_REFERENCE'\n'; sleep 30; done;
+      command:
+        - sh
+        - -c
+      image: busybox:1.28
+      env:
+        - name: SERVICE_PORT
+          value: "80"
+        - name: SERVICE_IP
+          value: "172.17.0.1"
+        - name: UNCHANGED_REFERENCE
+          value: "$(PROTOCOL)://$(SERVICE_IP):$(SERVICE_PORT)"
+        - name: PROTOCOL
+          value: "https"
+        - name: SERVICE_ADDRESS
+          value: "$(PROTOCOL)://$(SERVICE_IP):$(SERVICE_PORT)"
+        - name: ESCAPED_REFERENCE
+          value: "$$(PROTOCOL)://$(SERVICE_IP):$(SERVICE_PORT)"
+---------------------------------
+
+1. 依据清单创建 Pod: 
+$ kubectl apply -f dependent-envars.yaml
+pod/dependent-envars-demo created
+
+2. 列出运行的 Pod: 
+$ kubectl get pods dependent-envars-demo
+NAME                      READY     STATUS    RESTARTS   AGE
+dependent-envars-demo     1/1       Running   0          9s
+
+3. 检查 Pod 中运行容器的日志: 
+$ kubectl logs pod/dependent-envars-demo
+
+UNCHANGED_REFERENCE=$(PROTOCOL)://172.17.0.1:80
+SERVICE_ADDRESS=https://172.17.0.1:80
+ESCAPED_REFERENCE=$(PROTOCOL)://172.17.0.1:80
+
+如上所示,你已经定义了 SERVICE_ADDRESS 的正确依赖引用,UNCHANGED_REFERENCE 的错误依赖引用,并跳过了 ESCAPED_REFERENCE 的依赖引用.
+
+如果环境变量被引用时已事先定义,则引用可以正确解析,比如 SERVICE_ADDRESS 的例子.
+
+请注意,env 列表中的顺序很重要.如果某环境变量定义出现在列表的尾部,则在解析列表前部环境变量时不会视其为“已被定义”.这就是为什么 UNCHANGED_REFERENCE 在上面的示例中解析 $(PROTOCOL) 失败的原因.
+
+当环境变量未定义或仅包含部分变量时,未定义的变量会被当做普通字符串对待,比如 UNCHANGED_REFERENCE 的例子.注意,解析不正确的环境变量通常不会阻止容器启动.
+
+$(VAR_NAME) 这样的语法可以用两个 $ 转义,即: $$(VAR_NAME).无论引用的变量是否定义,转义的引用永远不会展开.这一点可以从上面 ESCAPED_REFERENCE 的例子得到印证.
+
+## 为容器设置环境变量 - 重要,使用 env 方式设置给容器设置环境变量
+本章节将展示如何为 Kubernetes Pod 下的容器设置环境变量.
+
+* 为容器设置一个环境变量
+创建 Pod 时,可以为其下的容器设置环境变量.通过配置文件的 env 或者 envFrom 字段来设置环境变量.
+
+env 和 envFrom 字段具有不同的效果.
+env: 可以为容器设置环境变量,直接为你所给的每个变量指定一个值.
+envFrom: 你可以通过引用 ConfigMap 或 Secret 来设置容器的环境变量.使用 envFrom 时,引用的 ConfigMap 或 Secret 中的所有键值对都被设置为容器的环境变量.你也可以指定一个通用的前缀字符串.
+
+本章节介绍如何使用 env.
+
+本示例中,将创建一个只包含单个容器的 Pod.此 Pod 的配置文件中设置环境变量的名称为 DEMO_GREETING,其值为 "Hello from the environment".下面是此 Pod 的配置清单: 
+
+envars.yaml
+----------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: envar-demo
+  labels:
+    purpose: demonstrate-envars
+spec:
+  containers:
+  - name: envar-demo-container
+    image: gcr.io/google-samples/hello-app:2.0
+    env:
+    - name: DEMO_GREETING
+      value: "Hello from the environment"
+    - name: DEMO_FAREWELL
+      value: "Such a sweet sorrow"
+------------------------------------------
+
+1.基于配置清单创建一个 Pod: 
+$ kubectl apply -f envars.yaml
+
+2.获取正在运行的 Pod 信息: 
+$ kubectl get pods -l purpose=demonstrate-envars
+
+查询结果应为: 
+NAME            READY     STATUS    RESTARTS   AGE
+envar-demo      1/1       Running   0          9s
+
+3. 列出 Pod 容器的环境变量: 
+$ kubectl exec envar-demo -- printenv
+
+打印结果应为: 
+NODE_VERSION=4.4.2
+EXAMPLE_SERVICE_PORT_8080_TCP_ADDR=10.3.245.237
+HOSTNAME=envar-demo
+...
+DEMO_GREETING=Hello from the environment
+DEMO_FAREWELL=Such a sweet sorrow
+
+说明: 
+通过 env 或 envFrom 字段设置的环境变量将覆盖容器镜像中指定的所有环境变量.
+
+说明: 
+环境变量可以互相引用,但是顺序很重要.使用在相同上下文中定义的其他变量的变量必须在列表的后面.同样,请避免使用循环引用.
+
+* 在配置中使用环境变量
+你在 Pod 的配置中定义的、位于 .spec.containers[*].env[*] 下的环境变量 可以在配置的其他地方使用,例如可用在为 Pod 的容器设置的命令和参数中.在下面的示例配置中,环境变量 GREETING、HONORIFIC 和 NAME 分别设置为 Warm greetings to、 The Most Honorable 和 Kubernetes.环境变量 MESSAGE 将所有这些环境变量的集合组合起来,然后再传递给容器 env-print-demo 的 CLI 参数中使用.
+
+环境变量名由字母、数字、下划线、点或连字符组成,但第一个字符不能是数字.如果启用了 RelaxedEnvironmentVariableValidation 特性门控,则所有可打印的 ASCII 字符("=" 除外)都可以用于环境变量名.
+----------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: print-greeting
+spec:
+  containers:
+  - name: env-print-demo
+    image: bash
+    env:
+    - name: GREETING
+      value: "Warm greetings to"
+    - name: HONORIFIC
+      value: "The Most Honorable"
+    - name: NAME
+      value: "Kubernetes"
+    command: ["echo"]
+    args: ["$(GREETING) $(HONORIFIC) $(NAME)"]
+--------------------------------------------------
+
+创建后,命令 echo Warm greetings to The Most Honorable Kubernetes 将在容器中运行.
+
+## 通过环境变量将 Pod 信息呈现给容器 - 重要,从 pod 和 container 中取值做为环境变量的值,分别取之 kubectl get pod xxx -o yaml 及 kubectl describe pod xxx,并且这里明确的表现了上述 2 个命令的差异,pod 和 container,与下一章节合并为 downward API
+此章节展示 Pod 如何使用 downward API 通过环境变量把自身的信息呈现给 Pod 中运行的容器.你可以使用环境变量来呈现 Pod 的字段、容器字段或两者.
+
+在 Kubernetes 中有两种方式可以将 Pod 和容器字段呈现给运行中的容器: 
+. 如本任务所述的环境变量
+. 卷文件
+
+这两种呈现 Pod 和容器字段的方式统称为 downward API.
+
+说明: 
+通过 kubectl get pod xxx -o yaml 能看见如下的一段内容: ?未知是何意思
+...
+      - downwardAPI:
+          items:
+          - fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+            path: namespace
+...
+
+Service 是 Kubernetes 管理的容器化应用之间的主要通信模式,因此在运行时能发现这些 Service 是很有帮助的.
+
+* 用 Pod 字段作为环境变量的值 - 重要,可以读取 kubectl get pod xxx -o yaml 中的字段内容,用在配置文件中,并且在通过 kubectl describe pod xxx 的时候看到的是关于 pod 的信息,不是 container
+在这部分练习中,你将创建一个包含一个容器的 Pod.并将 Pod 级别的字段作为环境变量投射到正在运行的容器中.
+
+说明: 通过 kubectl get pod xxx -o yaml 可以查看到所有可用的字段包括在 metadata:,spec:,status: 下的字段
+
+dapi-envars-pod.yaml
+---------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: dapi-envars-fieldref
+spec:
+  containers:
+    - name: test-container
+      image: registry.k8s.io/busybox
+      command: [ "sh","-c"]
+      args:
+      - while true; do
+          echo -en '\n';
+          printenv MY_NODE_NAME MY_POD_NAME MY_POD_NAMESPACE;
+          printenv MY_POD_IP MY_POD_SERVICE_ACCOUNT;
+          sleep 10;
+        done;
+      env:
+        - name: MY_NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: MY_POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: MY_POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: MY_POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: MY_POD_SERVICE_ACCOUNT
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.serviceAccountName
+  restartPolicy: Never
+------------------------------------
+
+这个清单中,你可以看到五个环境变量.env 字段定义了一组环境变量.数组中第一个元素指定 MY_NODE_NAME 这个环境变量从 Pod 的 spec.nodeName 字段获取变量值.同样,其它环境变量也是从 Pod 的字段获取它们的变量值.
+
+说明: 
+本示例中的字段是 Pod 字段,不是 Pod 中 Container 的字段.
+
+创建 Pod: 
+$ kubectl apply -f dapi-envars-pod.yaml
+
+验证 Pod 中的容器运行正常: 
+
+# 如果新创建的 Pod 还是处于不健康状态,请重新运行此命令几次.
+$ kubectl get pods
+
+查看容器日志: 
+$ kubectl logs dapi-envars-fieldref
+
+输出信息显示了所选择的环境变量的值: 
+minikube
+dapi-envars-fieldref
+default
+172.17.0.4
+default
+
+而通过 $ kubectl describe pod dapi-envars-fieldref 的 Containers: 部分显示的内容,区别于后面的取之于 container 的字段内容
+Environment:
+      MY_NODE_NAME:             (v1:spec.nodeName)
+      MY_POD_NAME:             dapi-envars-fieldref (v1:metadata.name)
+      MY_POD_NAMESPACE:        default (v1:metadata.namespace)
+      MY_POD_IP:                (v1:status.podIP)
+      MY_POD_SERVICE_ACCOUNT:   (v1:spec.serviceAccountName)
+ 
+
+要了解为什么这些值出现在日志中,请查看配置文件中的 command 和 args 字段.当容器启动时,它将五个环境变量的值写入标准输出.每十秒重复执行一次.
+
+接下来,进入 Pod 中运行的容器,打开一个 Shell: 
+$ kubectl exec -it dapi-envars-fieldref -- sh
+
+在 Shell 中,查看环境变量: 
+# 在容器内的 `shell` 中运行
+$ printenv
+
+输出信息显示环境变量已经设置为 Pod 字段的值.
+MY_POD_SERVICE_ACCOUNT=default
+...
+MY_POD_NAMESPACE=default
+MY_POD_IP=172.17.0.4
+...
+MY_NODE_NAME=minikube
+...
+MY_POD_NAME=dapi-envars-fieldref
+
+* 使用容器字段作为环境变量的值 - 重要,将 container 的内容取出使用,来自 kubectl describe pod xxx 的 Containers: 字段的内容
+前面的练习中,你将 Pod 级别的字段作为环境变量的值.接下来这个练习中,你将传递属于 Pod 定义的字段,但这些字段取自特定容器而不是整个 Pod.
+
+这里是只包含一个容器的 Pod 的清单: 
+dapi-envars-container.yaml
+-----------------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: dapi-envars-resourcefieldref
+spec:
+  containers:
+    - name: test-container
+      image: busybox
+      command: [ "sh","-c"]
+      args:
+      - while true; do
+          echo -en '\n';
+          printenv MY_CPU_REQUEST MY_CPU_LIMIT;
+          printenv MY_MEM_REQUEST MY_MEM_LIMIT;
+          sleep 10;
+        done;
+      resources:
+        requests:
+          memory: "32Mi"
+          cpu: "125m"
+        limits:
+          memory: "64Mi"
+          cpu: "250m"
+      env:
+        - name: MY_CPU_REQUEST
+          valueFrom:
+            resourceFieldRef:
+              containerName: test-container
+              resource: requests.cpu
+        - name: MY_CPU_LIMIT
+          valueFrom:
+            resourceFieldRef:
+              containerName: test-container
+              resource: limits.cpu
+        - name: MY_MEM_REQUEST
+          valueFrom:
+            resourceFieldRef:
+              containerName: test-container
+              resource: requests.memory
+        - name: MY_MEM_LIMIT
+          valueFrom:
+            resourceFieldRef:
+              containerName: test-container
+              resource: limits.memory
+  restartPolicy: Never
+------------------------------------------------
+
+这个清单中,你可以看到四个环境变量.env 字段定义了一组环境变量.数组中第一个元素指定 MY_CPU_REQUEST 这个环境变量从容器的 requests.cpu 字段获取变量值.同样,其它的环境变量也是从特定于这个容器的字段中获取它们的变量值.
+
+创建 Pod: 
+$ kubectl apply -f dapi-envars-container.yaml
+
+验证 Pod 中的容器运行正常: 
+# 如果新创建的 Pod 还是处于不健康状态,请重新运行此命令几次.
+$ kubectl get pods
+
+查看容器日志: 
+$ kubectl logs dapi-envars-resourcefieldref
+
+输出信息显示了所选择的环境变量的值: 
+1
+1
+33554432
+67108864
+
+通过 $ kubectl describe pod dapi-envars-resourcefieldref 显示内容
+Environment:
+      MY_CPU_REQUEST:  1 (requests.cpu)
+      MY_CPU_LIMIT:    1 (limits.cpu)
+      MY_MEM_REQUEST:  33554432 (requests.memory)
+      MY_MEM_LIMIT:    67108864 (limits.memory)
+
+## 通过文件将 Pod 信息呈现给容器 - 重要,与上一章节合并为 downward API,与上一章节类似,将 pod 的信息以文件的形式挂载到容器中,甚至可以将其他容器的信息挂载到此容器中
+此章节描述 Pod 如何使用 downwardAPI 卷 把自己的信息呈现给 Pod 中运行的容器.downwardAPI 卷 可以呈现 Pod 和容器的字段.
+
+在 Kubernetes 中,有两种方式可以将 Pod 和容器字段呈现给运行中的容器: 
+. 环境变量
+. 本章节所述的卷文件
+
+这两种呈现 Pod 和容器字段的方式都称为 downward API.
+
+* 存储 Pod 字段 
+在这部分的练习中,你将创建一个包含一个容器的 Pod,并将 Pod 级别的字段作为文件投射到正在运行的容器中.Pod 的清单如下: 
+ 
+dapi-volume.yaml
+--------------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kubernetes-downwardapi-volume-example
+  labels:
+    zone: us-est-coast
+    cluster: test-cluster1
+    rack: rack-22
+  annotations:
+    build: two
+    builder: john-doe
+spec:
+  containers:
+    - name: client-container
+      image: registry.k8s.io/busybox
+      command: ["sh","-c"]
+      args:
+      - while true; do
+          if [[ -e /etc/podinfo/labels ]]; then
+            echo -en '\n\n'; cat /etc/podinfo/labels; fi;
+          if [[ -e /etc/podinfo/annotations ]]; then
+            echo -en '\n\n'; cat /etc/podinfo/annotations; fi;
+          sleep 5;
+        done;
+      volumeMounts:
+        - name: podinfo
+          mountPath: /etc/podinfo
+  volumes:
+    - name: podinfo
+      downwardAPI:
+        items:
+          - path: "labels"                      # 此处为名为 labels 的文件
+            fieldRef:
+              fieldPath: metadata.labels        # 此处为通过 kubect get pod xxx -o yaml 得到
+          - path: "annotations"                 # 此处为名为 annotations 的文件
+            fieldRef:
+              fieldPath: metadata.annotations   # kubect get pod xxx -o yaml 得到
+----------------------------------------
+
+在 Pod 清单中,你可以看到 Pod 有一个 downwardAPI 类型的卷,并且挂载到容器中的 /etc/podinfo 目录.
+
+查看 downwardAPI 下面的 items 数组.数组的每个元素定义一个 downwardAPI 卷.第一个元素指示 Pod 的 metadata.labels 字段的值保存在名为 labels 的文件中.第二个元素指示 Pod 的 annotations 字段的值保存在名为 annotations 的文件中.
+
+说明: 
+本示例中的字段是 Pod 字段,不是 Pod 中容器的字段.
+
+创建 Pod: 
+$ kubectl apply -f dapi-volume.yaml
+
+验证 Pod 中的容器运行正常: 
+$ kubectl get pods
+
+查看容器的日志: 
+$ kubectl logs kubernetes-downwardapi-volume-example
+
+输出显示 labels 文件和 annotations 文件的内容: 
+cluster="test-cluster1"
+rack="rack-22"
+zone="us-est-coast"
+
+build="two"
+builder="john-doe"
+
+进入 Pod 中运行的容器,打开一个 Shell: 
+$ kubectl exec -it kubernetes-downwardapi-volume-example -- sh
+
+在该 Shell中,查看 labels 文件: 
+/# cat /etc/podinfo/labels
+
+输出显示 Pod 的所有标签都已写入 labels 文件: 
+cluster="test-cluster1"
+rack="rack-22"
+zone="us-est-coast"
+
+同样,查看 annotations 文件: 
+/# cat /etc/podinfo/annotations
+
+查看 /etc/podinfo 目录下的文件: 
+/# ls -laR /etc/podinfo
+
+在输出中可以看到,labels 和 annotations 文件都在一个临时子目录中.在这个例子中,这个临时子目录为 ..2982_06_02_21_47_53.299460680.在 /etc/podinfo 目录中,..data 是指向该临时子目录的符号链接.另外在 /etc/podinfo 目录中,labels 和 annotations 也是符号链接.
+
+drwxr-xr-x  ... Feb 6 21:47 ..2982_06_02_21_47_53.299460680
+lrwxrwxrwx  ... Feb 6 21:47 ..data -> ..2982_06_02_21_47_53.299460680
+lrwxrwxrwx  ... Feb 6 21:47 annotations -> ..data/annotations
+lrwxrwxrwx  ... Feb 6 21:47 labels -> ..data/labels
+
+/etc/..2982_06_02_21_47_53.299460680:
+total 8
+-rw-r--r--  ... Feb  6 21:47 annotations
+-rw-r--r--  ... Feb  6 21:47 labels
+
+用符号链接可实现元数据的动态原子性刷新;更新将写入一个新的临时目录,然后通过使用 rename(2) 完成 ..data 符号链接的原子性更新.
+
+说明: 
+如果容器以 subPath 卷挂载方式来使用 Downward API,则该容器无法收到更新事件.
+
+退出 Shell: 
+/# exit
+
+* 存储容器字段
+前面的练习中,你使用 downward API 使 Pod 级别的字段可以被 Pod 内正在运行的容器访问.接下来这个练习,你将只传递由 Pod 定义的部分的字段到 Pod 内正在运行的容器中,但这些字段取自特定容器而不是整个 Pod.下面是一个同样只有一个容器的 Pod 的清单: 
+
+dapi-volume-resources.yaml
+-----------------------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kubernetes-downwardapi-volume-example-2
+spec:
+  containers:
+    - name: client-container
+      image: registry.k8s.io/busybox:1.24
+      command: ["sh","-c"]
+      args:
+      - while true; do
+          echo -en '\n';
+          if [[ -e /etc/podinfo/cpu_limit ]]; then
+            echo -en '\n'; cat /etc/podinfo/cpu_limit; fi;
+          if [[ -e /etc/podinfo/cpu_request ]]; then
+            echo -en '\n'; cat /etc/podinfo/cpu_request; fi;
+          if [[ -e /etc/podinfo/mem_limit ]]; then
+            echo -en '\n'; cat /etc/podinfo/mem_limit; fi;
+          if [[ -e /etc/podinfo/mem_request ]]; then
+            echo -en '\n'; cat /etc/podinfo/mem_request; fi;
+          sleep 5;
+        done;
+      resources:
+        requests:
+          memory: "32Mi"
+          cpu: "125m"
+        limits:
+          memory: "64Mi"
+          cpu: "250m"
+      volumeMounts:
+        - name: podinfo
+          mountPath: /etc/podinfo
+  volumes:
+    - name: podinfo
+      downwardAPI:
+        items:
+          - path: "cpu_limit"
+            resourceFieldRef:
+              containerName: client-container
+              resource: limits.cpu
+              divisor: 1m
+          - path: "cpu_request"
+            resourceFieldRef:
+              containerName: client-container
+              resource: requests.cpu
+              divisor: 1m
+          - path: "mem_limit"
+            resourceFieldRef:
+              containerName: client-container
+              resource: limits.memory
+              divisor: 1Mi
+          - path: "mem_request"
+            resourceFieldRef:
+              containerName: client-container
+              resource: requests.memory
+              divisor: 1Mi
+-----------------------------------------------
+
+在这个清单中,你可以看到 Pod 有一个 downwardAPI 卷,并且这个卷会挂载到 Pod 内的单个容器的 /etc/podinfo 目录.
+
+查看 downwardAPI 下面的 items 数组.数组的每个元素定义一个 downwardAPI 卷.
+
+第一个元素指定在名为 client-container 的容器中,以 1m 所指定格式的 limits.cpu 字段的值应推送到名为 cpu_limit 的文件中.divisor 字段是可选的,默认值为 1.1 的除数表示 CPU 资源的核数或内存资源的字节数.
+
+创建 Pod: 
+$ kubectl apply -f dapi-volume-resources.yaml
+
+打开一个 Shell,进入 Pod 中运行的容器: 
+$ kubectl exec -it kubernetes-downwardapi-volume-example-2 -- sh
+
+在 Shell 中,查看 cpu_limit 文件: 
+# 在容器内的 Shell 中运行
+cat /etc/podinfo/cpu_limit
+
+你可以使用同样的命令查看 cpu_request、mem_limit 和 mem_request 文件.
+
+^^^^^^^^^^^^^^^^^^^^
+# 重要测试根据上两章节中的将一个容器的信息通过环境变量及文件的形式挂载到另外一个容器中.
+说明: 这里只做将一个容器的信息挂载到另外一个容器中,另外一种情况将 pod 信息挂载到容器中,不需要测试,因为 pod 的信息是唯一,相当于是容器的上层包裹
+说明: 测试的 2 个容器都在 1 个 pod 中
+
+测试1: 环境变量传输信息
+test01.yaml
+------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test01
+  namespace: default
+spec:
+  containers:
+  - name: nginx1
+    image: nginx
+    imagePullPolicy: Never
+    command: [ "sh","-c"]
+    args:
+    - while true; do
+        echo -en '\n';
+        printenv MY_CPU_REQUEST MY_CPU_LIMIT;
+        printenv MY_MEM_REQUEST MY_MEM_LIMIT;
+        sleep 10;
+      done;
+    resources:
+        requests:
+          memory: "32Mi"
+          cpu: "125m"
+        limits:
+          memory: "64Mi"
+          cpu: "250m"
+    env:
+      - name: MY_CPU_REQUEST
+        valueFrom:
+          resourceFieldRef:
+            containerName: nginx2     # 关键,这里指明了要采集的容器 name
+            resource: requests.cpu
+      - name: MY_CPU_LIMIT
+        valueFrom:
+          resourceFieldRef:
+            containerName: nginx2
+            resource: limits.cpu
+      - name: MY_MEM_REQUEST
+        valueFrom:
+          resourceFieldRef:
+            containerName: nginx2
+            resource: requests.memory
+      - name: MY_MEM_LIMIT
+        valueFrom:
+          resourceFieldRef:
+            containerName: nginx2
+            resource: limits.memory
+
+  - name: nginx2
+    image: nginx
+    imagePullPolicy: Never
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "200m"
+      limits:
+        memory: "128Mi"
+        cpu: "400m"
+-------------------------------------
+这里是在 nginx1 这个容器中采集 nginx2 这个容器的信息.
+
+# 分别显示 2 个容器中的日志
+$ kubectl logs test01 nginx2
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: info: Getting the checksum of /etc/nginx/conf.d/default.conf
+10-listen-on-ipv6-by-default.sh: info: Enabled listen on IPv6 in /etc/nginx/conf.d/default.conf
+/docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
+/docker-entrypoint.sh: Configuration complete; ready for start up
+2024/10/08 09:05:24 [notice] 1#1: using the "epoll" event method
+2024/10/08 09:05:24 [notice] 1#1: nginx/1.27.0
+2024/10/08 09:05:24 [notice] 1#1: built by gcc 12.2.0 (Debian 12.2.0-14) 
+2024/10/08 09:05:24 [notice] 1#1: OS: Linux 6.5.0-42-generic
+2024/10/08 09:05:24 [notice] 1#1: getrlimit(RLIMIT_NOFILE): 1024:524288
+2024/10/08 09:05:24 [notice] 1#1: start worker processes
+2024/10/08 09:05:24 [notice] 1#1: start worker process 29
+2024/10/08 09:05:24 [notice] 1#1: start worker process 30
+
+$ kubectl logs test01 nginx1
+1
+1
+67108864
+134217728
+
+根据上述显示的内容可以确定,在容器 nginx1 中符合预期的显示了从容器 nginx2 中采集到的信息
+
+测试2: 通过 downwardAPI 卷 传递信息
+test02
+----------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test02
+  namespace: default
+spec:
+  containers:
+  - name: nginx1
+    image: nginx
+    imagePullPolicy: Never
+    command: [ "sh","-c"]
+    args:
+    - while true; do
+        echo '\n';
+        cat /etc/podinfo/cpu_limit;
+        echo '\n';
+        cat /etc/podinfo/cpu_request;
+        echo '\n';
+        cat /etc/podinfo/mem_limit;
+        echo '\n';
+        cat /etc/podinfo/mem_request;
+        sleep 10;
+      done;
+    resources:
+        requests:
+          memory: "32Mi"
+          cpu: "125m"
+        limits:
+          memory: "64Mi"
+          cpu: "250m"
+    volumeMounts:
+        - name: podinfo
+          mountPath: /etc/podinfo
+
+  - name: nginx2
+    image: nginx
+    imagePullPolicy: Never
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "200m"
+      limits:
+        memory: "128Mi"
+        cpu: "400m"
+
+  volumes:
+    - name: podinfo
+      downwardAPI:
+        items:
+          - path: "cpu_limit"
+            resourceFieldRef:
+              containerName: nginx2   # 关键,指明采集的容器 name
+              resource: limits.cpu
+              divisor: 1m
+          - path: "cpu_request"
+            resourceFieldRef:
+              containerName: nginx2
+              resource: requests.cpu
+              divisor: 1m
+          - path: "mem_limit"
+            resourceFieldRef:
+              containerName: nginx2
+              resource: limits.memory
+              divisor: 1Mi
+          - path: "mem_request"
+            resourceFieldRef:
+              containerName: nginx2
+              resource: requests.memory
+              divisor: 1Mi
+
+----------------------
+在 downwardAPI 卷总存储的是 nginx2 容器的信息,将其挂载到 nginx1 容器中,显示出来
+
+$ kubectl logs test02 nginx1
+64
+
+400
+
+200
+
+128
+
+$ kubectl logs test02 nginx2
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: info: Getting the checksum of /etc/nginx/conf.d/default.conf
+10-listen-on-ipv6-by-default.sh: info: Enabled listen on IPv6 in /etc/nginx/conf.d/default.conf
+/docker-entrypoint.sh: Sourcing /docker-entrypoint.d/15-local-resolvers.envsh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/20-envsubst-on-templates.sh
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/30-tune-worker-processes.sh
+/docker-entrypoint.sh: Configuration complete; ready for start up
+2024/10/08 09:49:51 [notice] 1#1: using the "epoll" event method
+2024/10/08 09:49:51 [notice] 1#1: nginx/1.27.0
+2024/10/08 09:49:51 [notice] 1#1: built by gcc 12.2.0 (Debian 12.2.0-14) 
+2024/10/08 09:49:51 [notice] 1#1: OS: Linux 6.5.0-42-generic
+2024/10/08 09:49:51 [notice] 1#1: getrlimit(RLIMIT_NOFILE): 1024:524288
+2024/10/08 09:49:51 [notice] 1#1: start worker processes
+2024/10/08 09:49:51 [notice] 1#1: start worker process 30
+2024/10/08 09:49:51 [notice] 1#1: start worker process 31
+
+根据上述的测试,符合预期,nginx1 容器中显示了采集到的 nginx2 的信息
+
+总结: 上述的 2 个测试,将一个容器的信息传递到另外一个容器中,其中关键的地方是在环境环境变量及 downwardAPI 卷中指明需要采集信息的容器名称,在官方的教程中没有明确说明
+
+vvvvvvvvvvvvvvvvvvvv
+
+## 使用 Secret 安全地分发凭据
+本章节展示如何安全地将敏感数据(如密码和加密密钥)注入到 Pod 中.
+
+* 准备开始
+** 将 Secret 数据转换为 base-64 形式
+假设用户想要有两条 Secret 数据: 用户名 my-app 和密码 39528$vdg7Jb.首先使用 Base64 编码将用户名和密码转化为 base-64 形式.下面是一个使用常用的 base64 程序的示例: 
+$ echo -n 'my-app' | base64
+$ echo -n '39528$vdg7Jb' | base64
+
+结果显示 base-64 形式的用户名为 bXktYXBw, base-64 形式的密码为 Mzk1MjgkdmRnN0pi.
+
+注意: 
+使用你的操作系统所能信任的本地工具以降低使用外部工具的风险.
+
+* 创建 Secret
+这里是一个配置文件,可以用来创建存有用户名和密码的 Secret: 
+
+secret.yaml
+-------------------------
+apiVersion: v1
+kind: Secret
+metadata:
+  name: test-secret
+data:
+  username: bXktYXBw
+  password: Mzk1MjgkdmRnN0pi
+-----------------------------
+
+1.创建 Secret: 
+$ kubectl apply -f secret.yaml
+
+2.查看 Secret 相关信息: 
+$ kubectl get secret test-secret
+
+输出: 
+NAME          TYPE      DATA      AGE
+test-secret   Opaque    2         1m
+
+3.查看 Secret 相关的更多详细信息: 
+$ kubectl describe secret test-secret
+
+输出: 
+Name:       test-secret
+Namespace:  default
+Labels:     <none>
+Annotations:    <none>
+
+Type:   Opaque
+
+Data
+====
+password:   13 bytes
+username:   7 bytes
+
+** 直接用 kubectl 创建 Secret
+如果你希望略过 Base64 编码的步骤,你也可以使用 kubectl create secret 命令直接创建 Secret.例如: 
+$ kubectl create secret generic test-secret --from-literal='username=my-app' --from-literal='password=39528$vdg7Jb'
+这是一种更为方便的方法.
+
+* 创建一个可以通过卷访问 Secret 数据的 Pod
+
+这里是一个可以用来创建 Pod 的配置文件: 
+
+secret-pod.yaml
+--------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: secret-test-pod
+spec:
+  containers:
+    - name: test-container
+      image: nginx
+      volumeMounts:
+        # name 必须与下面的卷名匹配
+        - name: secret-volume
+          mountPath: /etc/secret-volume
+          readOnly: true
+  # Secret 数据通过一个卷暴露给该 Pod 中的容器
+  volumes:
+    - name: secret-volume
+      secret:
+        secretName: test-secret
+------------------------------
+
+1.创建 Pod: 
+$ kubectl apply -f secret-pod.yaml
+
+2.确认 Pod 正在运行: 
+$ kubectl get pod secret-test-pod
+
+输出: 
+NAME              READY     STATUS    RESTARTS   AGE
+secret-test-pod   1/1       Running   0          42m
+
+3.获取一个 Shell 进入 Pod 中运行的容器: 
+$ kubectl exec -i -t secret-test-pod -- /bin/bash
+
+4.Secret 数据通过挂载在 /etc/secret-volume 目录下的卷暴露在容器中.
+在 Shell 中,列举 /etc/secret-volume 目录下的文件: 
+
+# 在容器中 Shell 运行下面命令
+ls /etc/secret-volume
+
+输出包含两个文件,每个对应一个 Secret 数据条目: 
+password username
+
+5.在 Shell 中,显示 username 和 password 文件的内容: 
+
+# 在容器中 Shell 运行下面命令
+echo "$( cat /etc/secret-volume/username )"
+echo "$( cat /etc/secret-volume/password )"
+
+输出为用户名和密码: 
+my-app
+39528$vdg7Jb
+
+修改你的镜像或命令行,使程序在 mountPath 目录下查找文件.Secret data 映射中的每个键都成为该目录中的文件名.
+
+** 映射 Secret 键到特定文件路径
+你还可以控制卷内 Secret 键的映射路径.使用 .spec.volumes[].secret.items 字段来改变每个键的目标路径.
+----------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mypod
+spec:
+  containers:
+  - name: mypod
+    image: nginx
+    volumeMounts:
+    - name: foo
+      mountPath: "/etc/foo"
+      readOnly: true
+  volumes:
+  - name: foo
+    secret:
+      secretName: test-secret   # 注意,此 secret 中有 2 个  key
+      items:
+      - key: username
+        path: my-group/my-username
+--------------------------------------
+当你部署此 Pod 时,会发生以下情况: 
+. 来自 mysecret 的键 username 可以在路径 /etc/foo/my-group/my-username 下供容器使用,而不是路径 /etc/foo/username.
+. 来自该 Secret 的键 password 没有映射到任何路径.
+
+如果你使用 .spec.volumes[].secret.items 明确地列出键,请考虑以下事项: 
+. 只有在 items 字段中指定的键才会被映射.
+. 要使用 Secret 中全部的键,那么全部的键都必须列在 items 字段中.
+. 所有列出的键必须存在于相应的 Secret 中.否则,该卷不被创建. - 注意,上述的使用的 test-secret 中有 2 个 key,但是上述的 yaml 配置中只有一个 key 对应的内容,因此,另外一个 key 没有被创建.
+
+** 为 Secret 键设置 POSIX 权限
+你可以为单个 Secret 键设置 POSIX 文件访问权限位.如果不指定任何权限,默认情况下使用 0644.你也可以为整个 Secret 卷设置默认的 POSIX 文件模式,需要时你可以重写单个键的权限.
+
+例如,可以像这样指定默认模式: 
+----------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mypod
+spec:
+  containers:
+  - name: mypod
+    image: nginx
+    volumeMounts:
+    - name: foo
+      mountPath: "/etc/foo"
+  volumes:
+  - name: foo
+    secret:
+      secretName: test-secret
+      defaultMode: 0400
+---------------------------------
+Secret 被挂载在 /etc/foo 目录下;所有由 Secret 卷挂载创建的文件的访问许可都是 0400.
+
+在 /etc/foo 目录下的文件显示
+-r-------- 1 root root 12 Oct  9 09:17 password
+-r-------- 1 root root  6 Oct  9 09:17 username
+
+说明: 
+如果使用 JSON 定义 Pod 或 Pod 模板,请注意 JSON 规范不支持数字的八进制形式, 因为 JSON 将 0400 视为十进制的值 400.在 JSON 中,要改为使用十进制的 defaultMode.如果你正在编写 YAML,则可以用八进制编写 defaultMode.
+
+* 使用 Secret 数据定义容器变量
+在你的容器中,你可以以环境变量的方式使用 Secret 中的数据.
+
+如果容器已经使用了在环境变量中的 Secret,除非容器重新启动,否则容器将无法感知到 Secret 的更新.有第三方解决方案可以在 Secret 改变时触发容器重启.
+
+** 使用来自 Secret 中的数据定义容器变量
+.定义环境变量为 Secret 中的键值偶对: 
+$ kubectl create secret generic backend-user --from-literal=backend-username='backend-admin'
+
+.在 Pod 规约中,将 Secret 中定义的值 backend-username 赋给 SECRET_USERNAME 环境变量.
+
+pod-single-secret-env-variable.yaml
+------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: env-single-secret
+spec:
+  containers:
+  - name: envars-test-container
+    image: nginx
+    env:
+    - name: SECRET_USERNAME
+      valueFrom:
+        secretKeyRef:                 # 关键,表示值取自 secret
+          name: backend-user          # secret 的 name
+          key: backend-username       # secret 中的 key
+-------------------------------------
+
+. 创建 Pod: 
+$ kubectl create -f pod-single-secret-env-variable.yaml
+
+. 在 Shell 中,显示容器环境变量 SECRET_USERNAME 的内容: 
+$ kubectl exec -i -t env-single-secret -- /bin/sh -c 'echo $SECRET_USERNAME'
+
+输出类似于: 
+backend-admin
+
+** 使用来自多个 Secret 的数据定义环境变量
+. 和前面的例子一样,先创建 Secret: 
+$ kubectl create secret generic backend-user --from-literal=backend-username='backend-admin'
+$ kubectl create secret generic db-user --from-literal=db-username='db-admin'
+
+. 在 Pod 规约中定义环境变量: 
+
+pod-multiple-secret-env-variable.yaml
+----------------------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: envvars-multiple-secrets
+spec:
+  containers:
+  - name: envars-test-container
+    image: nginx
+    env:
+    - name: BACKEND_USERNAME
+      valueFrom:
+        secretKeyRef:
+          name: backend-user
+          key: backend-username
+    - name: DB_USERNAME
+      valueFrom:
+        secretKeyRef:
+          name: db-user
+          key: db-username
+-----------------------------------------
+
+. 创建 Pod: 
+$ kubectl create -f pod-multiple-secret-env-variable.yaml
+
+. 在你的 Shell 中,显示容器环境变量的内容: 
+$ kubectl exec -i -t envvars-multiple-secrets -- /bin/sh -c 'env | grep _USERNAME'
+
+输出类似于: 
+DB_USERNAME=db-admin
+BACKEND_USERNAME=backend-admin
+
+* 将 Secret 中的所有键值偶对定义为环境变量
+说明: 
+此功能在 Kubernetes 1.6 版本之后可用.
+
+. 创建包含多个键值偶对的 Secret: 
+$ kubectl create secret generic test-secret --from-literal=username='my-app' --from-literal=password='39528$vdg7Jb'
+
+. 使用 envFrom 来将 Secret 中的所有数据定义为环境变量.Secret 中的键名成为容器中的环境变量名: 
+
+pod-secret-envFrom.yaml
+------------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: envfrom-secret
+spec:
+  containers:
+  - name: envars-test-container
+    image: nginx
+    envFrom:
+    - secretRef:
+        name: test-secret
+-----------------------------------
+
+. 创建 Pod: 
+$ kubectl create -f pod-secret-envFrom.yaml
+
+. 在 Shell 中,显示环境变量 username 和 password 的内容: 
+$ kubectl exec -i -t envfrom-secret -- /bin/sh -c 'echo "username: $username\npassword: $password\n"'
+
+输出类似于: 
+username: my-app
+password: 39528$vdg7Jb
+
+* 示例: 使用 Secret 为 Pod 提供生产环境或测试环境的凭据
+此示例展示的是一个使用了包含生产环境凭据的 Secret 的 Pod 和一个使用了包含测试环境凭据的 Secret 的 Pod.
+
+1.创建用于生产环境凭据的 Secret: 
+$ kubectl create secret generic prod-db-secret --from-literal=username=produser --from-literal=password=Y4nys7f11
+输出类似于: 
+secret "prod-db-secret" created
+
+2.为测试环境凭据创建 Secret.
+$ kubectl create secret generic test-db-secret --from-literal=username=testuser --from-literal=password=iluvtests
+
+输出类似于: 
+secret "test-db-secret" created
+
+说明: 
+$、\、*、= 和 ! 这类特殊字符会被你的 Shell 解释,需要进行转义.
+
+在大多数 Shell 中,最简单的密码转义方法是使用单引号(')将密码包起来.例如,如果你的实际密码是 S!B\*d$zDsb=,则应执行以下命令: 
+kubectl create secret generic dev-db-secret --from-literal=username=devuser --from-literal=password='S!B\*d$zDsb='
+你无需转义来自文件(--from-file)的密码中的特殊字符.
+
+3.创建 Pod 清单: 
+
+cat <<EOF > pod.yaml
+apiVersion: v1
+kind: List
+items:
+- kind: Pod
+  apiVersion: v1
+  metadata:
+    name: prod-db-client-pod
+    labels:
+      name: prod-db-client
+  spec:
+    volumes:
+    - name: secret-volume
+      secret:
+        secretName: prod-db-secret
+    containers:
+    - name: db-client-container
+      image: myClientImage
+      volumeMounts:
+      - name: secret-volume
+        readOnly: true
+        mountPath: "/etc/secret-volume"
+- kind: Pod
+  apiVersion: v1
+  metadata:
+    name: test-db-client-pod
+    labels:
+      name: test-db-client
+  spec:
+    volumes:
+    - name: secret-volume
+      secret:
+        secretName: test-db-secret
+    containers:
+    - name: db-client-container
+      image: myClientImage
+      volumeMounts:
+      - name: secret-volume
+        readOnly: true
+        mountPath: "/etc/secret-volume"
+EOF
+
+说明: 
+这两个 Pod 的规约只在一个字段上有所不同;这样便于从一个通用的 Pod 模板创建具有不同权能的 Pod.
+
+4.通过运行以下命令将所有这些对象应用到 API 服务器: 
+$ kubectl create -f pod.yaml
+
+两个容器的文件系统中都将存在以下文件,其中包含每个容器环境的值: 
+/etc/secret-volume/username
+/etc/secret-volume/password
+
+你可以通过使用两个服务账号进一步简化基础 Pod 规约: 
+1. 带有 prod-db-secret 的 prod-user
+2. 带有 test-db-secret 的 test-user
+
+Pod 规约精简为: 
+----------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: prod-db-client-pod
+  labels:
+    name: prod-db-client
+spec:
+  serviceAccount: prod-db-client
+  containers:
+  - name: db-client-container
+    image: myClientImage
+--------------------------------------
+
+
+
+
+
+
+
+
+

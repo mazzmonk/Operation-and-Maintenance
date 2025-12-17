@@ -1,0 +1,101 @@
+1.在/abc下建立目录mongodb/data (abc目录，使用df -h命令查看那个目录比较大)
+2.先把现有容器的mongodb数据拷贝出来(docker cp xxxx:/data/db /abc/mongodb/data/,xxx为mongodb容器的ID )
+3.停止原有的mongodb容器
+4.docker run --restart=always --name mongo -p 27017:27017 \
+-v /abc/mongodb/data/db:/data/db \
+-e MONGO_INITDB_ROOT_USERNAME=admin -e MONGO_INITDB_ROOT_PASSWORD=Q!M#DY7$qL \
+-d mongo:4.0.10 --auth
+具体的mongodb版本，根据实际情况
+5.登录到mongodb的容器中
+# mongo
+>use admin
+>db.auth('admin','Q!M#DY7$qL') 
+>db.createUser({ user:"blue",pwd: 'Q!M#DY7$qL',roles: [{role:'readWrite',db:'RedOutpostReport'},{role:'readWrite',db:'OptimizerResults'},{role:'readWrite',db:'alm_report'},{role:'readWrite',db:'external-data-parse'},{role:'readWrite',db:'LtvResults'},{role:'readWrite',db:'regulatory_report_archive'}]})
+
+# 查看一下用户，应该类似如下：
+> show users;
+{
+        "_id" : "admin.admin",
+        "userId" : UUID("6e457256-e58a-49ab-99cc-f9824c03395c"),
+        "user" : "admin",
+        "db" : "admin",
+        "roles" : [
+                {
+                        "role" : "userAdminAnyDatabase",
+                        "db" : "admin"
+                }
+        ],
+        "mechanisms" : [
+                "SCRAM-SHA-1",
+                "SCRAM-SHA-256"
+        ]
+}
+{
+        "_id" : "admin.root",
+        "userId" : UUID("e5927864-0ac3-48db-a99e-efae793bcc87"),
+        "user" : "root",
+        "db" : "admin",
+        "roles" : [
+                {
+                        "role" : "root",
+                        "db" : "admin"
+                }
+        ],
+        "mechanisms" : [
+                "SCRAM-SHA-1",
+                "SCRAM-SHA-256"
+        ]
+}
+{
+        "_id" : "admin.blue",
+        "userId" : UUID("bd46e8fa-8b06-419b-807d-15cf7caa88bc"),
+        "user" : "blue",
+        "db" : "admin",
+        "roles" : [
+                {
+                        "role" : "readWrite",
+                        "db" : "RedOutpostReport"
+                },
+                {
+                        "role" : "readWrite",
+                        "db" : "OptimizerResults"
+                },
+                {
+                        "role" : "readWrite",
+                        "db" : "alm_report"
+                },
+                {
+                        "role" : "readWrite",
+                        "db" : "external-data-parse"
+                },
+                {
+                        "role" : "readWrite",
+                        "db" : "LtvResults"
+                },
+                {
+                        "role" : "readWrite",
+                        "db" : "regulatory_report_archive"
+                }
+        ],
+        "mechanisms" : [
+                "SCRAM-SHA-1",
+                "SCRAM-SHA-256"
+        ]
+}
+
+
+6.另外需要修改内存限制的那部分，看下gitlab上的内容
+
+7.修改postgres的密码(容器ID更具实际情况)
+# docker exec -it bf2ff99d3e72 psql -U postgres 
+postgres=# \password
+
+然后复制黏贴密码
+
+8.修改notixxx,hyxxx中的postgres及mongodb部分的密码
+
+9.重启一个容器
+
+
+
+

@@ -1,0 +1,21 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  namespace: own-project
+  name: rsync
+  labels:
+    name: rsync
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        name: rsync
+    spec:
+      containers:
+      - name: rsync
+        image: 192.168.81.97:5000/rsync:latest
+        ports:
+        - containerPort: 873
+
+

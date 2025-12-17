@@ -1,0 +1,85 @@
+etcdctl 命令用于查询,删除,添加 etcd 中的内容,
+etcdctl 3.4.13
+etcd     3.4
+
+etcdctl --endpoints=127.0.0.1:2379 	\
+             --cacert=/etc/kubernetes/pki/etcd/ca.crt \
+             --cert=/etc/kubernetes/pki/etcd/healthcheck-client.crt \
+         	 --key=/etc/kubernetes/pki/etcd/healthcheck-client.key
+
+上述是必须添加的,用于在执行 get,put 等等命令时用的证书,可以定义成别名
+
+export alias ectl="etcdctl --endpoints=127.0.0.1:2379 	\
+             --cacert=/etc/kubernetes/pki/etcd/ca.crt \
+             --cert=/etc/kubernetes/pki/etcd/healthcheck-client.crt \
+         	 --key=/etc/kubernetes/pki/etcd/healthcheck-client.key"
+
+
+# 显示所有的 etcd 成员
+$ $ectl member list
+
+# 查询所有的 key
+$ $ectl / --prefix --keys-only
+
+# 查询某个 key
+$ $ectl get /registry --prefix --keys-only
+
+# 查看某个 key 的值,--write-out 的内容只能是 fields, json, protobuf, simple, table,相对来说,fields 和 json 容易读
+$ $ectl get /registry/services/specs/kubernetes-dashboard/kubernetes-dashboard --write-out='fields'
+
+
+
+数据结构说明
+/registry/apiregistration.k8s.io/apiservices/{版本}.{api名称}
+包含 Kubernetes 中 API 服务的定义,因此我们可以在其中找到 Kubernetes 使用的所有现有核心 API,例如 /registry/apiregistration.k8s.io/apiservices/v1.batch或 /registry/apiregistration.k8s.io/apiservices/v1beta1.rbac
+
+/registry/clusterroles/{角色名称}
+包含 Kubernetes 中所有集群范围角色的定义,因此我们可以在那里找到 /registry/clusterroles/cluster-admin 或 /registry/clusterroles/system:kube-scheduler 之类的内容
+
+/registry/clusterrolebindings/{实体名称}
+包含集群范围内的角色和用户/组/服务帐户之间的绑定,因此我们可以在那里找到 /registry/clusterrolebindings/cluster-admin或 /registry/clusterrolebindings/kubeadm:kubelet-bootstrap 之类的东西
+
+/registry/roles/{namespace}/{role name} 和 /registry/rolebindings/{namespace}/{entity name}
+与clusterrole/clusterrolebinding 类似,但受命名空间限制,例如 /registry/roles/kube-system/system:controller:token-cleaner
+
+/registry/serviceaccounts/{namespace}/{name}
+所有服务帐户的定义
+
+/registry/configmaps/{命名空间}/{map名称}
+所有配置映射存储为 yamls
+
+/registry/controllerrevisions/{namespace}/{pod}
+ ControllerRevision 资源用于在 DaemonSet 和 StatefulSet ( https://kubernetes.io/docs/tasks/manage-daemon/rollback-daemon-set/ ) 中提供回滚可能性
+
+/registry/daemonsets/{namespace}/{name} 和 /registry/deployments/{namespace}/{name} 等.
+在这些键下,Kubernetes 存储有关不同部署的信息,例如 DaemonSet、Deployment、ReplicaSet、Job 等
+
+/registry/minions/{节点名称}
+Kubernetes 节点以前被称为"minions",所以在 Etcd 中的名称仍然没有改变.我们看到有大量数据描述节点,例如：
+
+CPU内核
+内存大小
+kubelet 的状态：例如 kubelet 有足够的可用磁盘空间或 kubelet 有足够的 PID 可用
+IP地址
+主机名
+Docker 版本
+Docker image /registry/ranges/servicenodeportss 在节点上可用
+
+/registry/namespaces/{namespace}
+只是定义命名空间.还有特定命名空间的状态,如 Active 或 Terminating.
+
+/registry/pods/{namespace}/{pod 名称}
+集群中运行的每个 pod 的状态.包含很多信息,如 pod IP、挂载的卷、docker 映像等.
+
+/registry/ranges/serviceips
+服务的 CIDR
+
+/registry/ranges/servicenodeports
+暴露服务的端口范围
+
+/registry/secrets/{namespace}/{pod}
+集群中的所有秘密都以默认模式存储为纯文本.
+
+/registry/services/endpoints/{namespace}/{name}
+服务定义.Kubernetes 计算特定服务选择了哪些 Pod,并将该信息存储在服务值中,以便我们可以在那里看到 Pod 的 IP 地址和名称.
+

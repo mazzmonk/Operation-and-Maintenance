@@ -1,0 +1,953 @@
+索引:
+----------------------------------------------------------------------------------------------------------------
+第一部分(1/16)
+# 管理集群
+
+## 用 kubeadm 进行管理 - 重要
+### 使用 kubeadm 进行证书管理
+* 使用 check-expiration 子命令来检查证书何时过期
+* 手动更新证书
+### 配置 cgroup 驱动
+* 迁移到 systemd 驱动
+### 使用 kubeadm 重新配置集群
+### 使用 kubeadm 升级集群
+* kubeadm 升级失败以后从故障状态恢复
+* kubeadm upgrade apply 工作原理
+
+## 管理内存 CPU 和 API 资源
+### 为命名空间配置默认的内存请求和限制
+* 创建命名空间
+* 创建 LimitRange 和 Pod
+* 现在如果你在 default-mem-example 命名空间中创建一个 Pod,并且该 Pod 中所有容器都没有声明自己的内存请求和内存限制,控制面会将内存的默认请求值 256MiB 和默认限制值 512MiB 应用到 Pod 上.
+* 声明容器的限制而不声明它的请求会怎么样?
+* 声明容器的内存请求而不声明内存限制会怎么样?
+* 设置默认内存限制和请求的动机
+### 为命名空间配置默认的 CPU 请求和限制
+* 创建命名空间
+* 创建 LimitRange 和 Pod
+* 你只声明容器的限制,而不声明请求会怎么样?
+* 你只声明容器的请求,而不声明它的限制会怎么样?
+* 默认 CPU 限制和请求的动机
+### 配置命名空间的最小和最大内存约束
+* 创建命名空间
+* 创建 LimitRange 和 Pod
+* 尝试创建一个超过最大内存限制的 Pod
+* 尝试创建一个不满足最小内存请求的 Pod
+* 创建一个没有声明内存请求和限制的 Pod
+* 强制执行内存最小和最大限制
+* 设置内存最小和最大限制的动因
+### 为命名空间配置 CPU 最小和最大约束
+* 创建命名空间
+* 创建 LimitRange 和 Pod
+* 以下为某个仅包含一个容器的 Pod 的清单.该容器声明了 CPU 请求 500 millicpu 和 CPU 限制 800 millicpu.这些参数满足了 LimitRange 对象为此名字空间规定的 CPU 最小和最大限制.
+* 尝试创建一个超过最大 CPU 限制的 Pod
+* 尝试创建一个不满足最小 CPU 请求的 Pod
+* 创建一个没有声明 CPU 请求和 CPU 限制的 Pod
+### 为命名空间配置内存和 CPU 配额
+* 创建命名空间
+* 创建 ResourceQuota
+* 创建 Pod
+* 尝试创建第二个 Pod
+### 配置命名空间下 Pod 配额
+* 创建一个命名空间
+* 创建 ResourceQuota
+* 下面是一个 Deployment 的示例清单:
+
+## 使用 Kubernetes API 访问集群
+* 直接访问 REST API
+* 使用 kubectl get pods <pod-name> -o custom-columns=NAME:.metadata.name,RSRC:.metadata.resourceVersion
+
+## 改变默认 StorageClass
+* 为什么要改变默认存储类?
+* 改变默认 StorageClass
+
+## 将 PersistentVolume 的访问模式更改为 ReadWriteOncePod - 一次只有 1 个 pod 可以写入 pvc,此模式需要特性门支持,包含了如何查看当前运行的特性门
+* 我为什么要使用 ReadWriteOncePod?
+* 迁移现有 PersistentVolume
+
+## 更改 PersistentVolume 的回收策略
+* 为什么要更改 PersistentVolume 的回收策略
+* 更改 PersistentVolume 的回收策略
+
+## 配置 API 对象配额
+* 创建命名空间
+* 创建 ResourceQuota
+* 创建 PersistentVolumeClaim
+* 尝试创建第二个 PersistentVolumeClaim
+* 下面这些字符串可被用来标识那些能被配额限制的 API 资源:
+
+## 调试 DNS 问题
+* 创建一个简单的 Pod 作为测试环境
+* 一旦 Pod 处于运行状态,你就可以在该环境里执行 nslookup.如果你看到类似下列的内容,则表示 DNS 是正常运行的.
+* 先检查本地的 DNS 配置
+* 检查 DNS Pod 是否运行
+* 检查 DNS Pod 里的错误
+* 检查是否启用了 DNS 服务
+* DNS 的端点公开了吗?
+* DNS 查询有被接收或者执行吗?
+* CoreDNS 是否有足够的权限?
+* 你的服务在正确的名字空间中吗?
+
+## 限制存储使用量
+* 使用 LimitRange 限制存储请求
+* 场景:限制存储使用量
+* 使用 StorageQuota 限制 PVC 数目和累计存储容量
+
+## 名字空间演练 - 重要,可以在多个命名空间切换,特别是关于 context (kubectl context view) 的应用
+* 创建新的名字空间
+* 在每个名字空间中创建 Pod
+
+## 操作 Kubernetes 中的 etcd 集群 - 重要
+
+## 为系统守护进程预留计算资源
+* 节点可分配资源
+* 启用 QoS 和 Pod 级别的 cgroups
+* 配置 cgroup 驱动
+* Kube 预留值
+* 系统预留值
+* 显式预留的 CPU 列表
+* 驱逐阈值
+* 实施节点可分配约束
+* 操作 kubelet 具体参数 - 重要
+* 示例场景
+
+## 以非 root 用户身份运行 Kubernetes 节点组件 - 参考,需要单独节点测试
+
+## 安全地清空一个节点
+* 配置干扰预算
+* 使用 kubectl drain 从服务中删除一个节点
+* 并行清空多个节点
+* 驱逐 API
+^^^^^^^^^^^^^^^^^^^^
+### 干扰(Disruptions)
+* 自愿干扰和非自愿干扰
+* 处理干扰
+* 干扰预算
+* 分离集群所有者和应用所有者角色
+* 如何在集群上执行干扰性操作
+### 为应用程序设置干扰预算(Disruption Budget) - 重要,使用 Deployment/ReplicationController/ReplicaSet/StatefulSet 控制器通过 PodDisruptionBudget(PDB) 来保证 pod 的数量,应用状态健康等等
+* 准备开始
+* 用 PodDisruptionBudget 来保护应用
+* 确定要保护的应用
+* 考虑应用对干扰的反应
+* 指定 PodDisruptionBudget
+* 创建 PDB 对象
+* 检查 PDB 状态
+* 不健康的 Pod 驱逐策略
+* 任意工作负载和任意选择算符
+vvvvvvvvvvvvvvvvvvvv
+
+## 保护集群 - 重要,包括: 控制对 api 的访问,控制对 Kubelet 的访问,控制运行时负载或用户的能力,保护集群组件免受破坏
+* 控制对 Kubernetes API 的访问
+* 控制对 Kubelet 的访问
+* 控制运行时负载或用户的能力
+* 保护集群组件免受破坏
+
+## 通过配置文件设置 kubelet 参数
+* 创建配置文件
+* 启动通过配置文件配置的 kubelet 进程
+* kubelet 配置文件的插件目录
+* 查看 kubelet 配置
+
+## 在集群中使用级联删除
+* 检查 Pod 上的属主引用
+* 使用前台级联删除
+* 使用后台级联删除
+* 删除属主对象和孤立的依赖对象 - 如下的操作将使得 deployment 和 pod 之间不在关联,通过 kubectl get deployment 将看不见 deployment,而通过 kubectl get pods 仍然能看见 pod,并且通过 kubectl get rs 仍然能看见 rs
+
+## 使用 CoreDNS 进行服务发现
+
+## 在 Kubernetes 集群中使用 sysctl
+
+--------------------
+
+第二部分(2/16)
+# 配置 Pods 和 容器
+
+## 为容器和 Pod 分配内存资源 - 包含 metrics server 安装配置
+* 创建命名空间
+* 指定内存请求和限制
+^^^^^^^^^^^^^^^^^^^^
+* 配置 metrics server
+vvvvvvvvvvvvvvvvvvvv
+* 超过容器限制的内存
+* 超过整个节点容量的内存
+* 内存单位
+* 如果你没有指定内存限制
+* 内存请求和限制的目的
+
+## 为容器和 Pods 分配 CPU 资源
+* 指定 CPU 请求和 CPU 限制
+* 设置超过节点能力的 CPU 请求
+* 如果不指定 CPU 限制
+* 如果你设置了 CPU 限制但未设置 CPU 请求
+* CPU 请求和限制的初衷
+
+## 配置 Pod 的服务质量
+* 创建名字空间
+* 创建一个 QoS 类为 Guaranteed 的 Pod
+* 创建一个 QoS 类为 Burstable 的 Pod
+* 创建一个 QoS 类为 BestEffort 的 Pod
+* 创建包含两个容器的 Pod
+* 检视 Pod 的 QoS 类
+* 环境清理
+
+## 调整分配给容器的 CPU 和内存资源 - 需要开启 feature-gates 的 InPlacePodVerticalScaling,此特性用于在不重启 Pod 或其容器的情况下调整分配给运行中 Pod 容器的 CPU 和内存资源,通过 kubeadm 升级配置的方式失败,暂时搁置
+* 容器调整策略
+
+## 为容器分派扩展资源
+^^^^^^^^^^^^^^^^^^^^
+### 为节点发布扩展资源
+* 在你的一个节点上发布一种新的扩展资源
+* 讨论
+* 存储示例
+* 清理
+vvvvvvvvvvvvvvvvvvvv
+* 给 Pod 分派扩展资源
+* 尝试创建第二个 Pod
+
+## 配置 Pod 以使用卷进行存储 - - 其中有关于 emptyDir 类型卷的使用
+* 为 Pod 配置卷
+
+## 配置 Pod 以使用 PersistentVolume 作为存储
+* 在你的节点上创建一个 index.html 文件
+* 创建 PersistentVolume
+* 创建 PersistentVolumeClaim
+* 创建 Pod
+* 清理
+* 访问控制 - 配置上没有任何问题,但是不知道用什么方式确认 GID 在 pod 中的
+
+## 配置 Pod 使用投射卷作存储 - 将 secret、configMap、downwardAPI 和 serviceAccountToken 卷混合在一起作为投射卷
+* 为 Pod 配置投射卷
+* 清理
+
+## 为 Pod 或容器配置安全上下文
+* 为 Pod 设置安全性上下文
+* 为 Pod 配置卷访问权限和属主变更策略
+* 将卷权限和所有权更改委派给 CSI 驱动程序
+* 为 Container 设置安全性上下文
+* 为 Container 设置权能 - 包含查看 Linux 权能的方法,及 capabilities 字段
+* 为容器设置 Seccomp 配置
+* 为 Container 赋予 SELinux 标签
+* 管理对 /proc 文件系统的访问
+* 讨论
+* 清理
+
+## 为 Pod 配置服务账号
+* 使用默认的服务账号访问 API 服务器
+** 放弃 API 凭据的自动挂载
+* 使用多个服务账号
+* 手动为 ServiceAccount 创建 API 令牌
+** 手动为 ServiceAccount 创建长期有效的 API 令牌
+* 为服务账号添加 ImagePullSecrets
+** 将镜像拉取 Secret 添加到服务账号
+** 检查 imagePullSecrets 已经被设置到新 Pod 上
+* 服务账号令牌卷投射
+** 启动使用服务账号令牌投射的 Pod
+* 发现服务账号分发者
+
+## 从私有仓库拉取镜像 - 重要
+
+## 配置存活、就绪和启动探针 - 重要,包括了 kubelet 通过容器中的命令来判断容器健康的标准
+* 定义存活命令
+* 定义一个存活态 HTTP 请求接口
+* 定义 TCP 的存活探测(livenessProbe)
+* 定义 gRPC 存活探针(livenessProbe)  - 此功能用于检查具有 grpc 服务的应用
+* 使用命名端口
+* 使用启动探针(startupProbe)保护慢启动容器
+* 定义就绪探针(readinessProbe)
+* 配置探针
+** HTTP 探测
+** TCP 探测
+** 探针层面的 terminationGracePeriodSeconds
+
+## 将 Pod 分配给节点 - 重要
+* 给节点添加标签
+* 创建一个将被调度到你选择的节点的 Pod
+* 创建一个会被调度到特定节点上的 Pod
+
+## 用节点亲和性把 Pod 分配到节点
+^^^^^^^^^^^^^^^^^^^^
+### 将 Pod 指派给节点 - 详细的节点选择方式,标签,亲和性,nodeName字段,Pod 拓扑分布约束 等等
+* 节点标签
+* 节点隔离/限制
+* nodeSelector
+* 亲和性与反亲和性
+** 节点亲和性
+*** 节点亲和性权重
+*** 逐个调度方案中设置节点亲和性
+** Pod 间亲和性与反亲和性 - 关于标签选择算符,默认的节点标签,注解,污点 - 重要
+*** Pod 间亲和性与反亲和性的类型
+*** 调度一组具有 Pod 间亲和性的 Pod
+*** Pod 亲和性示例
+^^^^^^^^^^^^^^^^^^^^
+### Pod 拓扑分布约束 - 关于PodTopologySpread 简介(https://kubernetes.io/blog/2020/05/introducing-podtopologyspread/)
+* 动机
+* topologySpreadConstraints 字段
+** 分布约束定义
+** 节点标签
+* 一致性 - 重要
+* 拓扑分布约束示例
+** 示例: 一个拓扑分布约束
+** 示例: 多个拓扑分布约束
+** 示例: 有冲突的拓扑分布约束
+*** 与节点亲和性和节点选择算符的相互作用
+** 示例: 带节点亲和性的拓扑分布约束
+* 隐式约定
+* 集群级别的默认约束 - 如果需要修改默认的调度策略,参考: 调度器配置(https://kubernetes.io/zh-cn/docs/reference/scheduling/config/)
+** 内置默认约束 - 重要
+* 比较 podAffinity 和 podAntiAffinity
+* 已知局限性
+vvvvvvvvvvvvvvvvvvvv
+*** 名字空间选择算符
+*** matchLabelKeys
+*** mismatchLabelKeys
+*** 更实际的用例
+* nodeName
+* Pod 拓扑分布约束
+* 操作符
+vvvvvvvvvvvvvvvvvvvv
+* 给节点添加标签
+* 依据强制的节点亲和性调度 Pod
+* 使用首选的节点亲和性调度 Pod
+
+## 配置 Pod 初始化
+* 创建一个包含 Init 容器的 Pod
+
+## 为容器的生命周期事件设置处理函数
+* 定义 postStart 和 preStop 处理函数
+* 讨论
+
+## 配置 Pod 使用 ConfigMap
+* 创建 ConfigMap
+** 使用 kubectl create configmap 创建 ConfigMap
+*** 基于一个目录来创建 ConfigMap
+*** 基于文件创建 ConfigMap
+*** 使用 --from-env-file 选项基于 env 文件创建 ConfigMap,例如: 
+*** 定义从文件创建 ConfigMap 时要使用的键
+*** 根据字面值创建 ConfigMap
+** 基于生成器创建 ConfigMap
+*** 基于文件生成 ConfigMap
+*** 定义从文件生成 ConfigMap 时要使用的键
+*** 基于字面值生成 ConfigMap
+* 临时清理
+* 使用 ConfigMap 数据定义容器环境变量
+** 使用单个 ConfigMap 中的数据定义容器环境变量
+** 使用来自多个 ConfigMap 的数据定义容器环境变量 
+* 将 ConfigMap 中的所有键值对配置为容器环境变量
+* 在 Pod 命令中使用 ConfigMap 定义的环境变量
+* 将 ConfigMap 数据添加到一个卷中
+** 使用存储在 ConfigMap 中的数据填充卷
+** 将 ConfigMap 数据添加到卷中的特定路径
+** 映射键到指定路径并设置文件访问权限 
+** 可选引用
+** 挂载的 ConfigMap 会被自动更新
+* 了解 ConfigMap 和 Pod
+** 可选的 ConfigMap
+** 限制
+
+## 在 Pod 中的容器之间共享进程命名空间 -- 通过在其他容器中查看无法登陆容器
+* 配置 Pod
+* 理解进程命名空间共享 - 查看其他容器内容的关键
+
+## 为 Pod 配置 user 名字空间
+* 准备开始
+
+## 创建静态 Pod - 注意: Pod 名称将把以连字符开头的节点主机名作为后缀,比如: static-web(yaml 中定义)-k8s02(Node名称)
+* 创建静态 Pod 
+** 文件系统上的静态 Pod 声明文件
+^^^^^^^^^^^^^^^^^^^^
+# kubelet 配置文件中参数
+vvvvvvvvvvvvvvvvvvvv
+** Web 网上的静态 Pod 声明文件
+* 观察静态 Pod 的行为
+* 动态增加和删除静态 Pod
+* 附加内容 - 重要: 使用 kubeadm 管理的控制平面及 etcd 的静态 pod 生成详细信息,详细的官方参考很重要
+
+## 将 Docker Compose 文件转换为 Kubernetes 资源 - kompose 工具用于将 docker compose 的配置内容转换成 k8s 中的 svc,deployment 等等配置文件
+* 安装 Kompose
+* 使用 Kompose
+* 用户指南 - 重要
+
+## 通过配置内置准入控制器实施 Pod 安全标准 - 和下一章配合使用
+* 配置准入控制器 
+## 使用名字空间标签来实施 Pod 安全性标准 - 和上一章配合使用
+## 从 PodSecurityPolicy 迁移到内置的 PodSecurity 准入控制器 - 依赖于前 2 章的内容
+
+--------------------
+
+第三部分(3/16)
+# 监控、日志和调试
+
+## 集群故障排查 - 针对集群管理员以及 Kubernetes 集群表现异常的用户.
+* 列举集群节点
+** 示例: 调试关闭/无法访问的节点
+* 查看日志
+** 控制平面节点
+** 工作节点
+* 集群故障模式
+** 故障原因
+** 具体情况
+** 缓解措施
+### kubectl 故障排查
+* 验证 kubectl 设置
+* 检查 kubeconfig
+* 检查 VPN 连接
+* 身份认证和鉴权 
+* 验证上下文
+* API 服务器和负载均衡器
+* TLS 问题
+* 验证 kubectl 助手
+### 资源监控工具
+* 资源度量管道
+* 完整度量管道 - 非常重要,提供了关于监控指标工具选取的仓库 CNCF(https://landscape.cncf.io/?group=projects-and-products&view-mode=card#observability-and-analysis--monitoring)
+### 资源指标管道 - 重要: 描述了如何通过 kubectl,curl 来使用 metric server 的指标,以及度量单位
+* Metrics API
+* 度量资源用量
+** CPU
+** 内存
+* Metrics 服务器
+### 节点健康监测 - 重要: 通过 DeamonSet 来启动检测器,检测系统日志,系统健康检查等等内容,同时可以通过自定义插件的方式,建立自定义的检测
+* 局限性
+* 启用节点问题检测器
+** 使用 kubectl 启用节点问题检测器
+** 使用插件 Pod 启用节点问题检测器 
+* 覆盖配置文件
+* 问题守护程序 
+** 增加对其他日志格式的支持 -- 二次开发需要
+** 添加自定义插件监视器 -- 二次开发需要
+* 导出器
+* 建议和限制
+### 使用 crictl 对 Kubernetes 节点进行调试
+* 安装 crictl
+* 一般用法
+* crictl 命令示例
+** 打印所有 Pod 的清单: 
+** 打印镜像清单
+** 打印容器清单
+** 在正在运行的容器上执行命令
+** 获取容器日志
+** 运行 Pod 沙盒 - 不能直接产生沙盒,有 calico 的报错
+** 创建容器 - ?未知,需要配合上一节内容使用
+** 启动容器
+### 使用 telepresence 在本地开发和调试服务
+^^^^^^^^^^^^^^^^^^^^
+telepresence 下载及安装参考
+vvvvvvvvvvvvvvvvvvvv
+* 从本机连接到远程 Kubernetes 集群
+* 开发和调试现有的服务
+* Telepresence 是如何工作的?
+### 用 Kubectl 调试 Kubernetes 节点 - 非常重要,通过 pod 来调试 pod 所在节点
+* 使用 kubectl debug node 调试节点
+* 清理现场
+
+## 应用排错 - 针对部署代码到 Kubernetes 并想知道代码为什么不能正常运行的用户.
+### 调试 Pod
+* 诊断问题
+** 调试 Pod
+*** Pod 停滞在 Pending 状态
+*** Pod 停滞在 Waiting 状态
+*** Pod 停滞在 terminating 状态
+*** Pod 处于 Crashing 或别的不健康状态
+*** Pod 处于 Running 态但是没有正常工作 -- 重要: kubectl apply --validate 参数可以参看详细的创建信息
+** 调试副本控制器 
+** 调试 Service
+*** 服务缺少 Endpoints
+### 调试 Service
+* 在 Pod 中运行命令
+* 设置
+* Service 是否存在?
+* Service 是否可通过 DNS 名字访问?
+** 是否存在 Service 能通过 DNS 名称访问？
+** Service 能够通过 IP 访问么？
+* Service 的配置是否正确？ 
+* Service 有 Endpoints 吗？
+* Pod 工作正常吗？
+* kube-proxy 正常工作吗？
+** kube-proxy 正常运行吗？ {#is-kube-proxy working}
+*** Iptables 模式
+*** IPVS 模式
+** kube-proxy 是否在执行代理操作?
+** 边缘案例: Pod 无法通过 Service IP 连接到它本身 - 观察目前使用的网络设置没有碰到此种关于 Hairpin 的配置内容,而 Hairpin 用于路由上路由回源的上下文.
+### 调试 StatefulSet - 重要: StatefullSet 用于有状态应用的场景,同时有 pv/pvc 的绑定,比如数据库 mysql 等等,同时手动删除 pv 的绑定
+* 准备开始
+^^^^^^^^^^^^^^^^^^^^
+pv/pvc 的排错
+vvvvvvvvvvvvvvvvvvvv
+* 调试 StatefulSet
+### 确定 Pod 失败的原因 - 重要: 介绍如何编写和读取容器的终止消息,同时关于日志处理的建议及策略
+* 读写终止消息
+* 定制终止消息 - 重要: 当容器失败的时候,退出消息为空的时候,定制一段输出消息
+### 调试 Init 容器 - 重要: 如何核查与 Init 容器执行相关的问题
+* 检查 Init 容器的状态
+* 获取 Init 容器详情
+* 通过 Init 容器访问日志
+* 理解 Pod 的状态
+### 调试运行中的 Pod - 重要: 如何在节点上调试运行中(或崩溃)的 Pod.
+* 使用 kubectl describe pod 命令获取 Pod 详情
+* 例子: 调试 Pending 状态的 Pod
+* 检查 Pod 的日志 - 重要: 可以查看容器崩溃之前的日志
+* 使用容器 exec 进行调试 - 重要: 当 pod 中包含多个容器,使用的方式
+* 使用临时调试容器来进行调试 - 重要: 当容器无法执行 kubectl exec 时使用
+* 使用临时容器来调试的例子 - 使用共享命名空间的模式来调试
+* 通过 Pod 副本调试
+** 在添加新的容器时创建 Pod 副本 
+# 此命令的逻辑是启动一个 pod 名字为 myapp-debug,为 myapp 这个 pod 的副本,使用 ubuntu 作为调试用的容器附在这个副本上.
+** 在改变 Pod 命令时创建 Pod 副本 
+** 在更改容器镜像时拷贝 Pod
+* 在节点上通过 shell 来进行调试
+* 调试配置 
+### 获取正在运行容器的 Shell
+* 获取容器的 Shell 
+* 编写 nginx 的根页面
+* 在容器中运行单个命令
+* 当 Pod 包含多个容器时打开 shell
+
+--------------------
+
+第四部分(4/16)
+# 管理 Kubernetes 对象
+
+## 使用配置文件对 Kubernetes 对象进行声明式管理 - 重要,这里详细介绍了 kubectl apply 的来龙去脉,已经经常需要使用的模式
+* 权衡取舍 
+* 如何创建对象 - 重要,显示了如何查看当初建立对象时候的配置文件内容,比如: kubectl apply -f a.yam,通过 kubectl get xx -o yaml中的 kubectl.kubernetes.io/last-applied-configuration: '{...}' 查看.
+* 如何更新对象 - 重要,描述了 kubectl apply -f x.yaml 与 kubectl create -f x.yaml 的部分区别
+* 如何删除对象
+** 建议操作:kubectl delete -f <文件名>
+** 替代方式:kubectl apply -f <目录> --prune
+* 如何查看对象 
+* apply 操作是如何计算配置差异并合并变更的? - 重要,详细描述了 kubectl apply 做了何种变更.
+** 合并补丁计算
+** 不同类型字段的合并方式
+** 合并对基本类型字段的更新
+** 合并对 map 字段的变更
+** 合并 list 类型字段的变更
+*** 如果 list 中元素都是基本类型则替换整个 list
+*** 如果 list 中元素为复合类型则逐个执行合并
+
+*** 合并基本类型元素 list 
+* 默认字段值 - 重要,这里描述了为什么最好将默认字段也设置在配置文件中的原因.
+** 如何清除服务器端按默认值设置的字段或者被其他写者设置的字段
+* 如何将字段的属主在配置文件和直接指令式写者之间切换 - 重要,如何修改当前正在运行的配置的某些字段
+** 将属主从直接指令式写者更改为配置文件
+** 将属主从配置文件改为直接指令式写者 
+^^^^^^^^^^^^^^^^^^^^
+重要测试: 测试通过手动方式修改运行的配置
+vvvvvvvvvvvvvvvvvvvv
+* 更改管理方法 
+** 从指令式命令管理切换到声明式对象配置
+** 从指令式对象配置切换到声明式对象配置 
+* 定义控制器选择算符和 PodTemplate 标签
+
+## 使用 Kustomize 对 Kubernetes 对象进行声明式管理 - 重要,标准批量管理应用的提倡方式,使用 kustomize 来标准化
+* Kustomize 概述 
+** 生成资源
+*** configMapGenerator 
+*** secretGenerator
+*** generatorOptions
+** 设置贯穿性字段
+** 组织和定制资源 
+*** 组织
+*** 定制
+* Kustomize 功能特性列表  - 有些特性被遗弃,需要更新到最新版本
+
+## 使用指令式命令管理 Kubernetes 对象 - 重要,介绍了如何通过 kubectl 来操作命令
+* 权衡取舍 
+* 如何创建对象
+* 如何更新对象
+* 如何删除对象
+* 如何查看对象 
+* 使用 set 命令在创建对象之前修改对象
+* 在创建之前使用 --edit 更改对象
+
+## 使用配置文件对 Kubernetes 对象进行命令式管理
+* 权衡
+* 如何创建对象 
+* 如何更新对象
+* 如何删除对象 - 重要,有 1 种特殊的字段删除,需要单独的删除
+* 如何查看对象 
+* 局限性
+* 从 URL 创建和编辑对象而不保存配置
+* 从命令式命令迁移到命令式对象配置 - 重要,导出线上配置并修改以后只能用 replace 来修改
+* 定义控制器选择器和 PodTemplate 标签 
+
+## 使用 kubectl patch 更新 API 对象 - 重要,关于 策略合并 patch 和 JSON 合并 patch 这 2 种模式更新 kubernetes api 对象
+* 使用策略合并 patch 更新 Deployment
+** 策略性合并类的 patch 的说明
+* 使用 JSON 合并 patch 更新 Deployment 
+* 使用带 retainKeys 策略的策略合并 patch 更新 Deployment
+** 关于使用 retainKeys 策略的策略合并 patch 操作的说明 - 有用,这里描述了当有些字段有值,通过 patch 方式无法修改时的一种方式,但是可以操作的字段很少,其中最有用的是 pod/deployment 的 .spec.volumes 这个数组和 Deployment 中的 .spec.strategy
+** kubectl patch 命令的其他形式 
+** 使用 kubectl patch 和 --subresource 更新一个对象的副本数 - 获取和更新资源的 status 和 scale 子资源
+* 总结 - 重要,告知了那些命令可以修改 API 对象
+
+## 使用存储版本迁移功能来迁移 Kubernetes 对象 - 很强大的功能,但是在 kubernetes 1.30 仍然为 [alpha]
+
+--------------------
+
+第五部分(5/16)
+# 管理 Secrets
+
+## 使用 kubectl 管理 Secret
+* 创建 Secret
+** 使用原始数据
+** 使用源文件 - 重要,解释了为什么 echo 要使用 -n 参数
+* 验证 Secret
+** 解码 Secret - 重要,解释了如何查看 secret 的解密以后的具体内容
+* 你可以编辑一个现存的 Secret 对象,除非它是不可改变的.要想编辑一个 Secret,请执行以下命令: 
+* 清理
+
+## 使用配置文件管理 Secret
+* 创建 Secret
+** 创建 Secret 时提供未编码的数据 - 重要,和使用 Data 字段加密数据有很大区别,需要特别注意,可以使用 | 来分割 key 和 value 作为其中一种有多层嵌套时用的
+** 同时指定 data 和 stringData
+* 编辑 Secret
+^^^^^^^^^^^^^^^^^^^^
+# 服务器端应用(Server-Side Apply) - 注意,Kubernetes v1.22 正式特性,是 last-applied configuration 的一种升级版,解决是某些没有被 last-applied configuration 管理的字段的 update 类似的操作,是一个可选的机制,需要 ServerSideApply 特性门支持,而 last-applied configuration 则相对的被称为 Client-Side Apply,但是,这个特性根据如下的官方描述,管理的字段会描述是被何种对象修改,后续的测试中有描述,当使用了此特性以后,不在有 last-applied configuration 字段.使用此特性还需要进一步的测试了解起详细的过程.
+vvvvvvvvvvvvvvvvvvvv
+* 清理
+
+## 使用 Kustomize 管理 Secret
+* 创建 Secret
+** 创建 kustomization 文件
+*** 文字
+*** 文件
+*** .env 文件 - 本质上和从文件获取方式一样,只是用的是 .开头的文件
+** 应用 kustomization 文件
+* 编辑 Secret - 编辑一个已经生成的 Secret 文件,将会生成一个新的 secret 对象
+* 清理
+
+--------------------
+
+第六部分(6/16)
+# 给应用注入数据
+
+## 为容器设置启动时要执行的命令和参数 - 重要,在 pod 下设置容器启动用的命令和参数,最通用的方式
+* 创建 Pod 时设置命令及参数
+^^^^^^^^^^^^^^^^^^^^
+# 错误测试,尝试使用 server-side apply 的方式强行修改正在运行的配置
+vvvvvvvvvvvvvvvvvvvv
+* 使用环境变量来设置参数
+* 在 Shell 来执行命令
+
+## 定义相互依赖的环境变量 - 重要,描述了环境变量的相互依赖,特别是定义时候有先后顺序的要求
+* 为容器定义相互依赖的环境变量
+
+## 为容器设置环境变量 - 重要,使用 env 方式设置给容器设置环境变量
+* 为容器设置一个环境变量
+* 在配置中使用环境变量
+
+## 通过环境变量将 Pod 信息呈现给容器 - 重要,从 pod 和 container 中取值做为环境变量的值,分别取之 kubectl get pod xxx -o yaml 及 kubectl describe pod xxx,并且这里明确的表现了上述 2 个命令的差异,pod 和 container,与下一章节合并为 downward API
+* 用 Pod 字段作为环境变量的值 - 重要,可以读取 kubectl get pod xxx -o yaml 中的字段内容,用在配置文件中,并且在通过 kubectl describe pod xxx 的时候看到的是关于 pod 的信息,不是 container
+* 使用容器字段作为环境变量的值 - 重要,将 container 的内容取出使用,来自 kubectl describe pod xxx 的 Containers: 字段的内容
+
+## 通过文件将 Pod 信息呈现给容器 - 重要,与上一章节合并为 downward API,与上一章节类似,将 pod 的信息以文件的形式挂载到容器中,甚至可以将其他容器的信息挂载到此容器中
+* 存储 Pod 字段 
+* 存储容器字段
+^^^^^^^^^^^^^^^^^^^^
+# 重要测试根据上两章节中的将一个容器的信息通过环境变量及文件的形式挂载到另外一个容器中.
+vvvvvvvvvvvvvvvvvvvv
+
+## 使用 Secret 安全地分发凭据
+* 准备开始
+** 将 Secret 数据转换为 base-64 形式
+* 创建 Secret
+** 直接用 kubectl 创建 Secret
+* 创建一个可以通过卷访问 Secret 数据的 Pod
+** 映射 Secret 键到特定文件路径
+** 为 Secret 键设置 POSIX 权限
+* 使用 Secret 数据定义容器变量
+** 使用来自 Secret 中的数据定义容器变量
+** 使用来自多个 Secret 的数据定义环境变量
+* 将 Secret 中的所有键值偶对定义为环境变量
+* 示例: 使用 Secret 为 Pod 提供生产环境或测试环境的凭据
+
+--------------------
+
+第七部分(7/16)
+# 运行应用
+
+## 使用 Deployment 运行一个无状态应用 - 关键,通过不断修改同一个 deployment 文件,实现修改 image,scale 的目的
+* 教程目标
+* 创建并了解一个 nginx Deployment
+* 更新 Deployment
+* 通过增加副本数来扩缩应用
+* 删除 Deployment 
+* ReplicationController —— 旧的方式 
+
+## 运行一个单实例有状态应用
+* 教程目标
+* 准备开始
+* 部署 MySQL
+* 访问 MySQL 实例
+* 更新
+* 删除 Deployment
+
+## 运行一个有状态的应用程序
+* 准备开始
+* 部署 MySQL
+** 创建一个 ConfigMap
+** 创建 Service
+** 创建 StatefulSet 
+^^^^^^^^^^^^^^^^^^^^
+# 测试,使用 volumeClaimTemplates(嵌入式 PVC) 完成类似生产环境的状态应用的部署,包括多个副本
+# 如下的 2 种方式都是动态制备的模式,动态制备指的的是动态产生 pvc,和静态的主要区别在于当 pod 使用 pvc 的时候,通过 volumeClaimTemplates 中的 storageClassName 来直接产生 pvc,挂载时则使用 volumeClaimTemplates 的名称,而静态模式 pod 使用 pvc 的时候,必须事先准备好 pvc 然后在配置文件中定义 volumes,并将 pvc 指定到此 volumes 中,然后通过 volumeMounts 来挂载此 volumes 来完成
+# 方式 1 : 单独定义了 storageclass,使用动态制备的方式使用 pv
+# 方式 2 : 不单独定义 storageclass,在 pv 文件中定义
+vvvvvvvvvvvvvvvvvvvv
+* 了解有状态的 Pod 初始化
+** 生成配置
+** 克隆现有数据
+** 开始复制
+* 发送客户端请求 - 由于上述的 mysql 镜像版本(9.0.1)与官方的 5.7 版本不符合,部署不成功,因此,此部分无法测试
+  mysql -h mysql-read -e "SELECT * FROM test.messages"
+* 模拟 Pod 和 Node 失效
+** 破坏就绪态探测
+** 删除 Pod
+** 腾空节点
+* 扩展副本节点数量
+* 清理现场
+
+## 扩缩 StatefulSet
+* 扩缩 StatefulSet
+** 使用 kubectl 扩缩 StatefulSet
+** 对 StatefulSet 执行就地更新
+* 故障排查
+** 缩容操作无法正常工作
+
+## 删除 StatefulSet
+* 删除 StatefulSet - 介绍了如何只删除 statefulset 而不删除 pod 的方式
+** 持久卷
+** 完全删除 StatefulSet
+** 强制删除 StatefulSet 的 Pod
+
+## 强制删除 StatefulSet 中的 Pod
+* StatefulSet 注意事项
+* 删除 Pod - 关键,提到了几种当节点(node)无法连接时的处理方式
+** 强制删除 - 关键,当无法优雅删除的时候,采用的一些强制方式,比如: --force --grace-period,kubectl patch pod <pod> -p '{"metadata":{"finalizers":null}}'
+
+## Pod 水平自动扩缩 - 重要,介绍了水平自动扩缩的算法,原则,等等细节,并且涉及到诸多的 kube-controller-manager 服务的启动参数,需要提前考虑
+* HorizontalPodAutoscaler 是如何工作的？
+** 算法细节
+期望副本数 = ceil[当前副本数 * (当前指标 / 期望指标)]
+* API 对象
+* 工作量规模的稳定性 
+* 滚动升级时扩缩
+* 对资源指标的支持
+** 容器资源指标 - 这里是更细化的配置模式,抵消上面提到的"Pod 的总体资源用量值可能不会精确体现各个容器的资源用量,当某个容器运行时的资源用量非常高,但因为 Pod 层面的资源用量总值让人在可接受的约束范围内,HPA 不会执行扩大目标对象规模的操作" 这一问题
+* 扩展自定义指标
+* 基于多个指标来执行扩缩
+* 可配置的扩缩行为
+** 扩缩策略 - 允许在扩缩中做出细致的调整
+** 稳定窗口
+** 默认行为
+** 示例: 更改缩容稳定窗口 
+** 示例: 限制缩容速率
+** 示例: 禁用缩容
+* kubectl 对 HorizontalPodAutoscaler 的支持
+* 隐式维护状态禁用
+** 将 Deployment 和 StatefulSet 迁移到水平自动扩缩
+
+## HorizontalPodAutoscaler 演练
+* 准备开始
+* 运行 php-apache 服务器并暴露服务
+* 创建 HorizontalPodAutoscaler
+* 增加负载
+* 停止产生负载
+* 基于多项度量指标和自定义度量指标自动扩缩 - 重要,除了固定的度量指标意外,另外有 2 种自定义的度量指标类型,Pod 度量指标类型和 Object 度量指标类型,以及一种特别的度量指标类型 External 用于那些与 kubernetes 无直接关联的度量指标
+** 基于更特别的度量值来扩缩
+** 基于与 Kubernetes 对象无关的度量指标执行扩缩
+* 附录: Horizontal Pod Autoscaler 状态条件
+* 量纲
+* 其他可能的情况
+
+## 为应用程序设置干扰预算(Disruption Budget) - 查看在第一部分中的内容
+
+## 从 Pod 中访问 Kubernetes API
+* 从 Pod 中访问 API
+** 使用官方客户端库
+** 直接访问 REST API - 重要,在非编程环境下访问 k8s api 的方式,包括了在容器中放置了与 pod 关联的服务帐号的 token,ca,namespace
+** 使用 kubectl proxy
+* 不使用代理 - 重要,介绍了在容器中如何通过 url 的方式使用与 pod 关联的服务帐号访问 k8s api
+
+--------------------
+
+第八部分(8/16)
+# 运行 Jobs
+
+## 使用 CronJob 运行自动化任务 - 类似 crontab 计划任务在 k8s 平台上运行,其中在 cronjob 上可以定义类似建立 pod 的 job
+* 创建 CronJob
+* 删除 CronJob
+
+## 使用工作队列进行粗粒度并行处理
+* 启动消息队列服务 
+* 测试消息队列服务
+* 为队列增加任务
+# 在你的计算机上运行此命令,而不是在 Pod 中 - 注意: 不一定需要在本地计算机上,在任意一个能解析到 kubernetes 的 service 的地方都可以,这里使用的是一个 pod,在 pod 中安装了 apt-get update && apt-get install -y curl ca-certificates amqp-tools python --no-install-recommends 这些工具,用以创建队列并向队列中推送消息.
+* 创建容器镜像 - 注意,当前运行的容器是使用 containerd 来完成的,因此,这部分的内容需要在有 docker 的机器上完成
+* 定义 Job
+* 运行 Job 
+* 替代方案
+* 友情提醒
+
+## 带 Pod 间通信的 Job - 使用"索引完成模式"的 Job,类似 statefulset 的具有固定 pod 名称的模式,比如: job-name-0-xcv,job-name-1-dfx,job-name-2-dfe ... 这样的名称的 pod.同时在 pod 中能解析到的 hostname 为 JobName-${i}.ServiceName 这样的固定样式
+* 启动带 Pod 间通信的 Job 
+** 示例
+* 启动 Redis 
+* 使用任务填充队列 
+* 创建容器镜像 - 注意,当前运行的容器是使用 containerd 来完成的,因此,这部分的内容需要在有 docker 的机器上完成
+** Push 镜像 
+* 定义一个 Job
+* 运行 Job
+* 替代方案 
+^^^^^^^^^^^^^^^^^^^^
+# 这里有个问题,当某一个 pod 完成将队列中的最后一个任务处理完毕以后,是如何通知控制器,job 完成了,这里如何处理的?
+# 重点: 根据下面的详细描述,队列并行的 Job 是否完成的关键在于某一个 pod 中的应用程序在完成队列的最后一项工作以后,关闭自己所在的 pod.
+# 详细的信息通过 "适合以 Job 形式来运行的任务主要有三种: " 来描述
+# 重要: 上述的 3 中任务中,带有 .spec.completionMode="Indexed",并且 completions 和 parallelism 都有计数或者 completions 和 parallelism 都有值的需要特别注意,后面的章节会讲解到.
+# 并行计算模式的取舍
+vvvvvvvvvvvvvvvvvvvv
+
+## 使用索引作业完成静态工作分配下的并行处理
+* 选择一种方法
+* 定义索引作业
+* 执行 Job {running-the-job} 
+
+## 使用展开的方式进行并行处理
+* 基于模板创建 Job - 说明,使用程序生成批量的 job 文件,同时每个 job 运行的是一个任务中的一部分,而且是非并行的任务
+** 基于模板创建清单
+** 基于清单创建 Job
+** 清理
+* 使用高级模板参数
+** 清理
+^^^^^^^^^^^^^^^^^^^^
+# 插入一个排错的内容,关于 kubectl remote error: tls: internal error 的报错及临时解决方法.
+vvvvvvvvvvvvvvvvvvvv
+* 在真实负载中使用 Job
+* Job 和 Pod 上的标签
+* 替代方案
+
+## 使用 Pod 失效策略处理可重试和不可重试的 Pod 失效
+* 准备开始
+* 使用 Pod 失效策略以避免不必要的 Pod 重试 - 使用 podFailurePolicy(Pod 失效策略)来防止 pod 失败重试,屏蔽 backoffLimit 参数的内容
+** 清理
+* 使用 Pod 失效策略来忽略 Pod 干扰 - 使用 podFailurePolicy(Pod 失效策略)来防止 pod 干扰策略的影响(比如因为干扰策略设置驱逐此节点上所有的 pod),并将 pod 重拾计数向着参数 .spec.backoffLimit 的数值递增
+** 清理 
+* 基于自定义 Pod 状况使用 Pod 失效策略避免不必要的 Pod 重试 - 当 pod 处于 pending 的状态时,由于无法通过重试恢复状态,需要过渡到终止状态,可以借鉴在某些 pod 无法恢复,需要直接终止的状态
+** 清理
+* 替代方案
+
+--------------------
+
+第九部分(9/16)
+# 访问集群中的应用程序
+
+## 部署和访问 Kubernetes 仪表板(Dashboard)
+* 部署 Dashboard UI - 重要,使用了最新的唯一的 helm 方式来安装
+* 访问 Dashboard 用户界面 - 重要,通过 token 的方式访问 UI
+** 命令行代理
+* 欢迎界面
+* 部署容器化应用
+** 指定应用的详细配置
+** 上传 YAML 或者 JSON 文件
+* 使用 Dashboard
+** 导航
+** 管理概述
+** 负载
+** 服务
+** 存储
+** ConfigMap 和 Secret
+** 日志查看器
+
+## 访问集群 - 重要,提供了访问集群方式的汇总
+* 使用 kubectl 完成集群的第一次访问
+* 直接访问 REST API 
+** 使用 kubectl proxy - 当在可以使用 kubectl 的机器上执行时候,因为有证书的原因,此方法可用
+** 不使用 kubectl proxy - 当没有可以与 api 通讯的证书,使用此种方法
+* 以编程方式访问 API
+** Go 客户端
+** Python 客户端
+** 其它语言
+** 从 Pod 中访问 API
+* 访问集群上运行的服务
+* 请求重定向 
+* 多种代理
+
+## 配置对多集群的访问 - 重要,在多个集群之间的切换及当使用类似 PAAS 平台时候管理多个集群时候非常有用,同时也是对'第一部分(1/16)' 中'的'## 名字空间演练'部分的更全面详细的描述
+* 定义集群、用户和上下文 - 重要,优先配置一个有配置选项的文件,使用 kubectl config --kubeconfig xxx 命令向文件中填充内容,最后得到一个可用的 kubeconfig 文件
+^^^^^^^^^^^^^^^^^^^^
+# 重要,插入一个关于在 yaml 文件中的数组的取值方式
+vvvvvvvvvvvvvvvvvvvv
+* 创建第二个配置文件
+* 设置 KUBECONFIG 环境变量 
+* 探索 $HOME/.kube 目录 
+* 将 $HOME/.kube/config 追加到 KUBECONFIG 环境变量中 - 重要,当设置好集群以后,连接集群实际上用的 KUBECONFIG 文件就是这个,通过 kubectl config view 看到也是这个文件
+* 清理
+* 检查 kubeconfig 所表示的主体 - 重要,当管理多个集群的时候,如何判断当前的用户名是那个很重要,及 kubectl [alpha] auth whoami 命令
+
+## 使用端口转发来访问集群中的应用
+* 准备开始
+* 创建 MongoDB Deployment 和服务
+* 转发一个本地端口到 Pod 端口
+** (可选操作)让 kubectl 来选择本地端口
+* 讨论
+
+## 使用服务来访问集群中的应用
+* 教程目标
+* 为运行在两个 Pod 中的应用创建一个服务
+* 使用服务配置文件
+* 清理现场
+
+## 使用 Service 把前端连接到后端
+* 使用部署对象(Deployment)创建后端 
+* 创建 hello Service 对象
+* 创建前端
+* 与前端 Service 交互
+* 通过前端发送流量
+* 清理现场
+
+## 创建外部负载均衡器
+* 创建服务
+** 基于清单文件创建服务
+** 使用 kubectl 创建 Service
+* 找到你的 IP 地址
+* 保留客户端源 IP - 类似的从客户端发送的数据包的源 IP 地址将被保留,某些情况将导致同一个源 IP 会将所有的请求发送到同一个 node
+** 保留源 IP 时的注意事项和限制
+* 回收负载均衡器 - 为了防止当在 service 被删除以后,云服务供应商的负载均衡仍然在工作导致,访问应用失败的情况
+* 外部负载均衡器供应商
+
+## 列出集群中所有运行容器的镜像
+* 列出所有命名空间下的所有容器镜像 - 重要,提供如何在 json 文件中提取字段的方式(https://kubernetes.io/zh-cn/docs/reference/kubectl/jsonpath/)
+^^^^^^^^^^^^^^^^^^^^
+# 对比使用 json 及 yaml 输出的信息 - 重要,对使用 jsonpath 及 yaml 形式显示数据的汇总
+vvvvvvvvvvvvvvvvvvvv
+* 按 Pod 列出容器镜像
+* 列出以标签过滤后的 Pod 的所有容器镜像
+* 列出以命名空间过滤后的 Pod 的所有容器镜像
+* 使用 go-template 代替 jsonpath 来获取容器镜像
+
+## 在 Minikube 环境中使用 NGINX Ingress 控制器配置 Ingress - 重要,插入了部署 nginx ingress 的详细步骤,其中当修改了 ingress 应用的 yaml 文件,在重新 apply 的时候,并不会影响原来运行的 ingress controller,就是说,ingress 的应用文件相当与 nginx 配置文件中的加入的转发策略,或者 host 的配置段等等,对于 nginx 本身的服务及关于 SSL等等的配置项不会产生影响,此特性非常有用,强烈建议使用.
+^^^^^^^^^^^^^^^^^^^^
+# nginx ingress 在 kubernetes 上的安装配置
+vvvvvvvvvvvvvvvvvvv
+* 部署一个 Hello World 应用
+* 创建一个 Ingress
+* 创建第二个 Deployment 
+* 编辑现有的 Ingress
+* 测试你的 Ingress
+
+## 同 Pod 内的容器使用共享卷通信 - 用于数据的共享
+* 创建一个包含两个容器的 Pod
+* 讨论
+
+## 为集群配置 DNS
+
+## 访问集群上运行的服务
+* 访问集群上运行的服务
+** 连接方式
+** 发现内置服务
+** 手动构建 API 服务器代理 URLs
+*** 示例
+** 通过 Web 浏览器访问集群中运行的服务
+
+

@@ -1,0 +1,31 @@
+当--anonymous-auth="true"时,使用--authorization-mode="AlwaysAllow"会有如下报错
+
+authentication.go:382] AnonymousAuth is not allowed with the AllowAll authorizer.  Resetting AnonymousAuth to false. You should use a different authorizer
+
+这里地方,很奇怪,当明确指定上述2个参数的时候,会有报错,如果不指定时,上述的2个参数的值是默认值,启动时,没有问题.
+把--authorization-mode="AlwaysAllow"修改为--authorization-mode=RBAC
+
+
+当使用--authorization-mode=RBAC,由于此参数的允许的权限问题,当
+curl https://192.168.10.15:6443/api/v1/nodes --cert /home/blue/apps/kubernetes/certificate/client.crt --key /home/blue/apps/kubernetes/certificate/client.key --cacert /home/blue/apps/kubernetes/certificate/ca.crt
+
+实际就是get nodes的时候,会出现
+
+[blue@lb01 logs]$ curl https://192.168.10.15:6443/api/v1/nodes --cert /home/blue/apps/kubernetes/certificate/client.crt --key /home/blue/apps/kubernetes/certificate/client.key --cacert /home/blue/apps/kubernetes/certificate/ca.crt
+{
+  "kind": "Status",
+  "apiVersion": "v1",
+  "metadata": {
+    
+  },
+  "status": "Failure",
+  "message": "nodes is forbidden: User \"blue\" cannot list nodes at the cluster scope",
+  "reason": "Forbidden",
+  "details": {
+    "kind": "nodes"
+  },
+  "code": 403
+的报错
+
+
+修改--authorization-mode="AlwaysAllow",同时修改--anonymous-auth="false"

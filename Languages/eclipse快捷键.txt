@@ -1,0 +1,294 @@
+1详细内容
+编辑
+
+Eclipse快捷键，熟悉快捷键可以帮助开发事半功倍，节省更多的时间来用于做有意义的事情。
+Ctrl+1 快速修复(最经典的快捷键,就不用多说了)
+Ctrl+D: 删除当前行
+Ctrl+Alt+↓ 复制当前行到下一行(复制增加)
+Ctrl+Alt+↑ 复制当前行到上一行(复制增加)
+Alt+↓ 当前行和下面一行交互位置(特别实用,可以省去先剪切,再粘贴了)
+Alt+↑ 当前行和上面一行交互位置(同上)
+Alt+← 前一个编辑的页面
+Alt+→ 下一个编辑的页面(当然是针对上面那条来说了)
+Alt+Enter 显示当前选择资源(工程,or 文件 or文件)的属性
+Shift+Enter 在当前行的下一行插入空行(这时鼠标可以在当前行的任一位置,不一定是最后)
+Shift+Ctrl+Enter 在当前行插入空行(原理同上条)
+Ctrl+Q 定位到最后编辑的地方
+Ctrl+L 定位在某行 (对于程序超过100的人就有福音了)
+Ctrl+M 最大化当前的Edit或View (再按则反之)
+Ctrl+/ 注释当前行,再按则取消注释
+Ctrl+O 快速显示 OutLine
+Ctrl+T 快速显示当前类的继承结构
+Ctrl+W 关闭当前Editer
+Ctrl+K 参照选中的Word快速定位到下一个
+Ctrl+E 快速显示当前Editer的下拉列表(如果当前页面没有显示的用黑体表示)
+Ctrl+/(小键盘) 折叠当前类中的所有代码
+Ctrl+×(小键盘) 展开当前类中的所有代码
+Ctrl+Space 代码助手完成一些代码的插入(但一般和输入法有冲突,可以修改输入法的热键,也可以暂用Alt+/来代替)
+Ctrl+Shift+E 显示管理当前打开的所有的View的管理器(可以选择关闭,激活等操作)
+Ctrl+J 正向增量查找(按下Ctrl+J后,你所输入的每个字母编辑器都提供快速匹配定位到某个单词,如果没
+有,则在stutes line中显示没有找到了,查一个单词时,特别实用,这个功能Idea两年前就有了)
+Ctrl+Shift+J 反向增量查找(和上条相同,只不过是从后往前查)
+Ctrl+Shift+F4 关闭所有打开的Editer
+Ctrl+Shift+X 把当前选中的文本全部变为大写
+Ctrl+Shift+Y 把当前选中的文本全部变为小写
+Ctrl+Shift+F 格式化当前代码
+Ctrl+Shift+P 定位到对于的匹配符(譬如{}) (从前面定位后面时,光标要在匹配符里面,后面到前面,则反之)
+下面的快捷键是重构里面常用的,本人就自己喜欢且常用的整理一下(注:一般重构的快捷键都是Alt+Shift开头的了)
+Alt+Shift+R 重命名 (是我自己最爱用的一个了,尤其是变量和类的Rename,比手工方法能节省很多劳动力)
+Alt+Shift+M 抽取方法 (这是重构里面最常用的方法之一了,尤其是对一大堆泥团代码有用)
+Alt+Shift+C 修改函数结构(比较实用,有N个函数调用了这个方法,修改一次搞定)
+Alt+Shift+L 抽取本地变量( 可以直接把一些魔法数字和字符串抽取成一个变量,尤其是多处调用的时候)
+Alt+Shift+F 把Class中的local变量变为field变量 (比较实用的功能)
+Alt+Shift+I 合并变量(可能这样说有点不妥Inline)
+Alt+Shift+V 移动函数和变量(不怎么常用)
+Alt+Shift+Z 重构的后悔药(Undo)
+
+2编辑
+编辑
+
+作用域		功能					快捷键
+全局   		查找并替换			Ctrl+F
+文本编辑器	查找上一个			Ctrl+Shift+K
+文本编辑器	查找下一个			Ctrl+K
+文本编辑器	删除当前行			Ctrl+D
+文本编辑器	当前行的下一行插入空行	Shift+Enter
+文本编辑器	当前行插入空行			Ctrl+Shift+Enter
+文本编辑器	定位到最后编辑的位置	Ctrl+Q　	　　	　　
+全局		恢复上一个选择				Alt+Shift+↓
+全局		快速修正					Ctrl+1
+全局		内容辅助（代码提示）		Alt+/
+全局		全部选中					Ctrl+A
+全局		删除						Delete
+全局		上下文信息				Alt+/Alt+Shift+?Ctrl+Shift+Space
+Java编辑器	显示工具提示描述		F2
+Java编辑器	选择封装元素			Alt+Shift+↑
+Java编辑器	增量选择上一个同级元素	Alt+Shift+←
+Java编辑器	增量选择下一个同级元素	Alt+Shift+→
+文本编辑器	增量查找				Ctrl+J
+文本编辑器	增量逆向查找			Ctrl+Shift+J	　　	　　
+java编辑器	自动生成get set方法	Alt+Shift+s 再按 r
+java编辑器	列出所有实现此接口的类	ctrl+T
+
+3查看
+编辑
+
+作用域		功能			快捷键
+全局			放大			Ctrl+=
+全局			缩小			Ctrl+-
+
+4窗口
+编辑
+
+作用域		功能			快捷键
+全局		激活编辑器		F12
+全局		关闭所有编辑器		Ctrl+Shift+W
+全局		上一个编辑器		Ctrl+Shift+F6
+全局		上一个视图		Ctrl+Shift+F7
+全局		上一个透视图		Ctrl+Shift+F8
+全局		下一个编辑器		Ctrl+F6
+全局		下一个视图		Ctrl+F7
+全局		下一个透视图		Ctrl+F8
+文本编辑器	关闭当前窗口	Ctrl+W
+全局		显示视图菜单		Ctrl+F10
+全局		显示系统菜单		Alt+-
+
+5导航
+编辑
+
+作用域		功能				快捷键
+Java编辑器	打开结构			Ctrl+F3
+全局			打开类型			Ctrl+Shift+T
+全局			打开类型层次结构	F4
+全局			打开声明			F3
+全局			打开外部javadoc	Shift+F2
+全局			打开资源			Ctrl+Shift+R
+全局			后退历史记录		Alt+←
+全局			前进历史记录		Alt+→
+全局			上一个			Ctrl+,
+全局			下一个			Ctrl+.
+Java编辑器	显示大纲			Ctrl+O
+全局		在层次结构中打开类型	Ctrl+Shift+H
+全局		转至匹配的括号			Ctrl+Shift+P
+全局		转至上一个编辑位置		Ctrl+Q
+Java编辑器	转至上一个成员		Ctrl+Shift+↑	
+Java编辑器	转至下一个成员		Ctrl+Shift+↓
+文本编辑器	转至行			Ctrl+L
+
+6搜索
+编辑
+
+作用域		功能				快捷键
+全局		出现在文件中			Ctrl+Shift+U
+全局		查找目标文件			ctrl+shift+R
+全局		打开搜索对话框			Ctrl+H
+全局		工作区中的声明			Ctrl+G
+全局		工作区中的引用			Ctrl+Shift+G
+工作区域的类	查看某一个类的继承类或者实现类	ctrl+T
+
+7文本编辑
+编辑
+
+作用域		功能				快捷键
+文本编辑器	改写切换			Insert
+文本编辑器	上滚行			Ctrl+↑
+文本编辑器	下滚行			Ctrl+↓
+
+8文件
+编辑
+
+作用域		功能			快捷键
+全局			保存			Ctrl+S
+全局			打印			Ctrl+P
+全局			关闭			Ctrl+F4
+全局			全部保存		Ctrl+Shift+S
+全局			全部关闭		Ctrl+Shift+F4
+全局			属性			Alt+Enter
+全局			新建			Ctrl+N
+
+9项目
+编辑
+
+作用域		功能			快捷键
+全局		全部构建			Ctrl+B
+
+10源代码
+编辑
+
+作用域		功能						快捷键
+Java编辑器	格式化					Ctrl+Shift+F
+Java编辑器	添加/取消注释				Ctrl+/
+Java编辑器	添加导入					Ctrl+Shift+M
+Java编辑器	组织导入					Ctrl+Shift+O
+Java编辑器	使用try/catch块来包围	未设置，太常用了，所以在这里列出，建议自己设置。也可以使用Ctrl+1自动修正。
+Java编辑器	将所选区域字母设置为小写	Ctrl+Shift+Y
+Java编辑器	将所选区域字母设置为大写	Ctrl+Shift+X	
+Java编辑器	方法添加注释				Alt+Shift+J
+
+11运行
+编辑
+
+作用域		功能				快捷键
+全局		单步返回				F7
+全局		单步执行				F6
+全局		单步跳入				F5
+全局		单步跳入选择			Ctrl+F5
+全局		调试上次启动			F11
+全局		继续					F8
+全局		使用过滤器单步执行		Shift+F5
+全局		添加/去除断点			Ctrl+Shift+B
+全局		显示					Ctrl+D
+全局		运行上次启动			Ctrl+F11
+全局		运行至行				Ctrl+R
+全局		执行					Ctrl+U
+
+12重构
+编辑
+
+作用域		功能			快捷键
+全局		撤销重构			Alt+Shift+Z
+全局		抽取方法			Alt+Shift+M
+全局		抽取局部变量		Alt+Shift+L
+全局		内联				Alt+Shift+I
+全局		移动				Alt+Shift+V
+全局		重命名			Alt+Shift+R
+全局		重做				Alt+Shift+Y
+
+13修改快捷键
+编辑
+
+依次打开window->preferrence->general->keys,在 binding一栏选择修改快捷键。
+
+
+从debug界面回到正常编辑界面
+window->openprespecitive->open c/c++
+
+
+选中函数，F3跳转到定义部分，F4看到全局
+
+1. Ctrl+左键 和F3
+这个是大多数人经常用到的，用来查看变量、方法、类的定义
+跳到光标所在标识符的定义代码。当按执行流程阅读时，F3实现了大部分导航动作。
+
+2 Ctrl+Shift+G
+在工作空间中查找引用了光标所在标识符的位置。可以说是与F3相反的快捷键。当按类定义进行阅读时，可以迅速找出当前类方法在被哪些类调用了。
+
+3. Ctrl+O
+查看一个类的纲要，列出其方法和成员变量。提示：再多按一次Ctrl+O，可以列出该类继承的方法和变量。
+助记："O"--->"Outline"--->"纲要"
+
+4 F4
+打开继承树。显示当前类所在的继承树。不但包括父类，还包括当前类的子类。
+
+5. Ctrl+T
+查看一个类的继承关系树，是自顶向下的，再多按一次Ctrl+T, 会换成自底向上的显示结构。与"F4"快捷键不同的是显示方式。
+提示：选中一个方法名，按Ctrl+T，可以查看到有这个同名方法的父类、子类、接口。
+助记："T"------->"Tree"----->"层次树"
+
+6.Alt+左右方向键
+我们经常会遇到看代码时Ctrl+左键，层层跟踪，然后迷失在代码中的情况，这时只需要按“Alt+左方向键”就可以退回到上次阅读的位置，同理，按“Alt+右方向键”会前进到刚才退回的阅读位置，就像浏览器的前进和后退按钮一样。
+
+Alt+-->返回上一个阅读位置。使用查找功能或导航功能跳转后，可以用ALT-左箭头返回上一个阅读位置，而且还是多层历史记录。类似IE的后退。若要这个后退功能 达到最好效率，就要养成使用它的习惯，例如遇到了一个方法调用，用F3打开了它所在的类文件，看完后应用alt-左箭头来后退，而不是直接关掉新打开的标 签页。否则这个新开的标签页将会被记录到历史中，下次后退到这里时又会被重新打开。
+
+7.Ctrl+Alt+H
+
+如果你想知道一个类的方法到底被那些其他的类调用，那么请选中这个方法名，然后按“Ctrl+Alt+H”，Eclipse就会显示出这个方法被哪些方法调用，最终产生一个调用关系树。
+
+助记："H"--->"Hierarchy"--->"调用层次"
+
+8 Alt+M,U
+Open Super Implementation
+
+
+打开光标所在类方法所覆盖的超类方法，相当于在覆盖方法中用鼠标点左边的覆盖方法三角标志。此功能没有默认快捷键，须在主菜单 Windows->Preferences->General-
+>Keys->Modify->Command->Navigate, Open Super Implementation中设置，我个人习惯设为Alt+M,U。
+9Alt+M,S
+Show Selected Element Only
+仅显示光标所在元素（类方法等）。隐藏当前代码中的其他部分，把光标所在的类方法置顶显示。我个人比较喜欢这种方式，一来屏幕比较清洁，二来此时使用导航 功能导航到类
+方法必然是置顶显示，三来可以迫使自己习惯使用导航功能（F3，ALT+左右箭头）等进行导航而不是习惯性地拖滚动条。再按一次则取消此方式。
+此功能没有默认快捷键，须在主菜单 Windows->Preferences->General->Keys->Modify->Command->Navigate, Open Super Implementation中设置，我个人习惯设为Alt+M,S。
+
+10 Ctrl+E
+弹出一个简易对话框用来精确切换代码编辑栏。(注意不要不小心按了Ctrl+W把当前栏目关了，可以考虑取消Ctrl+W关闭当前栏目的设定，因为Ctrl+W实在太容易误按。我个人比较习惯用Ctrl+F4来关闭栏目）
+11ctrl+M
+最大化当前窗口。配合F12（编辑窗口获得焦点），可以立刻最大化代码编辑栏。(F12、Ctrl+M)
+
+12Ctrl+小键盘的+ - * /
+控制代码结构的折叠与展开。由于我个人喜欢用Show Selected Elemnt Only多于折叠代码，而且要看类成员结构可以用Outline栏目（Shift+Alt+Q,O）或Ctrl+O。因此比较少用这个功能。主要用来集中 查看类方法的Inline JavaDoc注释。
+13 Open Implemention
+就是可以跳转到某个调用的方法的具体实现的地方去。为什么说这个是超级好用呢？用过Spring的人都知道，现在都提倡面向接口编程，所以，如果使用Open Declaration来追踪
+一个方法的调用的话，只会看到该方法在接口中的声明，而看不该方法在具体类中的实现，当然，可以使用Call Hierarchy先得到该方法的整个的调用层次，然后再导航到具体的实现处，但操作有些麻烦了。有了Open Implemention，就可以直接看到实现的代码了，在方法名上点击右键，选择Open Implemention就可以了！只是要享受这个功能，可安装一个Eclipse插件，到这里可以下载 http://eclipse-tools.sourceforge.net/implementors/
+
+Ctrl+Shift+T
+在工作空间内查找类型（包括所有项目中的类，引用JAR包中的类）。这是按名称打开一个类最快捷的方法。
+
+Ctrl-PageUp/Ctrl-PageDown
+切换到上一个/下一个标签页
+
+ctrl+F4或ctrl+w
+关闭当前标签页
+
+Shift+Alt+Q
+打开一个特定栏目，Shift+Alt+Q后可跟一个键表示要打开的栏目。按下Shift+Alt+Q后过一会可看到提示窗。
+
+Ctrl+J
+递增式查找。在当前编辑窗口中进行递增式查找。查找过程中按下箭头可跳到下一个匹配点，按上箭头跳到上一个匹配点，按ESC退出递增式查找。
+
+Ctrl+H
+打开查找窗口。打开一个可以进行详细设置的查找对话框。由于Eclipse各种导航功能很完善，我比较少用这个查找功能。主要用来进行一些用正则表达式做条件的查找。在查找中，用Ctrl+K查找下一个匹配。
+
+Ctrl+Shift+E
+弹出一个对话框来切换或关闭多个代码编辑栏。
+
+当然还有最基本的，Ctrl+Shift+L，显示快捷键列表。
+
+
+
+
+
+
+
+
+
+
+

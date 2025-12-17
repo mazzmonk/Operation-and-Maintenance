@@ -1,0 +1,62 @@
+coreOS是用于云平台
+1.安装
+下载
+https://coreos.com/docs/running-coreos/platforms/iso/
+下载文件如下：
+coreos_production_iso_image.iso
+安装方式与普通的linux桌面版很像，如mint
+刻录成光盘，引导进入以后
+
+默认是core用户，用ssh-keygen生成ssh的公钥，私钥
+把公钥，私钥下载到本地
+
+$ssh-keygen 
+
+给root用户设置密码
+$sudo passwd root
+
+切换到root用户
+$su -
+
+使用root用户编辑文件
+#cd /root
+vim .wgetrc
+http-proxy=114.113.159.4:8087
+
+保存，推出，这里是设置代理，在coreOS安装过程中需要下载。
+
+在/root下生产安装配置文件cloud-config.yaml
+
+#cloud-config
+
+users:
+	- name: core
+		ssh-authorized-keys:
+			- 这里填写上述生成的public key
+
+使用root安装系统到硬盘
+#coreos-install -d /dev/sda -C stable -c /root/cloud-config.yaml
+
+等待安装完
+
+2.安装完毕以后，需要用ssh客户端工具登录，注意使用key的方式登录，登录上去后去，设置core及root用户密码。
+
+3.配置网络
+进入/etc/systemd/network，新建文件static.network
+内容如下：
+[Match]
+Name=ens32                       //这里是网卡名称
+
+[Network]
+Address=172.16.8.222/24
+Gateway=172.16.8.254
+DNS=202.106.196.115
+DNS=202.106.0.20
+
+systemctl restart systemd-networkd重启网络即可
+
+4.配置hostname
+编辑/etc/hostname文件，加入内容
+
+
+

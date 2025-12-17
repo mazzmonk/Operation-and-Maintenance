@@ -1,0 +1,141 @@
+
+poppler
+librsvg    
+		  gdk-pixbuf-2.0 	libtiff
+		  libxml-2.0		libtool
+		  pangocairo
+		  cairo				pixman-1
+		  libcroco
+		  gobject-introspection
+					
+pango	  glib 				python 
+		  libffi
+		  gettext
+ 
+ 
+glib安装错误提示
+
+configure: error: Package requirements (libffi >= 3.0.0) were not met:
+
+No package 'libffi' found
+
+Consider adjusting the PKG_CONFIG_PATH environment variable if you
+installed software in a non-standard prefix.
+
+Alternatively, you may set the environment variables LIBFFI_CFLAGS
+and LIBFFI_LIBS to avoid the need to call pkg-config.
+See the pkg-config man page for more details.
+
+解决：
+cp /usr/local/libffi/lib/pkgconfig/libffi.pc /usr/lib/pkgconfig/
+cp /usr/local/libffi/lib/pkgconfig/libffi.pc /usr/lib64/pkgconfig/
+
+
+指定libiconv安装路径
+./configure --with-libiconv=/usr/local/libiconv时提示如下错误
+No iconv() implementation found in C library or libiconv
+
+解决：
+
+./configure --with-libiconv=gnu CPPFLAGS="-I/usr/local/libiconv/include" LDFLAGS="-L/usr/local/libiconv/lib"
+
+
+关于pkg-config的解决
+
+安装好相关软件以后，在安装好的软件目录中有pkg-config目录，将里边的东西全部拷贝到/usr/lib/pkgconfig及/usr/lib64/pkgconfig目录下
+然后执行命令pkgconfig xxx 
+
+
+
+
+
+
+./configure --prefix=/usr/local/librsvg-2.37.0  LIBRSVG_CFLAGS="/usr/lib/" LIBRSVG_LIBS="/usr/lib" --disable-Bsymbolic
+
+
+rsvg.h:31:25: error: glib-object.h: No such file or directory
+rsvg.h:32:21: error: gio/gio.h: No such file or directory
+rsvg.h:34:35: error: gdk-pixbuf/gdk-pixbuf.h: No such file or directory
+
+安装
+
+cairo-1.6.4.tar.gz
+fontconfig-2.10.1.tar.gz
+freetype-2.3.5.tar.gz
+glib-2.15.4.tar.gz
+libpng-1.2.18.tar.gz
+pango-1.21.1.tar.bz2
+pixman-0.10.0.tar.gz
+rrdtool-1.4.7.tar.gz
+注意:fontconfig-2.10.1.tar.gz在如上的地址不能下载，RRD提供的fontconfig-2.4.2在我的机器上安装失败，换成2.10.1后没有问题。
+
+2）安装顺序
+出了上面说到的包以外，系统还需要安装libX11-devel，使用yum install libX11-devel进行安装。
+
+然后一次安装如下包
+
+glib         libffi
+libpng
+pixman
+freetype
+fontconfig  libxml2 libtool
+
+cairo
+pango       harfbuzz-0.9.14.tar.bz2
+
+rrdtool
+
+
+
+libxml2安装出现如下错误
+/bin/rm: cannot remove `libtoolT': No such file or directory
+
+直接打开 configure，把 $RM “$cfgfile” 那行删除掉，重新再运行 ./configure 就可以了
+
+
+checking which cairo font backends could be used... none
+
+已经安装了cairo 和　FreeType
+
+修改 configure，将下面的两人个参数设为true
+
+have_cairo=true
+have_cairo_freetype=true
+
+
+
+
+
+pango-ot-private.h:28:19: error: hb-ot.h: No such file or directory
+pango-ot-private.h:29:19: error: hb-ft.h: No such file or directory
+pango-ot-private.h:30:21: error: hb-glib.h: No such file or directory
+
+
+Build configuration:
+
+Unicode callbacks (you want at least one):
+        Glib:                   true
+        ICU:                    false
+        UCDN:                   true
+
+Font callbacks (the more the better):
+        FreeType:               true
+
+Tools used for command-line utilities:
+        Cairo:                  true
+
+Additional shapers (the more the better):
+        Graphite2:              false
+
+Test / platform shapers (not normally needed):
+        CoreText:               false
+        ICU Layout Engine:      false
+        Old HarfBuzz:           true
+        Uniscribe:              false
+
+
+
+        LIBS=-lm  -lz -lcairo  
+   LDFLAGS= -L/usr/local/cairo-1.12.14/lib    
+  CPPFLAGS= -I/usr/local/cairo-1.12.14/include/cairo -I/usr/local/glib-2.34.3/include/glib-2.0 -I/usr/local/glib-2.34.3/lib/glib-2.0/include -I/usr/local/pixman-0.28.2/include/pixman-1 -I/usr/local/fontconfig-2.10.2/include -I/usr/local/freetype-2.4.11/include/freetype2 -I/usr/local/freetype-2.4.11/include -I/usr/include/libpng12  
+

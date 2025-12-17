@@ -1,0 +1,556 @@
+链接：http://www.pangxie.space/docker/679
+
+pod定义文件
+kind: ''                          //必选，Pod
+apiVersion: ''                    //必选，v1
+metadata:                         //必选，元数据
+  name: ''                        //必选，pod名称
+  generateName: ''               
+  namespace: ''                   //必选，命名空间，默认default
+  selfLink: ''
+  uid: ''
+  resourceVersion: ''
+  generation: {}
+  creationTimestamp: ''
+  deletionTimestamp: ''
+  deletionGracePeriodSeconds: {}
+  labels: any
+  annotations: any
+spec:                            //必选，详细描述
+  volumes:
+  - name: ''
+    hostPath:
+      path: ''
+    emptyDir:
+      medium: ''
+    gcePersistentDisk:
+      pdName: ''
+      fsType: ''
+      partition: {}
+      readOnly: false
+    awsElasticBlockStore:
+      volumeID: ''
+      fsType: ''
+      partition: {}
+      readOnly: false
+    gitRepo:
+      repository: ''
+      revision: ''
+    secret:
+      secretName: ''
+    nfs:
+      server: ''
+      path: ''
+      readOnly: false
+    iscsi:
+      targetPortal: ''
+      iqn: ''
+      lun: {}
+      fsType: ''
+      readOnly: false
+    glusterfs:
+      endpoints: ''
+      path: ''
+      readOnly: false
+    persistentVolumeClaim:
+      claimName: ''
+      readOnly: false
+    rbd:
+      monitors:
+      - ''
+      image: ''
+      fsType: ''
+      pool: ''
+      user: ''
+      keyring: ''
+      secretRef:
+        name: ''
+      readOnly: false
+    cinder:
+      volumeID: ''
+      fsType: ''
+      readOnly: false
+    cephfs:
+      monitors:
+      - ''
+      user: ''
+      secretFile: ''
+      secretRef:
+        name: ''
+      readOnly: false
+    flocker:
+      datasetName: ''
+    downwardAPI:
+      items:
+      - path: ''
+        fieldRef:
+          apiVersion: ''
+          fieldPath: ''
+    fc:
+      targetWWNs:
+      - ''
+      lun: {}
+      fsType: ''
+      readOnly: false
+    metadata:
+      items:
+      - name: ''
+        fieldRef:
+          apiVersion: ''
+          fieldPath: ''
+  containers:                    //必选，pod中运行的容器列表
+  - name: ''                     //必选，容器名称
+    image: ''                    //必选，容器镜像
+    command:
+    - ''
+    args:
+    - ''
+    workingDir: ''
+    ports:
+    - name: ''
+      hostPort: {}
+      containerPort: {}
+      protocol: ''
+      hostIP: ''
+    env:
+    - name: ''
+      value: ''
+      valueFrom:
+        fieldRef:
+          apiVersion: ''
+          fieldPath: ''
+    resources:
+      limits: any
+      requests: any
+    volumeMounts:
+    - name: ''
+      readOnly: false
+      mountPath: ''
+    livenessProbe:
+      exec:
+        command:
+        - ''
+      httpGet:
+        path: ''
+        port: ''
+        host: ''
+        scheme: ''
+      tcpSocket:
+        port: ''
+      initialDelaySeconds: {}
+      timeoutSeconds: {}
+    readinessProbe:
+      exec:
+        command:
+        - ''
+      httpGet:
+        path: ''
+        port: ''
+        host: ''
+        scheme: ''
+      tcpSocket:
+        port: ''
+      initialDelaySeconds: {}
+      timeoutSeconds: {}
+    lifecycle:
+      postStart:
+        exec:
+          command:
+          - ''
+        httpGet:
+          path: ''
+          port: ''
+          host: ''
+          scheme: ''
+        tcpSocket:
+          port: ''
+      preStop:
+        exec:
+          command:
+          - ''
+        httpGet:
+          path: ''
+          port: ''
+          host: ''
+          scheme: ''
+        tcpSocket:
+          port: ''
+    terminationMessagePath: ''
+    imagePullPolicy: ''
+    securityContext:
+      capabilities:
+        add:
+        - {}
+        drop:
+        - {}
+      privileged: false
+      seLinuxOptions:
+        user: ''
+        role: ''
+        type: ''
+        level: ''
+      runAsUser: {}
+      runAsNonRoot: false
+    stdin: false
+    stdinOnce: false
+    tty: false
+  restartPolicy: ''
+  terminationGracePeriodSeconds: {}
+  activeDeadlineSeconds: {}
+  dnsPolicy: ''                     //必选，DNS策略，两值可选（Default/ClusterFirst）
+  nodeSelector: any
+  host: ''
+  serviceAccountName: ''
+  serviceAccount: ''
+  nodeName: ''
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  securityContext:
+    seLinuxOptions:
+      user: ''
+      role: ''
+      type: ''
+      level: ''
+    runAsUser: {}
+    runAsNonRoot: false
+    supplementalGroups:
+    - {}
+    fsGroup: {}
+  imagePullSecrets:
+  - name: ''
+status:
+  phase: ''
+  conditions:
+  - type: ''
+    status: ''
+    lastProbeTime: ''
+    lastTransitionTime: ''
+    reason: ''
+    message: ''
+  message: ''
+  reason: ''
+  hostIP: ''
+  podIP: ''
+  startTime: ''
+  containerStatuses:
+  - name: ''
+    state:
+      waiting:
+        reason: ''
+        message: ''
+      running:
+        startedAt: ''
+      terminated:
+        exitCode: {}
+        signal: {}
+        reason: ''
+        message: ''
+        startedAt: ''
+        finishedAt: ''
+        containerID: ''
+    lastState:
+      waiting:
+        reason: ''
+        message: ''
+      running:
+        startedAt: ''
+      terminated:
+        exitCode: {}
+        signal: {}
+        reason: ''
+        message: ''
+        startedAt: ''
+        finishedAt: ''
+        containerID: ''
+    ready: false
+    restartCount: {}
+    image: ''
+    imageID: ''
+    containerID: ''
+
+
+
+rc定义文件
+
+kind: ''                            //必选，ReplicationController
+apiVersion: ''                      //必选，v1
+metadata:                           //必选，元数据
+  name: ''                          //必选，rc名称
+  generateName: ''
+  namespace: ''                     //必选，命名空间，默认default
+  selfLink: ''
+  uid: ''
+  resourceVersion: ''
+  generation: {}
+  creationTimestamp: ''
+  deletionTimestamp: ''
+  deletionGracePeriodSeconds: {}
+  labels: any
+  annotations: any
+spec:                               //必选，详细描述
+  replicas: {}                      //必选，pod副本数，设置0表示不创建pod
+  selector: any                     //必选，rc label选择器
+  template:                         //必选，容器的定义
+    metadata:
+      name: ''
+      generateName: ''
+      namespace: ''
+      selfLink: ''
+      uid: ''
+      resourceVersion: ''
+      generation: {}
+      creationTimestamp: ''
+      deletionTimestamp: ''
+      deletionGracePeriodSeconds: {}
+      labels: any
+      annotations: any
+    spec:
+      volumes:
+      - name: ''
+        hostPath:
+          path: ''
+        emptyDir:
+          medium: ''
+        gcePersistentDisk:
+          pdName: ''
+          fsType: ''
+          partition: {}
+          readOnly: false
+        awsElasticBlockStore:
+          volumeID: ''
+          fsType: ''
+          partition: {}
+          readOnly: false
+        gitRepo:
+          repository: ''
+          revision: ''
+        secret:
+          secretName: ''
+        nfs:
+          server: ''
+          path: ''
+          readOnly: false
+        iscsi:
+          targetPortal: ''
+          iqn: ''
+          lun: {}
+          fsType: ''
+          readOnly: false
+        glusterfs:
+          endpoints: ''
+          path: ''
+          readOnly: false
+        persistentVolumeClaim:
+          claimName: ''
+          readOnly: false
+        rbd:
+          monitors:
+          - ''
+          image: ''
+          fsType: ''
+          pool: ''
+          user: ''
+          keyring: ''
+          secretRef:
+            name: ''
+          readOnly: false
+        cinder:
+          volumeID: ''
+          fsType: ''
+          readOnly: false
+        cephfs:
+          monitors:
+          - ''
+          user: ''
+          secretFile: ''
+          secretRef:
+            name: ''
+          readOnly: false
+        flocker:
+          datasetName: ''
+        downwardAPI:
+          items:
+          - path: ''
+            fieldRef:
+              apiVersion: ''
+              fieldPath: ''
+        fc:
+          targetWWNs:
+          - ''
+          lun: {}
+          fsType: ''
+          readOnly: false
+        metadata:
+          items:
+          - name: ''
+            fieldRef:
+              apiVersion: ''
+              fieldPath: ''
+      containers:
+      - name: ''
+        image: ''
+        command:
+        - ''
+        args:
+        - ''
+        workingDir: ''
+        ports:
+        - name: ''
+          hostPort: {}
+          containerPort: {}
+          protocol: ''
+          hostIP: ''
+        env:
+        - name: ''
+          value: ''
+          valueFrom:
+            fieldRef:
+              apiVersion: ''
+              fieldPath: ''
+        resources:
+          limits: any
+          requests: any
+        volumeMounts:
+        - name: ''
+          readOnly: false
+          mountPath: ''
+        livenessProbe:
+          exec:
+            command:
+            - ''
+          httpGet:
+            path: ''
+            port: ''
+            host: ''
+            scheme: ''
+          tcpSocket:
+            port: ''
+          initialDelaySeconds: {}
+          timeoutSeconds: {}
+        readinessProbe:
+          exec:
+            command:
+            - ''
+          httpGet:
+            path: ''
+            port: ''
+            host: ''
+            scheme: ''
+          tcpSocket:
+            port: ''
+          initialDelaySeconds: {}
+          timeoutSeconds: {}
+        lifecycle:
+          postStart:
+            exec:
+              command:
+              - ''
+            httpGet:
+              path: ''
+              port: ''
+              host: ''
+              scheme: ''
+            tcpSocket:
+              port: ''
+          preStop:
+            exec:
+              command:
+              - ''
+            httpGet:
+              path: ''
+              port: ''
+              host: ''
+              scheme: ''
+            tcpSocket:
+              port: ''
+        terminationMessagePath: ''
+        imagePullPolicy: ''
+        securityContext:
+          capabilities:
+            add:
+            - {}
+            drop:
+            - {}
+          privileged: false
+          seLinuxOptions:
+            user: ''
+            role: ''
+            type: ''
+            level: ''
+          runAsUser: {}
+          runAsNonRoot: false
+        stdin: false
+        stdinOnce: false
+        tty: false
+      restartPolicy: ''
+      terminationGracePeriodSeconds: {}
+      activeDeadlineSeconds: {}
+      dnsPolicy: ''
+      nodeSelector: any
+      host: ''
+      serviceAccountName: ''
+      serviceAccount: ''
+      nodeName: ''
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
+      securityContext:
+        seLinuxOptions:
+          user: ''
+          role: ''
+          type: ''
+          level: ''
+        runAsUser: {}
+        runAsNonRoot: false
+        supplementalGroups:
+        - {}
+        fsGroup: {}
+      imagePullSecrets:
+      - name: ''
+status:
+  replicas: {}
+  observedGeneration: {}
+
+
+service定义文件
+
+kind: ''                                    //必选，Service
+apiVersion: ''                              //必选，v1   
+metadata:                                   //必选，元数据
+  name: ''                                  //必选，Service名称
+  generateName: ''
+  namespace: ''                             //必选，命名空间，默认default
+  selfLink: ''
+  uid: ''
+  resourceVersion: ''
+  generation: {}
+  creationTimestamp: ''
+  deletionTimestamp: ''
+  deletionGracePeriodSeconds: {}
+  labels: any
+  annotations: any
+spec:                                       //必选，详细描述
+  ports:
+  - name: ''
+    protocol: ''
+    port: {}
+    targetPort: ''
+    nodePort: {}
+  selector: any                             //必选，Service label选择器
+  portalIP: ''
+  clusterIP: ''
+  type: ''                                  //必选，Service类型，默认ClusterIP，还有2种（NodePort/LoadBalancer）
+  externalIPs:
+  - ''
+  deprecatedPublicIPs:
+  - ''
+  sessionAffinity: ''
+  loadBalancerIP: ''
+status:
+  loadBalancer:
+    ingress:
+    - ip: ''
+      hostname: ''
+
+

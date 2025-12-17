@@ -1,0 +1,103 @@
+kubernetes1.2以后版本google提供了一个kubernetes-dashboard的docker容器来管理整个kubernetes
+目前使用的是1.3版本
+
+下载连接:index.alauda.cn/googlecontainer/kubernetes-dashboard-amd64:v1.1.0-beta3
+
+源地址:gcr.io/google_containers/kubernetes-dashboard-amd64:v1.1.0，在google云平台，无法下载
+
+将上述的容器加入到私有库中
+
+通过kubernetes建立rc,services
+具体如下：
+
+********** kubernetes-dashboard-rc.yaml ***********************
+apiVersion: v1
+kind: ReplicationController     
+metadata:
+  labels:
+    app: kubernetes-dashboard
+    version: v1.1.0-beta3
+  name: kubernetes-dashboard
+  namespace: kube-system
+spec:
+  replicas: 1
+  selector:
+    app: kubernetes-dashboard
+  template:
+    metadata:
+      labels:
+        app: kubernetes-dashboard
+    spec:
+      containers:
+      - name: kubernetes-dashboard
+        image: 192.168.81.97:5000/kubernetes-dashboard-amd64:v1.1.0-beta3
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 9090
+          protocol: TCP
+        args:
+        - --apiserver-host=http://192.168.81.3:8080          #这里很重要
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 9090
+          initialDelaySeconds: 30
+          timeoutSeconds: 30
+
+********** kubernetes-dashboard-rc.yaml ***********************
+
+kubectl create -f kubernetes-dashboard-rc.yaml
+
+
+********** kubernetes-dashboard-service.yaml ******************
+kind: Service
+apiVersion: v1
+metadata:
+  labels:
+    app: kubernetes-dashboard
+  name: kubernetes-dashboard
+  namespace: kube-system
+spec:
+  type: NodePort
+  ports:
+  - port: 8080
+    targetPort: 9090
+    nodePort: 30000
+  selector:
+    app: kubernetes-dashboard
+
+********** kubernetes-dashboard-service.yaml *******************
+
+kubectl create -f kubernetes-dashboard-service.yaml
+
+注意：这里最重要的是namespace这个内容，这里用的是kube-system这个，查看如下：
+
+$kubectl get pods --all-namespaces -o wide
+NAMESPACE     NAME                         READY     STATUS    RESTARTS   AGE
+default       abc-portal-33jkd            1/1       Running   0          20h
+default       abc-portal-gq9mp            1/1       Running   0          20h
+default       abc-portal-uhj6w            1/1       Running   0          20h
+kube-system   kubernetes-dashboard-pku1n   1/1       Running   0          2h
+
+$kubectl get rc --all-namespaces -o wide
+NAMESPACE     NAME                   DESIRED   CURRENT   AGE
+default       abc-portal            3         3         20h
+kube-system   kubernetes-dashboard   1         1         2h
+
+$kubectl get services --all-namespaces -o 
+NAMESPACE     NAME                   CLUSTER-IP    EXTERNAL-IP   PORT(S)    AGE
+default       kubernetes             10.0.0.1      <none>        443/TCP    21d
+kube-system   kubernetes-dashboard   10.0.139.54   <nodes>       8080/TCP   15m
+
+
+上述通过http://x.x.x.x:30000来查看，使用这个平台删除rc不会删除pods，因此，需要优先缩减到1,然后，删除
+
+
+
+
+
+
+
+
+
+

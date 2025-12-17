@@ -1,0 +1,71 @@
+#include <stdio.h>
+
+int main(int argc, char* argv[]) {
+  int arr[] = {100, 101, 102};
+  int *ptr = arr;
+  int i, size = 0;
+  size = (sizeof arr/sizeof (arr[0]));
+
+  printf("使用arr指针常量来表示:\n");
+  for (i = 0; i < size; i++)
+    printf("&arr[%d] = %x\n", i, &arr[i]);
+
+  printf("\n");
+  for (i = 0; i < size; i++)
+    printf("arr+%d = %x\n",i, arr + i);
+
+  printf("\n");
+  for(i = 0; i < size; i++)
+    printf("arr[%d] = %d\n", i, arr[i]);
+
+  printf("\n");
+  for(i = 0; i < size; i++)
+    printf("*(arr+%d) = %d\n", i, *(arr+i));
+
+
+
+  printf("\n使用ptr指针变量来表示:\n");
+  for (i = 0; i < size; i++)
+    printf("ptr + %d = %x\n", i, ptr+i);
+
+  printf("\n");
+  for (i = 0; i < size; i++)
+    printf("ptr[%d] = %d\n", i, ptr[i]);
+
+  printf("\n");
+  for (i = 0; i < size; i++)
+    printf("*(ptr+%d) = %d\n", i, *(ptr+i));
+
+  return 0;
+}
+
+使用arr指针常量来表示:
+&arr[0] = 373d18f0
+&arr[1] = 373d18f4
+&arr[2] = 373d18f8
+
+arr+0 = 373d18f0
+arr+1 = 373d18f4
+arr+2 = 373d18f8
+
+arr[0] = 100
+arr[1] = 101
+arr[2] = 102
+
+*(arr+0) = 100
+*(arr+1) = 101
+*(arr+2) = 102
+
+使用ptr指针变量来表示:
+ptr + 0 = 373d18f0
+ptr + 1 = 373d18f4
+ptr + 2 = 373d18f8
+
+ptr[0] = 100
+ptr[1] = 101
+ptr[2] = 102
+
+*(ptr+0) = 100
+*(ptr+1) = 101
+*(ptr+2) = 102
+

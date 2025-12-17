@@ -1,0 +1,86 @@
+nginx命令
+nginx -s signal
+signal可以有如下的内容：
+stop - 快速关闭
+quit - 优雅关闭    #等待所有的worker processes完成当前的请求
+reload - 重载入配置问题      #重启之前会检查配置文件
+reopen - 重新打开日志文件
+
+nginx支持的IO模型
+select  标准模块，自动编译在缺少有效的模块时候  --with-select_module 
+poll	标准模块，自动编译在缺少有效的模块时候
+kqueue  用于FreeBSD 4.1+，OpenBSD 2.9+，NetBSD 2.0，Mac OS X	
+epoll	用于linux 2.6+
+/dev/poll 用于Solaris 7 11/99+,HP/UX 11.22+(eventport),IRIX 6.5.15+,Tru64 UNIX 5.1A+
+eventport 用于Solaris 10
+
+
+nginx.conf
+
+
+multi_accept on | off;   
+#默认off，包含在events，如果multi_accept关闭，一个时间worker process就接受一个新的连接，否则，一个worker process接受所有新的连接在一个时间。当kqueue使用时将挂起
+
+
+thread_pool name threads=number [max_queue=number];   
+#默认thread_pool default threads=32 max_queue=65536，包含在main，从1.7.11版本开始，可以配合AIO使用，--with-threads
+
+这里说明下AIO(asynchronous file I/O)，用于FreeBSD和Linux
+aio on | off | threads[=pool];
+#默认aio off，包含在http, server, location，从0.8.11开始支持
+
+location /video/ {
+    aio            on;
+    output_buffers 1 64k;
+}
+在FreeBSD，AIO用于FreeBSD 4.3，使用options VFS_AIO静态链接到内核，也可以使用kldload aio动态链接
+在Linux上，AIO开始于2.6.22内核以后，并且必须开启directio，directio后续说明
+location /video/ {
+    aio            on;
+    directio       512;
+    output_buffers 1 128k;
+}	
+
+在linux上，directio仅仅用于读512byte对齐的块，文件中未对齐的尾部和头部会被阻塞 -------------------> 有待观察
+
+directio size | off;
+#默认directio off;包含在http, server, location，从0.7.7开始支持
+开启O_DIRECT flag (FreeBSD, Linux), F_NOCACHE flag (Mac OS X), or the directio() function (Solaris), 当读取待遇或者等于这里设置的size，将自动的关闭sendfile模式（从0.7.15开始）
+directio 4m;
+
+
+sendfile on | off;
+#默认sendfile off;包含在http, server, location, if in location，从0.8.12和FreeBSD5.2.1开始支持
+location /video/ {
+    sendfile       on;
+    tcp_nopush     on;
+    aio            on;
+}
+
+这里sendfile()被调用使用SF_NODISKIO flag并且不会阻塞I/O，但是，数据会被报告不在内存中.
+
+location /video/ {
+    sendfile       on;
+    aio            on;
+    directio       8m;
+}
+
+这里着重说下上述这种模式，当AIO和sendfile在linux上开启时候，AIO将用于大于或等于directio设置的大小，
+sendfile用于小文件或者diretio关闭的时候，通俗的说，当大于等于8m的时候，将用AIO，小于的时候使用sendfile
+
+location /video/ {
+    sendfile       on;
+    aio            threads;
+}
+最后，可以使用多线程技术从1.7.11版本以后，文件读和发送通过没有被阻塞的worker process
+这里，读和发送的操作将会转发到一个特殊的线程池，假如线程池没有名字，池将有个默认的名字，池的名字可以设置成变量：
+
+aio threads=pool$disk;
+
+当前，多线程只能被编译在epoll,kqueue,eventport模块，并且只被linux支持。	
+
+
+
+
+
+	

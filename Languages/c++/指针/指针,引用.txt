@@ -1,0 +1,142 @@
+#include <iostream>
+
+int main() {
+  int k = 100;
+  int &r = k;
+  int *p = &k;
+
+  std::cout << "&k = " << &k << std::endl;               //变量k的地址
+  std::cout << "&r = " << &r << std::endl;               //变量r的地址
+  std::cout << "&p = " << &p << std::endl;               //变量p的地址
+  std::cout << "p = " << p << std::endl << std::endl;    //p中存储的是变量k的地址
+
+  std::cout << "k = " << k << std::endl;        //k的内容
+  std::cout << "r = " << r << std::endl;        //r的内容,由于r是k的引用,等于k的值
+  std::cout << "*p = " << *p << std::endl << std::endl;     //取指针p中地址指向的内容
+
+  r++;
+  std::cout << "k = " << k << std::endl;     //
+  std::cout << "r = " << r << std::endl;
+  std::cout << "*p = " << *p << std::endl << std::endl;
+
+  k++;
+  std::cout << "k = " << k << std::endl;
+  std::cout << "r = " << r << std::endl;
+  std::cout << "*p = " << *p << std::endl << std::endl;
+
+  return 0;
+}
+
+&k = 0x7fffce52a91c
+&r = 0x7fffce52a91c
+&p = 0x7fffce52a920
+p = 0x7fffce52a91c
+
+这里只有一个地方需要注意,引用r的地址和k一样.
+
+k = 100
+r = 100
+*p = 100
+
+k = 101
+r = 101
+*p = 101
+
+k = 102
+r = 102
+*p = 102
+
+修改k和r的值效果等同.
+
+
+在C语言中,通过值的方法对调2个输入参数的值,无法完成,只能通过指针,如下
+
+#include <iostream>
+
+void SwapVal(int a, int b);
+void SwapAddress(int *a, int *b);
+void SwapRef(int &a, int &b);
+
+int main() {
+  int x = 100, y = 200;
+  SwapVal(x, y);
+  std::cout << "x:" << x << "\t" << "y:" << y << std::endl;
+
+  int a = 1, b = 2;
+  int *a1 = &a;
+  int *b1 = &b;
+  SwapAddress(a1, b1);
+  std::cout << "a:" << a << "\t" << "b:" << b << std::endl;
+
+  int m = 3, n = 4;
+  int &m1 = m;
+  int &n1 = n;
+  SwapRef(m1, n1);
+  std::cout << "m:" << m << "\t" << "n:" << n << std::endl;
+
+  return 0;
+
+}
+
+void SwapVal(int a, int b) {
+  int temp = a;
+  a = b;
+  b = temp;
+}
+
+void SwapAddress(int *a, int *b) {
+  int temp = *a;
+  *a = *b;
+  *b = temp;
+}
+
+void SwapRef(int &a, int &b) {
+  std::cout << "a:" << a << "|" << "b:" << b << std::endl;
+  int temp = a;
+  a = b;
+  b = temp;
+}
+
+x:100	y:200
+a:2	b:1
+a:3|b:4
+m:4	n:3
+
+注意这里的引用,假如x1是一个指向x的引用,x1的值等同于x的值,同时x1的地址和x的地址相同.
+
+
+#include <iostream>
+
+struct says {
+  char word[20];
+  int times;
+};
+
+int main() {
+  says p = { "hello world", 0 };
+
+  says &p1 = p;
+  says *ptr = new says;
+
+  *ptr = p1;             //这里*ptr实际应该是指向一个says结构的指针,p1的内容应该是个地址.
+
+  std::cout << ptr->word << std::endl;
+  std::cout << p1.word << std::endl;
+
+  return 0;
+}
+
+hello world
+hello world
+
+这里是个奇葩用法,指针和引用混用,如上注释,另外,std::cout无法获取struct,即std::cout << p << std::endl是错误.
+
+
+
+
+
+
+
+
+
+

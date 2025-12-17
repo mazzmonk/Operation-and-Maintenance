@@ -1,0 +1,112 @@
+什么是 strace
+strace 是 Linux 系统下强大的诊断和调试工具, 用于追踪程序执行期间的系统调用(system calls)和接收到的信号(signals).系统调用是应用程序与操作系统内核交互的接口, 通过 strace 我们可以深入了解程序的底层行为.
+
+类比理解: 可以把 strace 想象成一个"翻译官", 它把程序与操作系统之间的"对话"(系统调用)翻译成我们能理解的人类语言.
+
+为什么需要 strace
+strace 在以下场景特别有用:
+. 调试程序异常行为
+. 分析程序性能瓶颈
+. 理解程序如何与操作系统交互
+. 诊断权限相关问题
+. 排查文件/网络访问问题
+
+基本语法
+strace [选项] 命令 [命令参数]
+
+或者附加到正在运行的进程:
+strace -p PID
+
+常用选项参数
+选项	               说明
+-c	               统计系统调用次数和时间
+-f	               跟踪子进程
+-e trace=系统调用	   只跟踪特定系统调用
+-o 文件	           将输出写入文件
+-p PID	           附加到正在运行的进程
+-t	               显示时间戳
+-T	               显示系统调用耗时
+-s 大小	           设置字符串最大显示长度(默认32)
+-v	               显示更详细的信息
+
+使用示例
+示例1: 基本追踪
+追踪 ls 命令的执行:
+
+strace ls
+
+输出会显示 ls 命令执行过程中的所有系统调用, 如打开目录、读取文件信息等.
+
+示例2: 统计系统调用
+统计 ls -l 的系统调用情况:
+
+strace -c ls -l
+
+输出示例:
+% time     seconds  usecs/call     calls    errors syscall
+------ ----------- ----------- --------- --------- ----------------
+ 45.21    0.000123           5        25        12 openat
+ 32.35    0.000088           4        21           mmap
+ 12.50    0.000034           3        11           read
+...
+
+示例3: 追踪特定系统调用
+只追踪文件相关的系统调用:
+
+strace -e trace=open,read,write ls
+
+示例4: 追踪网络连接
+追踪 curl 的网络相关系统调用:
+
+strace -e trace=network curl http://example.com
+
+示例5: 附加到运行中的进程
+首先找出进程ID:
+
+ps aux | grep 进程名
+
+然后附加追踪:
+
+strace -p 进程ID
+
+输出解读
+strace 输出的典型行如下:
+
+openat(AT_FDCWD, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3
+
+各部分含义:
+. openat: 系统调用名称
+. AT_FDCWD, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC: 调用参数
+. = 3: 返回值(这里是文件描述符)
+
+高级技巧
+1. 结合 grep 过滤输出
+  strace ls 2&gt;&amp;1 | grep open
+2. 追踪进程及其所有子进程
+  strace -f 命令
+3. 显示系统调用耗时
+  strace -T 命令
+4. 将输出保存到文件
+  strace -o trace.log 命令
+
+常见问题排查
+1. 文件找不到错误
+在输出中查找 ENOENT 错误:
+
+open("/nonexistent/file", O_RDONLY) = -1 ENOENT (No such file or directory)
+
+2. 权限问题
+查找 EPERM 或 EACCES 错误:
+
+open("/root/file", O_RDONLY) = -1 EACCES (Permission denied)
+
+3. 性能瓶颈
+使用 -c 选项统计耗时最长的系统调用.
+
+注意事项
+1. strace 会显著降低程序运行速度, 不适合生产环境长期使用
+2. 某些系统调用可能因安全限制无法追踪
+3. 输出可能非常冗长, 建议结合 -e 选项或重定向到文件
+4. 需要一定的系统编程知识才能充分理解输出
+
+通过 strace 这个强大工具, 你可以深入理解 Linux 程序的运行机制, 快速定位各种系统级问题.

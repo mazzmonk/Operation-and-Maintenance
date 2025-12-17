@@ -1,0 +1,21 @@
+#!/bin/bash
+# author:jack
+# date:20171024
+# startup kube-scheduler service
+# execute with ROOT user
+# FILENAME:srv.kube-scheduler
+###########################
+
+if [ -e GLOBAL-ENV ];then
+  source GLOBAL-ENV
+else
+  echo 'File GLOBAL-ENV does not exist.'
+  echo -1
+fi
+
+
+KUBERNETES=$HOME_PATH/apps/kubernetes
+
+$KUBERNETES/server/bin/kube-scheduler \
+--v=0 \
+--master=127.0.0.1:8080  >> $KUBERNETES/server/logs/kube-scheduler.log  2>&1 &

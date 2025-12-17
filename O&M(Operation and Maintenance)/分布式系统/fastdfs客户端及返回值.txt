@@ -1,0 +1,44 @@
+fdfs_test /etc/fdfs/client.conf upload 3.gif 
+This is FastDFS client test program v4.06
+
+Copyright (C) 2008, Happy Fish / YuQing
+
+FastDFS may be copied only under the terms of the GNU General
+Public License V3, which may be found in the FastDFS source kit.
+Please visit the FastDFS Home Page http://www.csource.org/ 
+for more detail.
+
+[2013-07-11 13:58:03] DEBUG - base_path=/home/blue/fastdfs, connect_timeout=30, network_timeout=60, tracker_server_count=2, anti_steal_token=0, anti_steal_secret_key length=0, use_connection_pool=0, g_connection_pool_max_idle_time=3600s, use_storage_id=0, storage server id count: 0
+
+tracker_query_storage_store_list_without_group: 
+	server 1. group_name=, ip_addr=172.16.20.9, port=23000
+
+group_name=group1, ip_addr=172.16.20.9, port=23000
+storage_upload_by_filename
+group_name=group1, remote_filename=M00/00/00/rBAUCVHeSbSABZTYABJQI9kUrIE612.gif
+source ip address: 172.16.20.9
+file timestamp=2013-07-11 13:59:16
+file size=1200163
+file crc32=3642010753
+file url: http://172.16.20.10:8080/group1/M00/00/00/rBAUCVHeSbSABZTYABJQI9kUrIE612.gif
+storage_upload_slave_by_filename
+group_name=group1, remote_filename=M00/00/00/rBAUCVHeSbSABZTYABJQI9kUrIE612_big.gif
+source ip address: 172.16.20.9
+file timestamp=2013-07-11 13:59:16
+file size=1200163
+file crc32=3642010753
+file url: http://172.16.20.10:8080/group1/M00/00/00/rBAUCVHeSbSABZTYABJQI9kUrIE612_big.gif
+
+
+访问的时候可以通过tracker,storage来访问，给出的url是通过tracker来访问，实际访问的时候用storage来访问
+store做了一个绑定host的工作，解析到image.abc.com来访问，具体路径如下：
+image.abc.com:8080/M00/00/00/rBAUCVHeSbSABZTYABJQI9kUrIE612_big.gif
+
+
+
+
+访问地址
+http://172.16.20.10:8080/group1/M00/00/00/rBAUCVHeSyiAddmZABpxtsnensI891_big.gif
+
+
+

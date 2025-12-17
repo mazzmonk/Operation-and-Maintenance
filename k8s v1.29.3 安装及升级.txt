@@ -1,0 +1,750 @@
+索引
+### cgroup 驱动
+### 容器运行时接口
+### 安装
+### docker 安装 - 不需要
+### 前置条件
+### containerd(容器运行时接口)及 runc (容器运行时) 安装 - 非常重要,多数的 runtime 的错误都是 containerd 配置错误导致
+### 安装 kubeadm, kubelet, kubectl 添加 kubelet 系统服务中
+### 使用 kubeadm 创建集群
+### worker node 加入集群
+
+
+kubelet 和 容器运行时  <-> CGroup 驱动 <-> CGroup(Linux)
+cgroupfs(CGroup 驱动) 直接对接 CGroup 
+systemd(CGroup 驱动) 则是对接到 systemd(Linux),通过 systemd(Linux) 来分配资源
+
+
+如果将 systemd(CGroup 驱动) 设置为 CGroup 的驱动,则必须配置 kubelet 和容器运行时也配置 systemd(CGroup 驱动)
+
+
+kubelet <-> 容器运行时接口(containerd,CRI-O,Docker Engine,Mirantis Container Runtime) <-> runc(容器运行时) <-> Linux kernel
+
+
+kubelet <-> 容器运行时接口 <-> cri-dockerd <-> docker(Docker Engine 容器运行时)
+
+
+参考于 https://chinalhr.github.io/post/docker-runc/
+
+### cgroup 驱动
+官方参考: https://kubernetes.io/zh-cn/docs/setup/production-environment/container-runtimes/
+
+
+在 Linux 上,控制组(CGroup)用于限制分配给进程的资源.
+kubelet 和底层容器运行时都需要对接控制组来强制执行为 Pod 和容器管理资源并为诸如 CPU、内存这类资源设置请求和限制.若要对接控制组,kubelet 和容器运行时需要使用一个 cgroup 驱动.关键的一点是 kubelet 和容器运行时需使用相同的 cgroup 驱动并且采用相同的配置.
+
+
+可用的 cgroup 驱动有两个：
+* cgroupfs
+* systemd
+
+
+* cgroupfs 驱动
+cgroupfs 驱动是 kubelet 中默认的 cgroup 驱动.当使用 cgroupfs 驱动时,kubelet 和容器运行时将直接对接 cgroup 文件系统来配置 cgroup.
+
+
+当 systemd 是初始化系统时,不推荐使用 cgroupfs 驱动,因为 systemd 期望系统上只有一个 cgroup 管理器.此外,如果你使用 cgroup v2,则应用 systemd cgroup 驱动取代 cgroupfs.
+
+
+* systemd cgroup 驱动
+当某个 Linux 系统发行版使用 systemd 作为其初始化系统时,初始化进程会生成并使用一个 root 控制组(cgroup),并充当 cgroup 管理器.
+
+
+systemd 与 cgroup 集成紧密,并将为每个 systemd 单元分配一个 cgroup.因此,如果你 systemd 用作初始化系统,同时使用 cgroupfs 驱动,则系统中会存在两个不同的 cgroup 管理器.
+
+
+同时存在两个 cgroup 管理器将造成系统中针对可用的资源和使用中的资源出现两个视图.某些情况下,将 kubelet 和容器运行时配置为使用 cgroupfs、但为剩余的进程使用 systemd 的那些节点将在资源压力增大时变得不稳定.
+
+
+当 systemd 是选定的初始化系统时,缓解这个不稳定问题的方法是针对 kubelet 和容器运行时将 systemd 用作 cgroup 驱动.
+
+
+说明：
+从 v1.22 开始,在使用 kubeadm 创建集群时,如果用户没有在 KubeletConfiguration 下设置 cgroupDriver 字段,kubeadm 默认使用 systemd.
+
+
+* 由于 kubeadm 把 kubelet 视为一个系统服务来管理, 所以对基于 kubeadm 的安装, 我们推荐使用 systemd 驱动, 不推荐 kubelet 默认的 cgroupfs 驱动.
+
+
+### 容器运行时接口
+为了在 Pod 中运行容器,Kubernetes 使用容器运行时(Container Runtime).
+默认情况下,Kubernetes 使用容器运行时接口(Container Runtime Interface,CRI) 来与你所选择的容器运行时交互.
+需要在集群内每个节点上安装一个 容器运行时以使 Pod 可以运行在上面
+
+
+Kubernetes 1.29 要求你使用符合容器运行时接口(CRI)的运行时.
+
+
+Kubernetes 中几个常见的容器运行时接口实现
+* containerd
+* CRI-O
+* Docker Engine
+* Mirantis Container Runtime
+
+
+说明：
+v1.24 之前的 Kubernetes 版本直接集成了 Docker Engine 的一个组件,名为 dockershim.这种特殊的直接整合不再是 Kubernetes 的一部分 (这次删除被作为 v1.20 发行版本的一部分宣布).
+
+
+### 安装
+软件环境:
+OS: ubuntu 23.10 
+kernel: 6.5.0-26-generic
+containerd: v1.7.16
+runc: 1.1.12
+
+
+安装参考: https://blog.frognew.com/2023/12/kubeadm-install-kubernetes-1.29.html
+
+
+### docker 安装 - 不需要
+如果 docker 是和 ubuntu 一起安装,则使用的是 snap 的模式安装,如果要卸载,需要使用 snap 的模式卸载
+apt-get install docker-ce 
+# apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+默认会把 runc 和 containerd 都装上, 如果使用 apt remove runc containerd 会把  docker-ce 也删掉, 因此需要使用新的 containerd, runc 版本就需要单独下载安装,见后续.
+
+
+### 前置条件
+cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
+overlay
+br_netfilter
+EOF
+
+
+modprobe overlay
+modprobe br_netfilter
+
+
+cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-iptables  = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+net.ipv4.ip_forward                 = 1
+net.ipv4.conf.all.route_localnet    = 1        # 当 kube-proxy 使用本地 127.0.0.1 的地址时需要开启
+net.ipv4.conf.all.log_martians      = 1        # 否则有报错
+EOF
+
+sysctl --system
+
+sysctl net.bridge.bridge-nf-call-iptables net.bridge.bridge-nf-call-ip6tables net.ipv4.ip_forward
+
+
+关闭 swap -- 通过系统启动脚本(rc.local)关闭 
+swapoff /swap.img
+
+
+修改 /etc/hostname 加入预先设置的 hostname
+修改 /etc/hosts 中的关于本地 IP 的设置类似如下
+
+
+192.168.1.11 k8s01
+
+### containerd(容器运行时接口)及 runc (容器运行时) 安装 - 非常重要,多数的 runtime 的错误都是 containerd 配置错误导致
+1. containerd
+官方参考: https://github.com/containerd/containerd/blob/main/docs/getting-started.md 安装新版本
+
+目前安装通过 apt-get install containerd.io 方式装上的,版本为 1.6.28 版本,需要用新的版本
+
+下载: https://github.com/containerd/containerd/releases
+版本: v1.7.16
+
+下载解压到 /usr/local/bin/, 使用下面的链接的服务配置文件
+https://raw.githubusercontent.com/containerd/containerd/main/containerd.service
+拷贝到 /etc/systemd/system 
+
+systemctl daemon-reload
+systemctl enable containerd
+systemctl start containerd
+
+在 Linux 上,containerd 的默认 CRI 套接字是 /run/containerd/containerd.sock.
+在路径 /etc/containerd/config.toml 为配置文件
+containerd 通过 containerd-shim-runc-v* 来调用 runc 
+
+说明：
+使用 containerd config default > /etc/containerd/config.toml 
+命令得到默认配置文件
+
+官方参考: 
+https://github.com/containerd/containerd/blob/main/docs/man/containerd-config.toml.5.md
+
+
+如下有一段官方的示例,描述当有多个 runtime 的时候配置方式
+-----------------------------------------------------------------
+[plugins]
+
+
+  [plugins."io.containerd.grpc.v1.cri"]
+
+
+    [plugins."io.containerd.grpc.v1.cri".containerd]    # 这里标识了使用那个 runtime
+      default_runtime_name = "runc"                     # 使用了名称为 runc 的 runtime        
+
+
+      [plugins."io.containerd.grpc.v1.cri".containerd.runtimes]
+        
+        # 注意这里的最后的 .runc 对应到上面的 default_runtime_name 内容
+        [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc] 
+          privileged_without_host_devices = false
+          runtime_type = "io.containerd.runc.v2"     # 这里使用的 runc v2 和 runc 软件的版本没有直接关系
+
+
+          [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
+            BinaryName = "/usr/bin/runc"             # 这里标明了使用的 runc 的具体路径
+        
+        # 注意这里的最后的 .other 如果要使用这 runtime, 则 default_runtime_name = "other"
+        [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.other]
+          privileged_without_host_devices = false
+          runtime_type = "io.containerd.runc.v2"
+
+
+          [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.other.options]
+            BinaryName = "/usr/bin/path-to-runtime"
+
+
+-----------------------------------------------------------------
+有几个重要的地方注意: 第 2, 3 部分就是上述例子中描述的内容.
+[plugins."io.containerd.grpc.v1.cri"]
+  sandbox_image = "registry.k8s.io/pause:3.9"
+  systemd_cgroup = false  # 不要使用,遗弃 
+
+
+[plugins."io.containerd.grpc.v1.cri".containerd]
+  default_runtime_name = "runc"
+
+
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes]
+  [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]
+    runtime_type = "io.containerd.runc.v2"
+    [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
+      BinaryName = "/usr/bin/runc"
+
+重启
+systemctl restart containerd
+
+
+警告:
+WARN[0000] DEPRECATION: The `systemd_cgroup` property (old form) of `[plugins."io.containerd.grpc.v1.cri"] is deprecated since containerd v1.3 and will be removed in containerd v2.0. Use `SystemdCgroup` in [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options] options instead. 
+解决: 修改 [plugins."io.containerd.grpc.v1.cri"] 中的 
+systemd_cgroup = false 
+
+
+WARN[0000] DEPRECATION: The `io.containerd.runtime.v1.linux` runtime is deprecated since containerd v1.4 and removed in containerd v2.0. Use the `io.containerd.runc.v2` runtime instead. 
+解决: 修改 [plugins."io.containerd.grpc.v1.cri".containerd.default_runtime] 中的  
+runtime_type = ""
+
+
+WARN[0000] DEPRECATION: The `default_runtime` property of [plugins."io.containerd.grpc.v1.cri".containerd] is deprecated since containerd v1.3 and will be removed in containerd v2.0. Use `default_runtime_name` instead. 
+解决: 修改 [plugins."io.containerd.grpc.v1.cri".containerd] 中的
+default_runtime_name = "io.containerd.runc.v2"
+
+
+2. runc 
+下载: https://github.com/opencontainers/runc/releases
+版本: 1.1.12
+
+
+install -m 755 runc.amd64 /usr/bin/runc
+
+
+如果系统中有 2 个 runc,见上述的配置描述,多个 runc 配置
+
+
+3. 安装 crictl（kubeadm/kubelet 容器运行时接口（CRI）所需）：
+下载: https://github.com/kubernetes-sigs/cri-tools/releases
+版本: 1.29.0 
+
+
+tar zxvf crictl-v1.29.0-linux-amd64.tar.gz -C /usr/local/bin/
+
+
+# touch /etc/crictl.yaml 
+将如下的内容写入,根据实际的 containerd 的 socket
+
+
+runtime-endpoint: unix:///run/containerd/containerd.sock
+image-endpoint: unix:///run/containerd/containerd.sock
+timeout: 10
+debug: true
+
+
+* ctr 命令使用说明
+此命令类似 docker 这个命令用于容器, 并且有 namespace 的概念, 因此 crictl 的镜像都在 k8s.io 这命名空间
+使用说明: 
+https://blog.51cto.com/flyfish225/5366113
+https://www.huisiban.com/412372.html
+
+
+# ctr plugin ls  # 查看 containerd 配置是否有错.
+
+
+* crictl 命令使用说明
+此命令用于调试 k8s, 镜像都在上述的 k8s.io 的 namespace 中,没有命名空间的说法
+参考: https://kubernetes.io/zh-cn/docs/tasks/debug/debug-cluster/crictl/
+
+
+可以在 /etc/crictl.yaml 设置 socket
+
+
+使用说明: https://www.huisiban.com/412655.html
+# crictl crictl --runtime-endpoint unix:///run/containerd/containerd.sock' info  # 查看当前的 containerd 运行的参数
+# crictl --runtime-endpoint=unix:///run/containerd/containerd.sock  version # 版本信息
+# crictl --runtime-endpoint=unix:///run/containerd/containerd.sock ps -a # 查看 docker 的容器
+
+
+ctr 和 crictl 的区别及参数的详细介绍
+https://www.cnblogs.com/hwj4191/p/17295075.html
+
+
+**********************************************************************************************
+# 安装 cri-dockerd (Docker Engine 作为容器运行时使用,如果安装将和 containerd 冲突, 所以不需要)
+说明：
+Docker Engine 没有实现 CRI,而这是容器运行时在 Kubernetes 中工作所需要的.为此,必须安装一个额外的服务 cri-dockerd.cri-dockerd 是一个基于传统的内置 Docker 引擎支持的项目,它在 1.24 版本从 kubelet 中移除.
+
+
+说明：
+假设你使用 cri-dockerd 适配器来将 Docker Engine 与 Kubernetes 集成.
+1. 在你的每个节点上,遵循安装 Docker Engine 指南为你的 Linux 发行版安装 Docker.
+2. 请按照文档中的安装部分指示来安装 cri-dockerd.
+对于 cri-dockerd,默认情况下,CRI 套接字是 /run/cri-dockerd.sock.
+
+
+安装参考: https://github.com/Mirantis/cri-dockerd
+版本: v0.3.11
+
+
+# Run these commands as root
+
+
+cd cri-dockerd
+mkdir -p /usr/local/bin
+install -o root -g root -m 0755 cri-dockerd /usr/local/bin/cri-dockerd
+install packaging/systemd/* /etc/systemd/system
+sed -i -e 's,/usr/bin/cri-dockerd,/usr/local/bin/cri-dockerd,' /etc/systemd/system/cri-docker.service
+systemctl daemon-reload
+systemctl enable --now cri-docker.socket
+systemctl start cri-docker
+**********************************************************************************************
+
+
+### 安装 kubeadm, kubelet, kubectl 添加 kubelet 系统服务中
+注意: 根据官方的说法,kubeadm 只适合用于测试,安装工具等等,不能用于生产环境
+下载: https://github.com/kubernetes/kubernetes/blob/master/CHANGELOG/CHANGELOG-1.29.md 
+
+
+将 kubeadm, kubelet 放在 /usr/local/bin 目录下
+
+
+* 下载 kubelet, kubeadm 的系统服务配置文件
+
+RELEASE_VERSION="v0.16.2"
+curl -sSL "https://raw.githubusercontent.com/kubernetes/release/${RELEASE_VERSION}/cmd/krel/templates/latest/kubelet/kubelet.service" | sed "s:/usr/bin:${DOWNLOAD_DIR}:g" | sudo tee /usr/lib/systemd/system/kubelet.service
+sudo mkdir -p /usr/lib/systemd/system/kubelet.service.d
+curl -sSL "https://raw.githubusercontent.com/kubernetes/release/${RELEASE_VERSION}/cmd/krel/templates/latest/kubeadm/10-kubeadm.conf" | sed "s:/usr/bin:${DOWNLOAD_DIR}:g" | sudo tee /usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf
+
+
+* 10-kubeadm.conf 文件中描述了在启动时候的 kubelet 的参数信息
+* 上述文件中的内容,特别是最后一行包含的几个参数,kubelet 启动的时候将这几个参数加在一起启动
+
+
+重启
+systemctl daemon-reload
+systemctl enable --now kubelet
+
+
+### 使用 kubeadm 创建集群
+# 在 kubeadm 配置文件中使用高可用的参数
+https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/setup-ha-etcd-with-kubeadm/
+# init 阶段的工作描述: 
+https://kubernetes.io/zh-cn/docs/reference/setup-tools/kubeadm/kubeadm-init/
+
+
+* kubeadm 与其他 Kubernetes 组件类似,会尝试在与主机默认网关关联的网络接口上找到可用的 IP 地址.这个 IP 地址随后用于由某组件执行的公告和/或监听.
+要在 Linux 主机上获得此 IP 地址,你可以使用以下命令：
+
+
+ip route show # 查找以 "default via" 开头的行
+
+
+* 准备所需的容器镜像
+可以使用 kubeadm config images --config kubeadm.yaml 子命令列出并拉取镜像：
+
+
+kubeadm config images list    # 查看需要的镜像
+kubeadm config images pull    # 下载, 这里下载的镜像和通过 docker pull 的完全不同,因为使用了 containerd 而不是 docker Engine,因此 docker images 看到的镜像这里看不见,需要通过  crictl --runtime-endpoint unix:///run/containerd/containerd.sock images 查看,需要设置代理,见后
+ 
+* 通过 kubeadm 安装
+kubeadm config print               # 命令打印出默认配置
+kubeadm config print init-defaults # 命令打印出默认 init 配置
+
+
+# 导出一个默认配置,这个文件只能用于修改,具体的范例文件如下链接,根据范例修改成最终需要的配置文件
+kubeadm config print init-defaults > kubeadm-config.yaml
+
+
+官方参考: https://kubernetes.io/zh-cn/docs/reference/config-api/kubeadm-config.v1beta3/
+
+
+修改 kubeadm-config.yaml 文件中的如下部分,用于参考
+-----------------------------------------------------------------
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: InitConfiguration
+nodeRegistration:
+  name: k8s01
+  criSocket: unix:///run/containerd/containerd.sock   # containerd socket
+  imagePullPolicy: IfNotPresent
+  taints: 
+  - effect: PreferNoSchedule
+    key: node-role.kubernetes.io/master
+localAPIEndpoint:
+  advertiseAddress: 192.168.1.11  # apiserver IP
+  bindPort: 6443
+---
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: ClusterConfiguration
+networking:
+  dnsDomain: cluster.local
+  serviceSubnet: 10.96.0.0/12   # service IP段
+  podSubnet: "10.244.0.0/24"    # pod IP段
+kubernetesVersion: 1.29.3       # k8s 版本
+controlPlaneEndpoint: "192.168.1.11:6443"   # api-server 监听
+imageRepository: "registry.k8s.io"          # 镜像仓库地址
+clusterName: kubernetes                     # 集群名称
+---
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration                  # 必须
+cgroupDriver: systemd                       # 必须
+
+
+-----------------------------------------------------------------
+
+kubeadm init phase preflight --config kubeadm-config.yaml -v 5 # 检查配置是否正确,查看细节
+
+k8s 1.30 版本需要的镜像
+registry.k8s.io/kube-apiserver:v1.30.0
+registry.k8s.io/kube-controller-manager:v1.30.0
+registry.k8s.io/kube-scheduler:v1.30.0
+registry.k8s.io/kube-proxy:v1.30.0
+registry.k8s.io/coredns/coredns:v1.11.1
+registry.k8s.io/pause:3.9
+registry.k8s.io/etcd:3.5.12-0
+
+
+上述的步骤没有报错以后,可以通过
+
+kubeadm init --config kubeadm-config.yaml --v=5
+
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+
+# 查看启动以后的容器,或者失败的容器 - 重要
+Additionally, a control plane component may have crashed or exited when started by the container runtime.
+To troubleshoot, list all containers using your preferred container runtimes CLI.
+Here is one example how you may list all running Kubernetes containers by using crictl:
+        - 'crictl --runtime-endpoint unix:///var/run/containerd/containerd.sock ps -a | grep kube | grep -v pause'
+        Once you have found the failing container, you can inspect its logs with:
+        - 'crictl --runtime-endpoint unix:///var/run/containerd/containerd.sock logs CONTAINERID'
+
+
+# 安装 CNI 插件(大多数 Pod 网络都需要)
+参考: https://github.com/containernetworking/plugins
+版本: 1.4.1
+
+tar zxvf cni-plugins-linux-amd64-v1.4.1.tgz -C /opt/cni/bin/
+
+# 网络插件
+官方参考: https://docs.tigera.io/calico/latest/getting-started/kubernetes/kind
+在 Install Calico 部分选择  Manifest 页
+
+先下载好镜像,导入
+docker.io/calico/cni:v3.28.0
+docker.io/calico/kube-controllers:v3.28.0
+docker.io/calico/node:v3.28.0
+
+
+按照上述官方提供的 yaml 文件,修改
+
+
+# no effect. This should fall within `--cluster-cidr`.
+            - name: CALICO_IPV4POOL_CIDR
+              value: "10.244.0.0/24"       # 修改为在 kubeadm-config.yaml 配置文件中的 podSubnet: "10.244.0.0/24"
+
+修改 calico.yaml 的 image 的 pull 规则 imagePullPolicy 为 Never.
+kubectl create -f calico.yaml 即可
+
+
+# calico 管理工具 calicoctl
+下载地址: https://github.com/projectcalico/calico/releases
+必须和 calico 版本相同,这里使用 3.28.0 
+
+
+# 这里如果将下载的软件名称改为 kubectl-xxx, 则可以使用 kubectl calico -h 命令来使用
+install -m 755 calicoctl-linux-amd64 /usr/local/bin/kubectl-calico
+kubectl calico -h
+
+
+### worker node 加入集群
+按照前面的前置步骤,containerd 安装,kubelet/kubeadm 安装配置好,这里 kubeadm 及 kubelet 的服务配置文件都需要,安装好 CNI 插件
+
+
+导出/导入镜像 
+registry.k8s.io/coredns/coredns:v1.11.1
+registry.k8s.io/kube-proxy:v1.29.3
+registry.k8s.io/pause:3.9
+docker.io/calico/cni:v3.28.0
+docker.io/calico/kube-controllers:v3.28.0
+docker.io/calico/node:v3.28.0
+
+导出类似如下:
+ctr -n k8s.io i export coredns.tar registry.k8s.io/coredns/coredns:v1.11.1
+
+导入类似如下:
+ctr -n k8s.io i import coredns.tar
+
+执行:
+kubeadm token list   # 如果没有结果,执行 
+kubeadm token create # token 会在24小时过期
+openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt | openssl rsa -pubin -outform der 2>/dev/null | \
+   openssl dgst -sha256 -hex | sed 's/^.* //'     # 得到 --discovery-token-ca-cert-hash
+
+
+使用如下命令:
+kubeadm join --token <token> <control-plane-host>:<control-plane-port> --discovery-token-ca-cert-hash sha256:<hash>
+
+
+例子:
+如果需要 control-plane 
+kubeadm join 192.168.1.11:6443 --token bpv4mr.31o82on0e81y3g21 \
+        --discovery-token-ca-cert-hash sha256:c2a79190b28534073ec637f55dde8e9b27054de33d3c8ea8536c02f4b510b09f \
+        --control-plane
+
+
+单独的 worker node
+kubeadm join 192.168.1.11:6443 --token bpv4mr.31o82on0e81y3g21 \
+        --discovery-token-ca-cert-hash sha256:c2a79190b28534073ec637f55dde8e9b27054de33d3c8ea8536c02f4b510b09f
+
+
+在 master 端
+kubectl get nodes 
+
+类似:
+NAME    STATUS   ROLES           AGE    VERSION
+k8s01   Ready    control-plane   2d1h   v1.29.3
+k8s02   Ready    <none>          38m    v1.29.3
+
+
+######################################################
+报错 1:  
+[preflight] Running pre-flight checks
+        [WARNING FileExisting-socat]: socat not found in system path
+error execution phase preflight: [preflight] Some fatal errors occurred:
+        [ERROR FileExisting-conntrack]: conntrack not found in system path
+
+
+解决: apt-get install socat conntrack
+
+
+报错 2: failed to pull image registry.k8s.io
+解决:
+systemctl set-environment HTTP_PROXY=127.0.0.1:1080
+systemctl set-environment HTTPS_PROXY=127.0.0.1:1080
+systemctl restart containerd.service
+
+或者在 /etc/environment 文件中使用 
+export HTTP_PROXY=127.0.0.1:1080
+export HTTP_PROXYS=127.0.0.1:1080
+
+设置代理
+
+
+报错 3: etcd 容器中通过 crictl logs CONTAINER-ID 显示如下的报错
+{"level":"info","ts":"2024-05-13T09:16:50.404026Z","caller":"osutil/interrupt_unix.go:64","msg":"received signal; shutting down","signal":"terminated"
+解决: 这里是随机不定时的关闭自己,升级 containerd 版本,中间很多的 containerd 的配置参数错误,导致 runc 报错.
+
+
+报错 4: failed to load Kubelet config file /var/lib/kubelet/config.yaml
+解决: 可以暂时不用管,当通过 kubeadm init 以后会生成配置
+
+
+报错 5: 
+当使用 kubeadm join 的时候, 出现如下错误
+error port-10250 port 10250 is in use kubeadm join
+
+解决: kubeadm reset 
+
+
+报错 6: calico容器中有 error=connection is unauthorized: Unauthorized 的报错,并且容器处于 Unknown 或者类似
+kube-proxy-4f5r6  1/1     Running       4 (<invalid> ago)    5d 
+这样的时间这列无法确定的状态
+
+解决: 是因为系统时间不正常导致,比如安装的某个组件,关闭了一段时间,在启动的时候,由于时间延时比较长,因此有上述的错误
+执行 kubectl delete pod calico-node-4tmbf -n kube-system 删除对应的 pod 以后,会自动重建,就正常了.
+
+如果删除不了,出现一直 Terminate 的状态,可以使用 
+kubectl delete pod  coredns-76f75df574-gbwwt -n kube-system --force --grace-period=0
+
+强行删除
+
+
+报错7: 当使用 kubeadm reset 时候总是会在 Unmounting mounted directories in "/var/lib/kubelet" 这里卡住,不能继续这里使用的 containerd runc 因此,查看
+# systemctl status containerd -l -–no-pager
+
+
+会得到是有某些 pod 无法删除,使用 
+# crictl pods 
+或者
+# crictl ps -a 
+
+
+有些 pod 或者容器处于 NotReady 状态,并且通过 ps aux |grep containerd 能看见有个 crictl 删除 pod 的进程,说明是删除容器或者 pod 的过程被卡住,通过 
+# systemctl status containerd -l –no-pager 
+
+
+能看见此服务会关联 calico, 下面的内容也显示因为无法得到 calico 的信息导致
+● containerd.service - containerd container runtime
+     Loaded: loaded (/etc/systemd/system/containerd.service; enabled; preset: enabled)
+     Active: active (running) since Wed 2024-12-04 16:19:33 CST; 12min ago
+       Docs: https://containerd.io
+    Process: 3537 ExecStartPre=/sbin/modprobe overlay (code=exited, status=0/SUCCESS)
+   Main PID: 3543 (containerd)
+      Tasks: 25
+     Memory: 33.4M
+        CPU: 10.593s
+     CGroup: /system.slice/containerd.service
+             ├─3543 /usr/local/bin/containerd
+             └─6255 /opt/cni/bin/calico
+
+
+解决: 采用直接删除 pod 或者容器的文件及 calico 对应网络的文件
+删除如下目录的全部内容,如果需要删除某个 pod 对应的虚拟网卡,也可以删除对应的文件
+/var/lib/cni/results/
+
+按照上述的方式删除了所有的 calico 的内容，但是 containerd 中还有信息，类似：
+Dec 02 18:01:18 k8s01 containerd[613]: time="2025-12-02T18:01:18.385567251+08:00" level=error msg="Failed to load container \"318dd6f158226c24a8c7d9c026cb313100b9049c982ea8594255fbbc3a134161\"" error="failed to checkpoint status to \"/var/lib/containerd/io.containerd.grpc.v1.cri/containers/318dd6f158226c24a8c7d9c026cb313100b9049c982ea8594255fbbc3a134161/status\": open /var/lib/containerd/io.containerd.grpc.v1.cri/containers/318dd6f158226c24a8c7d9c026cb313100b9049c982ea8594255fbbc3a134161/.tmp-status3942500910: no such file or directory"
+
+当启动的时候仍然会读取相应的信息，即元数据，需要删除元数据，即如下的目录中的 meta.db 文件，重启 containerd 即不会再有错误提示，但是相应的镜像也会全部删除。
+
+具体的 contanerd 的目录结构及内容见下面的介绍。
+
+https://desistdaydream.github.io/docs/10.%E4%BA%91%E5%8E%9F%E7%94%9F/Containerization-implementation/Containerd/Containerd/
+这里也有个大概的介绍。
+
+/var/lib/containerd/
+├── io.containerd.content.v1.content
+│   ├── blobs
+│   └── ingest
+├── io.containerd.grpc.v1.cri
+│   ├── containers
+│   └── sandboxes
+├── io.containerd.grpc.v1.introspection
+│   └── uuid
+├── io.containerd.metadata.v1.bolt
+│   └── meta.db                           # 删除这里，将会删除全部的镜像
+├── io.containerd.runtime.v1.linux
+│   └── k8s.io
+├── io.containerd.runtime.v2.task
+│   └── k8s.io
+├── io.containerd.snapshotter.v1.blockfile
+├── io.containerd.snapshotter.v1.btrfs
+├── io.containerd.snapshotter.v1.native
+│   └── snapshots
+├── io.containerd.snapshotter.v1.overlayfs
+│   ├── metadata.db                       # 测试删除这里，是否会会删除容器
+│   └── snapshots
+└── tmpmounts
+
+
+# 目录下面是容器或者 pod 对应的 ID 通过 crictl ps -a /crictl pods --no-trunc 查看到 ID,如果想删除某个容器或者 POD,也可以删除下面目录中对应的目录即可
+/var/lib/containerd/io.containerd.grpc.v1.cri/sandboxes/
+/var/lib/containerd/io.containerd.grpc.v1.cri/containers/
+
+
+/var/run/containerd/io.containerd.grpc.v1.cri/sandboxes/
+/var/run/containerd/io.containerd.grpc.v1.cri/containers/
+
+同时通过 
+# ctr -n k8s.io c rm CONTAINER-ID 	 # 删除容器
+
+重启 containerd
+# systemctl restart containerd 
+
+进入到 /var/lib/containerd/io.containerd.runtime.v2.task/k8s.io  目录中查看是否还存在刚才对应 ID 的容器和 pod,如果不存在,说明已经删除了,同时,再次通过
+# crictl ps -a |crictl pods 
+
+发现已经把对应的容器或者 pod 删掉
+
+
+# ctr 及 crictl 命令
+
+容器
+crictl pods --no-trunc
+crictl stop 91c6b23b126f1
+crictl rmp 91c6b23b126f1
+crictl ps -a
+
+镜像
+ctr ns ls
+ctr -n k8s.io c ls
+ctr -n default c ls
+ctr -n k8s.io i import /home/blue/hello-frontend-1.0.tar
+ctr -n k8s.io i export coredns-v1.11.1.tar registry.k8s.io/coredns/coredns:v1.11.1
+ctr -n k8s.io i ls -q
+
+
+# Containerd 关联文件与配置
+/etc/containerd/config.toml # Containerd 运行时配置文件。该文件可以通过 containerd config default 命令来生成一个默认的配置。
+
+/var/lib/containerd/ # Root(根) 文件夹。用于保存持久化数据，镜像、元数据 所在路径。包括 Snapshots, Content, Metadata 以及各种插件的数据。每一个插件都有自己单独的目录，Containerd 本身不存储任何数据，它的所有功能都来自于已加载的插件。目录下的内容详解，见 Containerd Image 章节
+  ./io.containerd.content.v1.content/ # 镜像的上下文保存目录
+    ./blobs/ # 镜像文件系统布局中。blobs 目录数据的存放路径
+  ./io.containerd.snapshotter.v1.overlayfs/ # 镜像的层信息所在目录。
+
+/run/containerd/ # State(状态) 文件夹。用于保存运行时产生的临时数据，也就是容器启动后数据存放目录。包括 sockets、pid、挂载点、运行时状态以及不需要持久化保存的插件数据。
+  ./io.containerd.runtime.VERSION.ID/ # Containerd 运行容器时所使用的 runtime 插件，该目录的名称就是插件的版本和名称。该目录下的目录以名称空间命名。
+    ./NAMESPACE/ # 指定名称空间下的容器启动后的数据(主要就是符合 OCI 标准的 一组 Bundle 文件)保存路径，其内目录名为 ContainerID。
+
+/var/lib/containerd/ 与 /run/containerd/ 是 Containerd 最常用的两个目录，一个存镜像数据，一个存容器数据。
+
+目录结构
+在 /var/lib/containerd 和 /run/containerd 目录下，保存了 Containerd 运行所需的所有数据。Containerd 本身不存储任何数据，所有数据都来源于插件的功能。 看一下目录下的层次结构就一目了然了：
+?  → tree -L 2 /var/lib/containerd/
+/var/lib/containerd/
+├── io.containerd.content.v1.content
+│   ├── blobs
+│   └── ingest
+├── io.containerd.grpc.v1.cri
+│   ├── containers
+│   └── sandboxes
+├── io.containerd.metadata.v1.bolt
+│   └── meta.db
+├── io.containerd.runtime.v1.linux
+│   └── k8s.io
+├── io.containerd.runtime.v2.task
+├── io.containerd.snapshotter.v1.aufs
+│   └── snapshots
+├── io.containerd.snapshotter.v1.btrfs
+├── io.containerd.snapshotter.v1.native
+│   └── snapshots
+├── io.containerd.snapshotter.v1.overlayfs
+│   ├── metadata.db
+│   └── snapshots
+└── tmpmounts
+18 directories, 2 files
+
+每个子目录，其实都表示的是一个插件名称。
+
+?  → tree -L 2 /run/containerd/
+/run/containerd/
+├── containerd.sock
+├── containerd.sock.ttrpc
+├── io.containerd.grpc.v1.cri
+│   ├── containers
+│   └── sandboxes
+├── io.containerd.runtime.v1.linux
+│   └── k8s.io
+├── io.containerd.runtime.v2.task
+└── runc
+    └── k8s.io
+8 directories, 2 files
+
+

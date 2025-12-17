@@ -1,0 +1,286 @@
+Http Handler
+收到的请求Pistache由一个名为的特殊类处理Http::Handler.此类声明了一组虚拟方法,可以覆盖这些方法来处理套接字和/或连接上发生的特殊事件.
+
+必须覆盖该onRequest()功能.每当 接收到数据时都会调用此函数,并将其正确地解析为http请求.Pistache
+
+virtual void onRequest(const Http::Request& request,Http::ResponseWriter response);
+第一个参数是Http::Request表示请求本身的类型的对象.它包含一堆信息,包括:
+
+* 与请求关联的资源
+* 查询参数
+* 标题
+* 请求的正文
+该Request对象提供read-only对这些信息的访问.您可以通过几个getter访问它们,但不能修改它们.http请求是不可变的.
+
+发送回复
+ResponseWriter是一个对象,最终的http响应从该对象发送到客户端.该onRequest() 函数不返回任何内容（void）.相反,响应是通过ResponseWriter类发送的.这个类提供了一堆send()函数重载来发送响应:
+
+Async::Promise<ssize_t> send(Code code);
+您可以使用此重载来发送具有空主体和给定HTTP代码的响应（例如Http::Code::Ok）
+
+Async::Promise<ssize_t> send(
+            Code code,
+            const std::string& body,
+            const Mime::MediaType &mime = Mime::MediaType());
+此重载可用于发送具有静态,固定大小内容（正文）的响应.还可以指定MIME类型,该类型将通过Content-Type标头发送.
+
+template<size_t N>
+Async::Promise<ssize_t> send(
+            Code code,
+            const char (&arr)[N],
+            const Mime::MediaType& mime = Mime::MediaType());
+此版本还可用于向正文发送固定大小的响应,但不需要构造字符串（不分配内存）.内容的大小由编译器直接推导出来.此版本仅适用于原始字符串文字.
+
+这些函数asynchronous意味着它们不返回ssize_t 表示正在发送的字节数的普通旧值,而是Promise稍后将实现的.有关使用Pistache进行异步编程的更多详细信息,请参阅下一节.
+
+
+响应流
+有时,不能预先知道要发回给用户的内容,因此不能预先确定长度.就此而言,HTTP规范定义了一种称为分块编码的特殊数据传输机制 ,其中数据以一系列块的形式发送.此机制使用Transfer-EncodingHTTP标头代替该标头Content-Length.
+
+为了传输内容,Pistache提供了一个特殊的ResponseStream类.要从ResponseWriter获取ResponseStream,请调用stream()成员函数:
+
+auto stream = response.stream(Http::Code::Ok);
+要启动流,您必须将HTTP状态代码传递给流功能（此处Http::Code::Ok或HTTP 200）.ResponseStream类提供了一个iostream重载<<运算符的类似接口.
+
+stream << "PO"
+stream << "NG"
+第一行将使用内容PO将大小为2的块写入流的缓冲区.第二行将写入第二个大小为2的块,其内容为“NG”.要结束流并刷新内容,请使用特殊ends标记:
+
+stream << ends
+该ends标志将写大小为0的最后一个块,并通过网络发送的最终数据.要简单地刷新流的缓冲区而不结束流,您可以使用flush标记:
+
+stream << flush
+标题写作
+启动流后,标头变为不可变.必须在创建ResponseStream之前将它们写入响应:
+
+response.headers()
+    .add<Header::Server>("lys")
+    .add<Header::ContentType>(MIME(Text,Plain));
+
+auto stream = response.stream();
+stream << "PO" << "NG" << ends;
+
+
+静态文件服务
+除了提供文本内容外,Pistache还提供了一种通过该Http::serveFile功能提供静态文件的方法:
+
+if (request.resource() == "/doc" && request.method == Http::Method::Get) {
+    Http::serveFile(response,"README.md");
+}
+返回值
+serveFile还返回一个Promise,表示发送到线路的总字节数
+
+控制超时
+有时,您可能需要在一段时间后超时.例如,如果您正在设计具有软实时约束的HTTP API,则您将有时间限制将响应发送回客户端.这就是为什么Pistache提供了基于每个请求控制超时的能力.要在响应上设置超时,可以timeoufterAfter()直接在ResponseWriter对象上使用成员函数:
+
+response.timeoutAfter(std::chrono::milliseconds(500));
+如果在500毫秒内未发送响应,则会触发超时.timeoutAfter接受任何类型的持续时间.
+
+超时触发时,onTimeout()将调用处理程序中的函数.默认情况下,此方法不执行任何操作 如果要正确处理超时,则应在自己的处理程序中覆盖此函数:
+
+void onTimeout(const Http::Request& request,Http::ResponseWriter writer) {
+    request.send(Http::Code::No_Content);
+}
+Request传递给onTimeout 的对象是触发超时的完全相同的请求.这ResponseWriter是一个完整的新编写器对象.
+
+ResponseWriter状态
+由于ResponseWriter对象是一个完整的新对象,因此不会使用onRequest（）回调中的ResponseWriter保留状态,这意味着您必须再次编写完整的响应,包括标头和cookie.
+
+异步HTTP编程
+提供的接口Pistaches是asynchronous和non-blocking.异步编程允许代码继续执行,即使给定调用的结果尚不可用.引用提供异步接口的调用asynchronous calls.
+
+这种调用的一个例子是接口send()提供的ResponseWriter功能.此函数返回写入与连接关联的套接字文件描述符的字节数.但是,它不是直接将值返回给调用者,从而阻塞调用者,而是将值包装到名为a的组件中Promise.
+
+A Promise是Pistache 在许多Javascript实现中可用的 Promises / A +标准的实现.简单地说,在异步调用期间Promise,将异步操作的启动与其结果的检索分开.虽然异步可能仍在运行,但是a Promise<T>会直接返回给调用者,以便在可用时检索最终结果.所谓的continuation可以附加到Promise以在结果可用时执行回调（当Promise已被解析或完成时）.
+
+auto res = response.send(Http::Code::Ok,"Hello World");
+res.then(
+    [](ssize_t bytes) { std::cout << bytes << " bytes have been sent" << std::endl; },
+    Async::NoExcept
+);
+该then()成员用于将回调附加到Promise.第一个参数是callable在Promise 成功解析后将被调用的参数.如果由于某种原因,在异步操作期间发生错误,则可以拒绝 Promise ,然后失败.在这种情况下,将调用第二个可调用对象.Async::NoExcept是一个特殊的回调,std::terminate()如果承诺失败将调用.这相当于noexcept关键字.
+
+在这种情况下,也可以使用其他通用回调:
+
+Async::IgnoreException 将简单地忽略该异常并让程序继续
+Async::Throw将“重新抛出”异常直至最终的承诺呼叫链.这与throw 关键字具有相同的效果,除了它适用于promises.
+promises中的异常回调通过一个传播exception_ptr.Promise也可以链接在一起以创建一个完整的异步管道:
+
+1 auto fetchOp = fetchDatabase();
+2 fetchOp
+3  .then(
+4     [](const User& user) { return fetchUserInfo(user); },
+5     Async::Throw)
+6  .then(
+7     [](const UserInfo& info) { std::cout << "User name = " << info.name << std::endl; },
+8     [](exception_ptr ptr) { std::cout << "An exception occured during user retrieval" << std::endl;
+9 });
+如果fetchDatabase()失败则第5行将传播异常并拒绝承诺.
+
+头
+概观
+受Rust生态系统和Hyper的启发,HTTP标头表示为type-safe普通对象.不是将标题表示为一对,而是(key: string,value: value)选择将它们表示为普通对象.这大大降低了编译器使用普通旧字符串无法捕获的拼写错误的风险.
+
+相反,对象使编译器能够在编译时直接捕获错误,因为用户无法通过其名称添加或请求标头:它必须使用整个类型.在编译时强制执行的类型,它有助于减少常见的拼写错误.
+
+使用时Pistache,每个HTTP标头都是class从Http::Header基类继承的,并使用NAME()宏来定义标头的名称.HTTP请求或响应中的所有标头的列表存储在内部 std::unordered_map,包含在Header::Collection类中.可以通过整个标题类型检索或添加到该对象的Invidual标头:
+
+auto headers = request.headers();
+auto ct = headers.get<Http::Header::ContentType>();
+get<H>将返回std::shared_ptr<H>where H: Header（H继承自Header）.如果标头不存在,get<H> 将抛出异常.tryGet<H>提供了一个非抛出的替代方法,而是返回一个空指针.
+
+内置标头
+Pistache提供的头文件位于Http :: Header命名空间中
+
+定义自己的标题
+HTTP RFC（RFC2616）定义的公共标头已经实现并可用.但是,某些API可能会定义不存在的额外标头Pistache.要支持您自己的头类型,您可以通过首先声明一个继承Http::Header该类的类来定义和注册您自己的HTTP头:
+
+class XProtocolVersion : public Http::Header {
+};
+由于每个标头都有一个名称,因此NAME()必须使用宏来正确命名标头:
+
+class XProtocolVersion : public Http::Header {
+    NAME("X-Protocol-Version")
+};
+该Http::Header基类提供,你必须在自己的实现覆盖两个虚拟的方法:
+
+ void parse(const std::string& data); 
+此函数用于解析字符串表示形式的标头.或者,为避免为字符串表示分配内存,可以使用原始版本:
+
+void parseRaw(const char* str,size_t len);
+str将直接从原始http流指向标头缓冲区.该len参数是标头的值的总长度.
+
+ void write(std::ostream& stream) const 
+将响应写回客户端时,该write函数用于将标头序列化到网络缓冲区中.
+
+让我们将这些函数组合在一起,以完成我们之前声明的标头的实现:
+
+class XProtocolVersion : public Http::Header {
+public:
+
+    NAME("X-Protocol-Version")
+
+    XProtocolVersion()
+     : minor(-1)
+     ,major(-1)
+    { }
+
+    void parse(const std::string& data) {
+        auto pos = data.find('.');
+        if (pos != std::string::npos) {
+            minor = std::stoi(data.substr(0,pos));
+            major = std::stoi(data.substr(pos + 1));
+        }
+    }
+
+    void write(std::ostream& os) const {
+        os << minor << "." << major;
+    }
+private:
+    int minor;
+    int major;
+};
+就是这样.现在我们所要做的就是将标题注册到注册表系统:
+
+Header::Registry::registerHeader<XProtocolVersion>();
+标题的瞬间
+您应始终为标头提供默认构造函数,以便注册表系统可以对其进行实例化
+
+现在,XProtocolVersion可以像在Header::Collection类中的任何其他标头一样检索和添加.
+
+未知标题
+注册表系统未知的标头存储为Collection类中的原始字符串对.getRaw（）可用于检索原始标头:
+
+auto myHeader = request.headers().getRaw("x-raw-header");
+myHeader.name() // x-raw-header
+myHeader.value() // returns the value of the header as a string
+MIME类型
+MIME类型（或媒体类型）也是完全类型化的.这些类型例如在HTTP请求或响应中使用,以描述消息正文中包含的数据（Content-Type标题,...）,并且由类型,子类型和可选后缀和参数组成.
+
+MIME类型由Mime::MediaType类表示,在mime.h标头中实现.MIME类型可以直接从字符串构造:
+
+auto mime = Http::Mime::MediaType::fromString("application/json");
+但是,为了强制执行类型安全,常见类型都表示为枚举:
+
+Http::Mime::MediaType m1(Http::Mime::Type::Application,Http::Mime::Subtype::Json);
+为了避免这种打字疼痛,MIME还提供了一个宏:
+
+auto m1 = MIME(Application,Json);
+对于后缀MIME,请使用特殊MIME3宏:
+
+auto m1 = MIME3(Application,Json,Zip);
+如果您喜欢打字,也可以使用长格式:
+
+Http::Mime::MediaType m1(Http::Mime::Type::Application,Http::Mime::Subtype::Json,Http::Mime::Suffix::Zip);
+该toString()函数可用于获取给定MIME类型的字符串表示形式:
+
+auto m1 = MIME(Text,Html);
+m1.toString(); // text/html
+路由
+HTTP路由包括将HTTP路由绑定到C ++回调.一个称为HTTP路由器的特殊组件将负责将HTTP请求分派给正确的C ++回调.路由由与资源关联的HTTP谓词组成:
+
+GET /users/1
+这里GET是动词,/users/1是关联的资源.
+
+HTTP方法
+Pistache支持一堆HTTP方法（动词）:
+
+GET:GET客户端（例如browser）使用该方法来检索由URI标识的资源.例如,要检索由ID标识的用户,客户端会发出GET的/users/:id请求URI.
+POST:该POST方法用于将新信息发布或发送到某个资源.然后,服务器将读取并存储与请求关联的数据.POST是从HTML表单传输数据的常用方法.POST还可用于创建新资源或更新现有资源的信息.例如,要创建新用户,客户端将向POST该/users 路径发出一个包含要在其正文中创建的用户数据的路径.
+PUT:PUT非常相似,POST除非PUT是幂等的,这意味着对具有相同内容的相同Request-URI的两个请求应该具有相同的效果并且应该产生相同的结果.
+DELETE:该DELETE方法用于删除与给定Request-URI关联的资源.例如,要删除用户,客户端可能会发出DELETE对/users/:idRequest-URI 的调用.
+综上所述,POST以及PUT用于创建和/或更新,GET用于读取和DELETE用于删除信息.
+
+路线模式
+静态路线
+静态路由是最简单的路由,因为它们依赖于Request-URI的动态部分.例如,/users/all是一个与/users/allRequest-URI 完全匹配的静态路由.
+
+动态路线
+但是,定义具有动态部分的路径通常很有用.例如,要通过其id检索特定用户,需要id来查询存储.因此,动态路由具有参数,然后由HTTP路由器逐个匹配.在动态路线中,参数由列标识:
+
+/users/:id
+
+这:id是一个动态参数.当请求进入时,路由器将尝试将:id参数与请求的相应部分匹配.例如,如果服务器收到请求/users/13,则路由器将该13值与:id参数匹配.
+
+一些参数,如:id命名.但是,Pistache也允许由星形标识的splat（通配符）参数*:
+
+/link/*/to/*
+
+定义路线
+要定义路由,首先必须实例化HTTP路由器:
+
+Http::Router router
+然后,使用这些Routes::<Method>()函数添加一些路径:
+
+Routes::Get(router,"/users/all",Routes::bind(&UsersApi::getAllUsers,this));
+Routes::Post(router,"/users/:id",Routes::bind(&UsersApi::getUserId,this));
+Routes::Get(router,"/link/*/to/*",Routes::bind(&UsersApi::linkUsers,this));
+Routes::bind 是一个特殊的函数,它将生成一个相应的C ++回调,如果给定的路由与Request-URI匹配,那么路由器将调用该回调.
+
+回调
+与路由关联的C ++回调必须具有以下签名:
+
+void(const Rest::Request&,Http::ResponseWriter);
+回调可以是非静态自由或成员函数.对于成员函数,必须将指向相应实例的指针传递给Routes::bind函数,以便路由器知道调用成员函数的实例.
+
+回调的第一个参数是Rest::Request而不是Http::Request.A Rest::Request是Http::Request附加功能.例如,通过此对象检索命名和splat参数:
+
+void UsersApi::getUserId(const Rest::Request& request,Http::ResponseWriter response) {
+    auto id = request.param(":id").as<int>();
+    // ...
+}
+
+void UsersApi::linkUsers(const Rest::Request& request,Http::ResponseWriter response) {
+    auto u1 = request.splatAt(0).as<std::string>();
+    auto u2 = request.splatAt(1).as<std::string>();
+    // ...
+}
+如您所见,参数也是键入的.要将参数强制转换为适当的类型,请使用as<T>成员模板.
+
+铸造安全
+如果参数无法转换为正确的类型,则抛出异常
+
+安装处理程序
+定义路由后,Http::Handler必须将final 设置为HTTP端点.要检索处理程序,只需调用handler()路由器对象上的成员函数:
+
+endpoint.setHandler(router.handler());

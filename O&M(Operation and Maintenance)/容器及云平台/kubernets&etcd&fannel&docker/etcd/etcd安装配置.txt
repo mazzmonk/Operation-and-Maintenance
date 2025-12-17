@@ -1,0 +1,180 @@
+etcd 是一个用于存储的key/value的容器，可以配置成集群模式
+
+版本：etcd-v3.0.1-linux-amd64.tar.gz
+下载：
+https://github.com/coreos/etcd/releases/ 二进制版本
+
+1.安装
+解压以后建立如下的目录
+mkdir -p $HOME_PATH/apps/etcd/{bin,data,wal,logs}
+touch $HOME_PATH/apps/etcd/logs/etcd.log
+将解压的文件etcd  etcdctl复制到bin目录中
+
+
+
+环境
+192.168.81.4
+192.168.81.5
+192.168.81.6
+
+
+###### 192.168.81.4 ######
+#!/bin/bash
+
+$HOME_PATH/apps/kubernetes/etcd/bin/etcd --name etcd01 --data-dir '$HOME_PATH/apps/kubernetes/etcd/data' --wal-dir '$HOME_PATH/apps/kubernetes/etcd/wal' --snapshot-count 10000 --heartbeat-interval 100 --election-timeout 1000 --listen-peer-urls 'http://192.168.81.4:2380' --listen-client-urls 'http://0.0.0.0:2379,http://0.0.0.0:4001' --max-snapshots 5 --max-wals 5 --initial-advertise-peer-urls 'http://192.168.81.4:2380' --initial-cluster 'etcd01=http://192.168.81.4:2380,etcd02=http://192.168.81.5:2380,etcd03=http://192.168.81.6:2380' --initial-cluster-token 'etcd-cluster' --advertise-client-urls 'http://192.168.81.4:2379,http://192.168.81.4:4001'  >> $HOME_PATH/logs/kubernetes/etcd/etcd.log 2>&1 &
+
+
+###### 192.168.81.5 ######
+#!/bin/bash
+
+$HOME_PATH/apps/kubernetes/etcd/bin/etcd --name etcd02 --data-dir '$HOME_PATH/apps/kubernetes/etcd/data' --wal-dir '/home/aspir
+e/apps/kubernetes/etcd/wal' --snapshot-count 10000 --heartbeat-interval 100 --election-timeout 1000 --listen-peer-urls 'http
+://192.168.81.5:2380' --listen-client-urls 'http://0.0.0.0:2379,http://0.0.0.0:4001' --max-snapshots 5 --max-wals 5 --initia
+l-advertise-peer-urls 'http://192.168.81.5:2380' --initial-cluster 'etcd01=http://192.168.81.4:2380,etcd02=http://192.168.81
+.5:2380,etcd03=http://192.168.81.6:2380' --initial-cluster-token 'etcd-cluster' --advertise-client-urls 'http://192.168.81.5
+:2379,http://192.168.81.5:4001'  >> $HOME_PATH/logs/kubernetes/etcd/etcd.log 2>&1 &
+
+
+
+###### 192.168.81.6 ######
+#!/bin/bash
+
+$HOME_PATH/apps/kubernetes/etcd/bin/etcd --name etcd03 --data-dir '$HOME_PATH/apps/kubernetes/etcd/data' --wal-dir '/home/aspir
+e/apps/kubernetes/etcd/wal' --snapshot-count 10000 --heartbeat-interval 100 --election-timeout 1000 --listen-peer-urls 'http
+://192.168.81.6:2380' --listen-client-urls 'http://0.0.0.0:2379,http://0.0.0.0:4001' --max-snapshots 5 --max-wals 5 --initia
+l-advertise-peer-urls 'http://192.168.81.6:2380' --initial-cluster 'etcd01=http://192.168.81.4:2380,etcd02=http://192.168.81
+.5:2380,etcd03=http://192.168.81.6:2380' --initial-cluster-token 'etcd-cluster' --advertise-client-urls 'http://192.168.81.6
+:2379,http://192.168.81.6:4001'  >> $HOME_PATH/logs/kubernetes/etcd/etcd.log 2>&1 &
+
+
+上述的脚本有2个需要注意的：
+1.每个http://这里的地址
+2.如果重新配置启动的参数，必须删除上述data,wal目录中的内容
+
+
+添加etcd节点
+*****************************************************
+
+#!/bin/bash
+
+$HOME_PATH/apps/kubernetes/etcd/bin/etcd --name etcd00 --data-dir '$HOME_PATH/apps/kubernetes/etcd/data' --wal-dir '$HOME_PATH/apps/kubernetes/etcd/wal' --snapshot-count 10000 --heartbeat-interval 100 --election-timeout 1000 --listen-peer-urls 'http://192.168.81.3:2380' --listen-client-urls 'http://0.0.0.0:2379,http://0.0.0.0:4001' --max-snapshots 5 --max-wals 5 --initial-advertise-peer-urls 'http://192.168.81.3:2380' --initial-cluster 'etcd00=http://192.168.81.3:2380,etcd01=http://192.168.81.4:2380,etcd02=http://192.168.81.5:2380,etcd03=http://192.168.81.6:2380' --initial-cluster-token 'etcd-cluster' --advertise-client-urls 'http://192.168.81.3:2379,http://192.168.81.3:4001' --initial-cluster-state 'existing'  >> $HOME_PATH/logs/kubernetes/etcd/etcd.log 2>&1 &
+
+*****************************************************
+
+etcd集群原有3个节点，192.168.81.4/5/6，现在添加一个节点192.168.81.3，上述脚本在192.168.81.3执行，主要是最后参数--initial-cluster-state 'existing'，这里起决定作用。
+
+
+详细的操作见：http://soft.dog/2016/02/16/etcd-cluster/
+
+
+
+上述的操作只是的通用操作，具体需要如下配置
+重要：在配置集群或者迁移之前请先阅读
+https://skyao.gitbooks.io/leaning-etcd3/content/documentation/op-guide/clustering.html
+
+
+核心思想：先建立一个单节点的集群，及在第一节点上启动etcd进程(步骤2)，然后添加后续的节点(步骤3,4)．
+
+
+由于在etcd集群所在的某个节点出现磁盘满，导致etcd无法响应。
+做了一个全部etcd集群的重建（迁移），步骤如下：
+1.备份etcd中的data及wal数据，使用etcdctl工具
+
+./etcdctl backup --data-dir $HOME_PATH/apps/kubernetes/etcd/data/ --wal-dir $HOME_PATH/apps/kubernetes/etcd/wal/  --backup-dir $HOME_PATH/backup/data --backup-wal-dir $HOME_PATH/backup/wal/
+
+在运行etcd过程中使用--data-dir和--wal-dir目录，因此有上述的参数，同时备份data/member/snap/中的db文件
+
+2.启动具有一个节点的etcd集群
+
+mkdir -p $HOME_PATH/apps/etcd/{bin,data,wal,logs}
+etcd/bin/{etcd,etcdctl}
+
+在使用脚本启动之前，把data及wal备份的相应的内容拷贝到相对应的目录中，启动脚本
+
+HOME_PATH
+
+$HOME_PATH/apps/etcd/bin/etcd \
+--name etcd00 \
+--data-dir '$HOME_PATH/apps/etcd/data' \
+--wal-dir '$HOME_PATH/apps/etcd/wal' \
+--snapshot-count 10000 \
+--heartbeat-interval 100 \
+--election-timeout 1000 \
+--listen-peer-urls 'http://192.168.81.3:2380' \
+--listen-client-urls 'http://0.0.0.0:2379,http://0.0.0.0:4001' \
+--max-snapshots 5 \
+--max-wals 5 \
+--initial-advertise-peer-urls 'http://192.168.81.3:2380' \
+--initial-cluster 'etcd00=http://192.168.81.3:2380' \
+--initial-cluster-token 'etcd-cluster' \
+--advertise-client-urls 'http://192.168.81.3:2379,http://192.168.81.3:4001' \
+--force-new-cluster                #这个参数除了新建集群外，其他时候不用
+＞ $HOME_PATH/apps/etcd/logs/etcd.log 2>&1 &
+
+--name：方便理解的节点名称，默认为 default，在集群中应该保持唯一，可以使用hostname
+--data-dir：服务运行数据保存的路径，默认为 ${name}.etcd
+--snapshot-count：指定有多少事务（transaction）被提交时，触发截取快照保存到磁盘
+--heartbeat-interval：leader 多久发送一次心跳到 followers。默认值是 100ms
+--eletion-timeout：重新投票的超时时间，如果 follow 在该时间间隔没有收到心跳包，会触发重新投票，默认为 1000 ms
+--listen-peer-urls：和同伴通信的地址，比如 http://ip:2380，如果有多个，使用逗号分隔。需要所有节点都能够访问，所以不要使用localhost！
+--listen-client-urls：对外提供服务的地址：比如 http://ip:2379,http://127.0.0.1:2379，客户端会连接到这里和 etcd 交互
+--advertise-client-urls：对外公告的该节点客户端监听地址，这个值会告诉集群中其他节点
+--initial-advertise-peer-urls：该节点同伴监听地址，这个值会告诉集群中其他节点
+--initial-cluster：集群中所有节点的信息，格式为 node1=http://ip1:2380,node2=http://ip2:2380,…。注意：这里的 node1 是节点的 --name 指定的名字；后面的 ip1:2380 是 --initial-advertise-peer-urls 指定的值
+--initial-cluster-state：新建集群的时候，这个值为 new；假如已经存在的集群，这个值为 existing;
+--initial-cluster-token：创建集群的 token，这个值每个集群保持唯一。这样的话，如果你要重新创建集群，即使配置和之前一样，也会再次生成新的集群和节点 uuid；否则会导致多个集群之间的冲突，造成未知的错误
+所有以 --init 开头的配置都是在 bootstrap 集群的时候才会用到，后续节点的重启会被忽略。
+
+注意使用的--force-new-cluster参数，强迫新建集群使用新的配置
+
+注意：这里有个诡异的情况，就是直接用上述的脚本，所有日志都无法写入日志文件，因此用nohup x.sh &方式
+
+
+./etcdctl member list
+5936fc38a001: name=etcd00 peerURLs=http://192.168.81.3:2380 clientURLs=http://192.168.81.3:2379,http://192.168.81.3:4001 isLeader=true
+
+如果不是上述内容，则使用如下api更新节点内容。
+
+curl http://192.168.81.3:2379/v2/members/5936fc38a001 -XPUT -H "Content-Type:application/json" -d '{"peerURLs":["http://192.168.81.3:2380"]}'
+
+3.添加新节点在集群中
+步骤是先注册节点，然后启动服务
+
+curl http://192.168.81.3:2379/v2/members -XPOST -H "Content-Type: application/json" -d '{"peerURLs": ["http://192.168.81.4:2380"]}'
+
+执行脚本
+
+$HOME_PATH/apps/etcd/bin/etcd --name etcd01 --data-dir '$HOME_PATH/apps/etcd/data' --wal-dir '$HOME_PATH/apps/etcd/wal' --snapshot-count 10000 --heartbeat-interval 100 --election-timeout 1000 --listen-peer-urls 'http://192.168.81.4:2380' --listen-client-urls 'http://0.0.0.0:2379,http://0.0.0.0:4001' --max-snapshots 5 --max-wals 5 --initial-advertise-peer-urls 'http://192.168.81.4:2380' --initial-cluster 'etcd00=http://192.168.81.3:2380,etcd01=http://192.168.81.4:2380' --initial-cluster-token 'etcd-cluster' --advertise-client-urls 'http://192.168.81.4:2379,http://192.168.81.4:4001' --initial-cluster-state 'existing'
+
+这里注意--initial-cluster这个参数，添加的是etcd00，etcd01
+
+./etcdctl member list
+5936fc38a001: name=etcd00 peerURLs=http://192.168.81.3:2380 clientURLs=http://192.168.81.3:2379,http://192.168.81.3:4001 isLeader=true
+58018176480458b0: name=etcd01 peerURLs=http://192.168.81.4:2380 clientURLs=http://192.168.81.4:2379,http://192.168.81.4:4001 isLeader=false
+
+4.添加第三个节点，步骤如上
+
+curl http://192.168.81.3:2379/v2/members -XPOST -H "Content-Type: application/json" -d '{"peerURLs": ["http://192.168.81.5:2380"]}'
+
+执行脚本
+
+$HOME_PATH/apps/etcd/bin/etcd --name etcd02 --data-dir '$HOME_PATH/apps/etcd/data' --wal-dir '$HOME_PATH/apps/etcd/wal' --snapshot-count 10000 --heartbeat-interval 100 --election-timeout 1000 --listen-peer-urls 'http://192.168.81.5:2380' --listen-client-urls 'http://0.0.0.0:2379,http://0.0.0.0:4001' --max-snapshots 5 --max-wals 5 --initial-advertise-peer-urls 'http://192.168.81.5:2380' --initial-cluster 'etcd00=http://192.168.81.3:2380,etcd01=http://192.168.81.4:2380,etcd02=http://192.168.81.5:2380' --initial-cluster-token 'etcd-cluster' --advertise-client-urls 'http://192.168.81.5:2379,http://192.168.81.5:4001' --initial-cluster-state 'existing'
+
+同样注意--initial-cluster这个参数，添加的是etcd00，etcd01，etcd02
+
+./etcdctl member list
+5936fc38a001: name=etcd00 peerURLs=http://192.168.81.3:2380 clientURLs=http://192.168.81.3:2379,http://192.168.81.3:4001 isLeader=true
+58018176480458b0: name=etcd01 peerURLs=http://192.168.81.4:2380 clientURLs=http://192.168.81.4:2379,http://192.168.81.4:4001 isLeader=false
+caf88142b19269c2: name=etcd02 peerURLs=http://192.168.81.5:2380 clientURLs=http://192.168.81.5:2379,http://192.168.81.5:4001 isLeader=false
+
+
+
+
+
+
+
+
+
+
+
+

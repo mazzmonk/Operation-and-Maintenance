@@ -1,0 +1,69 @@
+docker volume inspect
+
+Description
+
+Display detailed information on one or more volumes
+
+API 1.21+  The client and daemon API must both be at least 1.21 to use this command. Use the docker version command on the client to check your client and daemon API versions.
+
+* Usage
+
+docker volume inspect [OPTIONS] VOLUME [VOLUME...]
+
+* Extended description
+
+Returns information about a volume. By default, this command renders all results in a JSON array. You can specify an alternate format to execute a given template for each result. Go’s text/template package describes all the details of the format.
+
+For example uses of this command, refer to the examples section below.
+
+* Options
+Name,shorthand	Default	Description
+--format , -f			Format the output using the given Go template
+
+* Examples
+$ docker volume create
+
+8140a838303144125b4f54653b47ede0486282c623c3551fbc7f390cdc3e9cf5
+
+$ docker volume inspect 85bffb0677236974f93955d8ecc4df55ef5070117b0e53333cc1b443777be24d
+
+[
+  {
+    "CreatedAt": "2020-04-19T11:00:21Z",
+    "Driver": "local",
+    "Labels": {},
+    "Mountpoint": "/var/lib/docker/volumes/8140a838303144125b4f54653b47ede0486282c623c3551fbc7f390cdc3e9cf5/_data",
+    "Name": "8140a838303144125b4f54653b47ede0486282c623c3551fbc7f390cdc3e9cf5",
+    "Options": {},
+    "Scope": "local"
+  }
+]
+
+$ docker volume inspect --format '{{ .Mountpoint }}' 8140a838303144125b4f54653b47ede0486282c623c3551fbc7f390cdc3e9cf5
+
+/var/lib/docker/volumes/8140a838303144125b4f54653b47ede0486282c623c3551fbc7f390cdc3e9cf5/_data
+
+* Parent command
+
+Command			Description
+docker volume	Manage volumes
+
+* Related commands
+
+Command					Description
+docker volume create	Create a volume
+docker volume inspect	Display detailed information on one or more volumes
+docker volume ls		List volumes
+docker volume prune		Remove all unused local volumes
+docker volume rm		Remove one or more volumes
+
+
+通过docker system df -v查看volume内容时候,在LINKS这一列的0/1表示当前此volume是否在使用,如果不用则是0,如果用则是1,当时使用docker volume prune,会把为0的volume的全部清理掉
+
+另外,通过docker rm -f container-id并不能完全删除容器,可能会有相应的volume没删掉
+
+
+
+
+
+

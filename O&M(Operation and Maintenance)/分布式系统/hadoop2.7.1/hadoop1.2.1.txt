@@ -1,0 +1,319 @@
+配置hadoop eclipse
+
+安装编译需要用eclipse工具，必须有java环境，就是说，同时有c++,java环境，使用基本eclipse工具，然后下载相应的
+c++，java部分。
+
+手动编译hadoop的eclipse包，可用，编译的时候需要用eclise的java版本
+http://f.dataguru.cn/thread-167671-1-1.html
+
+
+配置连接可以用
+http://blog.csdn.net/dajuezhao/article/details/5909410
+
+map/reduce locations在下面的框
+
+
+eclipse hadoop c++ 编译环境配置
+http://f.dataguru.cn/thread-197350-1-1.html
+
+
+连接上以后，会有如下提示：
+
+org.apache.hadoop.security.accesscontrolexception permission denied
+
+修改hdfs-site.xml文件，添加：
+    <property>
+	<name>dfs.permissions</name>
+	<value>false</value>
+    </property>
+
+
+
+### eclipse libhdfs 编译环境 ###
+在建项目时候不选择自动建立makefile文件，而是保持空
+
+1./etc/profile里添加
+# java env #
+export JAVA_HOME=/usr/local/jdk1.7.0_45
+export M2_HOME=/usr/local/apache-maven-3.1.1
+export PATH=$JAVA_HOME/bin:$PATH
+export JRE_HOME=$JAVA_HOME/jre
+export PATH=$JAVA_HOME:$JRE_HOME:$M2_HOME/bin:$PATH
+export CLASSPATH=.:$JAVA_HOME/lib/dt.jar:$JAVA_HOME/lib/tools.jar:$JAVA_HOME/lib:$JRE_HOME/lib:$JAVA_HOME/include:/home/blue/app
+s/hadoop/build/contrib/thriftfs/classes
+
+# hadoop #
+export HADOOP_HOME=/home/blue/apps/hadoop
+export LD_LIBRARY_PATH=${JAVA_HOME}/jre/lib/amd64/server:/home/blue/apps/hadoop/c++/Linux-amd64-64/lib/
+
+
+for i in $HADOOP_HOME/*.jar
+do
+	CLASSPATH=$CLASSPATH:$i
+done
+
+for j in $HADOOP_HOME/lib/*.jar
+do
+     CLASSPATH=$CLASSPATH:$j
+done
+
+export CLASSPATH
+
+
+2.自己创建makefile文件
+
+HADOOP_HOME=/home/blue/apps/hadoop-1.2.1
+PLATFORM=Linux-amd64-64
+JAVA_HOME=/usr/java/jdk1.7.0_25
+CPPFLAGS= -I$(HADOOP_HOME)/src/c++/libhdfs -I$(JAVA_HOME)/include -I$(JAVA_HOME)/include/linux
+LIB = -L$(HADOOP_HOME)/c++/Linux-amd64-64/lib -L$(JAVA_HOME)/jre/lib/amd64/server
+libjvm=/usr/java/jdk1.7.0_25/jre/lib/amd64/server/libjvm.so
+LDFLAGS += -lhdfs
+
+all: hadoop
+
+hadoop: main.cpp
+	g++ main.cpp  $(CPPFLAGS) $(LIB)  $(LDFLAGS)  $(libjvm)  -o hadoop
+
+clean:
+	rm hadoop
+
+
+3.运行libhdfs需要的环境
+添加到/etc/profile
+
+# java env #
+export JAVA_HOME=/usr/java/jdk1.7.0_21
+export PATH=$JAVA_HOME/bin:$PATH
+export JRE_HOME=$JAVA_HOME/jre
+export PATH=$JAVA_HOME:$JRE_HOME:$PATH
+export CLASSPATH=.:$JAVA_HOME/lib/dt.jar:$JAVA_HOME/lib/tools.jar:$JAVA_HOME/lib:$JRE_HOME/lib:$JAVA_HOME/include
+
+
+# hadoop #
+export HADOOP_HOME=/home/blue/apps/hadoop
+export LD_LIBRARY_PATH=${JAVA_HOME}/jre/lib/amd64/server:/home/blue/apps/hadoop/c++/Linux-amd64-64/lib/
+
+for i in $HADOOP_HOME/*.jar
+do
+	CLASSPATH=$CLASSPATH:$i
+done
+
+for j in $HADOOP_HOME/lib/*.jar
+do
+     CLASSPATH=$CLASSPATH:$j
+done
+export CLASSPATH
+
+
+
+hadoop pipes编译
+次序不能改变
+g++  main.cpp -lpthread -lhadooppipes  -lhadooputils -lcrypto -lssl -o mywordcount
+
+
+
+############
+
+hadoop 1.2.1安装配置
+http://blog.csdn.net/wyswlp/article/details/10564847
+
+
+修改配置文件
+
+编辑core-site.xml
+
+<configuration>
+    <property>
+        <name>fs.default.name</name>
+        <value>hdfs://lv02:49000</value>
+        <final>true</final>
+        
+    </property>
+
+    <property>
+        <name>hadoop.tmp.dir</name>
+        <value>/home/blue/hadoop/tmp</value>
+    </property>
+
+</configuration>
+
+
+修改hdfs-site.xml
+
+<configuration>
+    <property>
+        <name>dfs.replication</name>
+        <value>2</value>
+    </property>
+
+    <property>
+        <name>dfs.permissions</name>
+        <value>false</value>
+    </property>
+
+
+</configuration>
+
+
+修改mapred-site.xml:
+
+<configuration>
+    <property>
+        <name>mapred.job.tracker</name>
+        <value>lv02:49001</value>
+    </property>
+    <property>
+        <name>mapred.local.dir</name>
+        <value>/home/blue/hadoop/var</value>
+    </property>
+</configuration>
+
+
+格式化HDFS
+hadoop namenode -format
+
+##########
+
+
+
+
+http://hadoop.apache.org/docs/r1.2.1/libhdfs.html
+http://wiki.apache.org/cassandra/ThriftExamples
+http://blog.csdn.net/hshxf/article/details/5666145
+
+
+
+
+
+####################### fuse ############################
+
+
+由于在使用thrift过程中，当调用服务器端的thrift服务时候，需要生成一个中间语言用于在服务器和客户端通讯，
+过程繁琐，暂时放弃使用，改用fuse来把hdfs挂载到本地文件系统使用
+
+具体如下
+
+1.安装
+设置/etc/profile
+# fuse #
+export HADOOP_HOME=/home/blue/apps/hadoop
+export OS_ARCH=amd64
+export OS_BIT=64
+
+HADOOP_HOME设置主要用于在启动脚本时候，会检测此环境变量
+
+cd /home/blue/apps/hadoop
+ant compile-c++-libhdfs -Dlibhdfs=1 -Dcompile.c++=1
+ln -s c++/Linux-amd64-64/lib build/libhdfs
+ant compile-contrib -Dlibhdfs=1 -Dfusedfs=1  
+
+
+2.配置
+添加/etc/fuse.conf
+
+# Set the maximum number of FUSE mounts allowed to non-root users.
+# The default is 1000.
+
+mount_max = 1000
+
+# Allow non-root users to specify the 'allow_other' or 'allow_root'
+# mount options.
+
+user_allow_other
+
+
+mkdir /mnt/dfs  
+cd $HADOOP_HOME/build/contrib/fuse-dfs  
+./fuse_dfs_wrapper.sh dfs://namenode:9000 /mnt/dfs/  
+ls /mnt/dfs/
+
+
+###### hadoop操作 ######
+新增节点datanode
+1.部署hadoop
+  和普通的datanode一样。安装jdk，sh
+2.修改host
+  和普通的datanode一样。添加namenode的ip
+3.修改namenode的配置文件conf/slaves
+  添加新增节点的ip或host
+4.在新节点的机器上，启动服务
+[root@slave-004 hadoop]$ ./bin/hadoop-daemon.sh start datanode  
+[root@slave-004 hadoop]$ ./bin/hadoop-daemon.sh start tasktracker 
+
+5.均衡block
+[root@slave-004 hadoop]$ ./bin/start-balancer.sh  
+
+这个会非常耗时
+1）如果不balance，那么cluster会把新的数据都存放在新的node上，这样会降低mapred的工作效率
+2）设置平衡阈值，默认是10%，值越低各节点越平衡，但消耗时间也更长
+[root@slave-004 hadoop]# ./bin/start-balancer.sh -threshold 5
+3）设置balance的带宽，默认只有1M/s
+Xml代码  收藏代码
+
+    <property>  
+      <name>dfs.balance.bandwidthPerSec</name>  
+      <value>1048576</value>  
+      <description>  
+            Specifies the maximum amount of bandwidth that each datanode  
+            can utilize for the balancing purpose in term of  
+            the number of bytes per second.  
+      </description>  
+    </property>  
+
+
+注意：
+1. 必须确保slave的firewall已关闭;
+2. 确保新的slave的ip已经添加到master及其他slaves的/etc/hosts中，反之也要将master及其他slave的ip添加到新的slave的/etc/hosts中 
+###################
+
+
+########### hdfs c++ ##############
+程序编译成功以后在服务器上运行时候，需要如下的环境/etc/profile
+
+# java env #
+export JAVA_HOME=/usr/java/jdk1.7.0_21
+export PATH=$JAVA_HOME/bin:$PATH
+export CLASSPATH=.:$JAVA_HOME/lib/dt.jar:$JAVA_HOME/lib/tools.jar
+export LD_LIBRARY_PATH=/usr/lib:/usr/lib64:/usr/java/jdk1.7.0_21/jre/lib/amd64/server
+
+# hadoop #
+export HADOOP_HOME=/home/blue/apps/hadoop
+export PATH=$PATH:$HADOOP_HOME/bin:$HADOOP_HOME/lib
+export CLASSPATH=$CLASSPATH:$HADOOP_HOME/lib:$HADOOP_HOME/bin:$HADOOP_HOME/hadoop-core-1.2.1.jar:$HADOOP_HOME/lib/commons-lang-2.
+4.jar:$HADOOP_HOME/lib/commons-logging-api-1.0.4.jar:$HADOOP_HOME/lib/commons-configuration-1.6.jar:$HADOOP_HOME/contrib/streamin
+g/hadoop-streaming-1.2.1.jar:$HADOOP_HOME/build/classes:$HADOOP_HOME
+export HADOOP_CLASSPATH=$CLASSPATH
+
+for i in $HADOOP_HOME/*.jar
+do
+	CLASSPATH=$CLASSPATH:$i
+done
+
+for j in $HADOOP_HOME/lib/*.jar
+do
+     CLASSPATH=$CLASSPATH:$j
+done
+export CLASSPATH
+
+
+http://speakingbaicai.blog.51cto.com/5667326/1309023
+ant compile-c++-libhdfs -Dislibhdfs=true
+
+
+g++编译hdfs提示少jni.h文件
+文件在/usr/java/jdk1.7.0_25/include中，将其中的所有文件都拷贝到编译器找到的路径里
+比如:/usr/include/hadoop/下
+
+同时有找不到libjvm.so的提示,执行如下命令
+export LD_LIBRARY_PATH=/usr/lib:/usr/lib64:/usr/java/jdk1.7.0_25/jre/lib/amd64/server/
+文件在/usr/java/jdk1.7.0_25/jre/lib/amd64/server/路径下
+
+编译的时候需要如下选项
+
+g++ main.cpp -I/home/jack/workspace/hadoop-1.2.1/src/c++/libhdfs -L/home/jack/workspace/hadoop-1.2.1/src/c++/libhdfs -lhdfs /usr/java/jdk1.7.0_25/jre/lib/amd64/server/libjvm.so
+
+当出现缺少libhdfs.so.0文件时候，就拷贝如下如下目录的文件到/usr/lib和/usr/lib64/下
+hadoop-1.2.1/c++/Linux-amd64-64/lib
+
+

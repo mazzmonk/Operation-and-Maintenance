@@ -1,0 +1,19 @@
+目录stackstorm/packs/nagios
+
+pack.yaml
+这里定义了pack的名字,以及ref和description
+############################
+---
+ref: nagios
+name : nagios
+description : Nagios integration pack. See README.md for setup instructions.
+keywords:
+  - nagios
+  - monitoring
+  - alerting
+version : 0.2.0
+author : StackStorm, Inc.
+email : info@stackstorm.com
+
+############################
+

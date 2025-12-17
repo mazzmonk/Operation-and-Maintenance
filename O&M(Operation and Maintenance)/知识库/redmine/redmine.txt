@@ -1,0 +1,255 @@
+redmine是一个用于问题跟踪的web ui，基本运营用的多
+本人不会玩
+
+需要安装配置，因此如下：
+先下载
+redmine-3.2.0.tar.gz
+ruby-2.2.3.tar.gz
+rubygems-2.5.1.tgz
+
+版本有严格的限制，特别是rubygmes及相应软件的版本
+
+1.ruby安装及配置
+tar zxvf ruby-2.2.3.tar.gz
+cd ruby-2.2.3
+./configure --prefix=/home/blue/apps/ruby && make && make install
+
+2.rubygems安装及配置
+tar zxvf rubygems-2.5.1.tgz
+cd rubygems-2.5.1
+/home/blue/apps/ruby/bin/ruby setup.rb
+
+3.修改gem的源，默认在Amazon S3上，因此改用taobao的
+gem sources -l
+gem sources --remove https://rubygems.org/
+gem sources -a https://ruby.taobao.org/
+
+4.安装redmine
+redmine有兼容性问题，因此选择ruby版本如上述，同时对应的Rails 4.2版本
+gem install rails -v=4.2
+
+5.设置redmine
+tar zxvf redmine-3.2.0.tar.gz
+mv redmine-3.2.0 www/redmine
+
+拷贝database.yml.example为database.yml
+编辑redmine/conf/database.yml
+设置如下：
+
+production:
+  adapter: mysql2
+  database: redmine
+  host: localhost
+  username: redmine
+  password: "redmine123"
+  encoding: utf8
+
+安装mysql，设置相应的数据库和用户密码为上述内容
+
+安装redmine相关依赖
+
+cd redmine
+gem install budler
+
+使用root如下
+yum install mysql-devel
+
+使用普通账户，进入到redmine目录下
+gem install json -v '1.8.3'
+gem install minitest -v '5.8.3'
+gem install addressable -v '2.4.0'
+gem install coderay -v '1.1.0'
+gem install htmlentities -v '4.3.1'
+gem install mysql2 -v '0.3.20'
+gem install net-ldap -v '0.12.1'
+gem install ruby-openid -v '2.3.0'
+gem install rbpdf-font -v '1.19.0'
+gem installredcarpet -v '3.3.3'
+gem install request_store -v '1.0.5'
+gem install redcarpet -v '3.3.3'
+gem install css_parser -v '1.3.7'
+gem install rack-openid -v '1.4.2'
+gem install rbpdf -v '1.19.0'
+gem install activesupport -v '4.2.5'
+gem install roadie -v '3.1.1'
+gem install activemodel -v '4.2.5'
+gem install activejob -v '4.2.5'
+gem install activerecord -v '4.2.5'
+gem install protected_attributes -v '1.1.3'
+gem install actionview -v '4.2.5'
+gem install actionpack -v '4.2.5'
+gem install actionmailer -v '4.2.5'
+gem install actionpack-action_caching -v '1.1.1'
+gem install actionpack-xml_parser -v '1.0.2'
+gem install railties -v '4.2.5'
+gem install jquery-rails -v '3.1.4'
+gem install roadie-rails -v '1.1.0'
+gem install rails -v '4.2.5'
+gem install nokogiri -v '1.6.7.1'`
+
+/home/blue/apps/ruby/bin/bundle  install 
+
+6.redmine配置
+为Rails生成cookies秘钥
+rake generate_secret_token
+报错:
+/home/blue/apps/ruby/lib/ruby/gems/2.2.0/gems/htmlentities-4.3.1/lib/htmlentities/mappings/expanded.rb:465: warning: duplicated key at line 466 ignored: "inodot"
+
+编辑/home/blue/apps/ruby/lib/ruby/gems/2.2.0/gems/htmlentities-4.3.1/lib/htmlentities/mappings/expanded.rb文件，465行与466行重复，删除一行就ok
+
+创建数据库数据
+RAILS_ENV=production rake db:migrate
+报错：
+rake aborted!
+Mysql2::Error: Can't connect to local MySQL server through socket '/var/lib/mysql/mysql.sock' (2)
+/home/blue/www/redmine/app/models/custom_field.rb:36:in `<class:CustomField>'
+/home/blue/www/redmine/app/models/custom_field.rb:18:in `<top (required)>'
+/home/blue/www/redmine/lib/redmine/field_format.rb:87:in `field_attributes'
+/home/blue/www/redmine/lib/redmine/field_format.rb:90:in `<class:Base>'
+/home/blue/www/redmine/lib/redmine/field_format.rb:48:in `<module:FieldFormat>'
+/home/blue/www/redmine/lib/redmine/field_format.rb:19:in `<module:Redmine>'
+/home/blue/www/redmine/lib/redmine/field_format.rb:18:in `<top (required)>'
+/home/blue/www/redmine/lib/redmine.rb:38:in `<top (required)>'
+/home/blue/www/redmine/config/initializers/30-redmine.rb:6:in `<top (required)>'
+/home/blue/www/redmine/config/environment.rb:14:in `<top (required)>'
+Tasks: TOP => db:migrate => environment
+
+创建mysql socket的链接
+ln -s /home/blue/apps/mysql/tmp/mysql.sock /var/lib/mysql/mysql.sock
+
+重新执行
+
+生成缺省数据
+RAILS_ENV=production REDMINE_LANG=zh rake redmine:load_default_data
+
+
+7.启动
+ruby $HOME/www/redmine/bin/rails server webrick -e production -d -b 0.0.0.0
+
+8.浏览器访问
+http://192.168.113.65:3000/
+
+9.迁移
+拷贝/home/blue/www/redmine目录到新的地方，拷贝/home/blue/apps/ruby到新的目录，执行上述的命令，然后导入数据库，
+添加用户和密码根据redmine/config/database.yml中的内容
+
+
+配置smtp
+编辑conf/configuration.yml文件
+
+有如下的部分
+
+default:
+  email_delivery:
+    delivery_method: :smtp
+    smtp_settings:
+      enable_starttls_auto: true
+      address: "mail.bluecn.com"
+      port: 587
+      domain: "bluecn.com"
+      authentication: :login
+      user_name: "blue_point"
+      password: "asp+888"
+
+  attachments_storage_path: /home/blue/www/redmine/files
+
+  autologin_cookie_name:
+  autologin_cookie_path: /home/blue/www/redmine/cookie
+  autologin_cookie_secure:
+
+  scm_subversion_command:
+  scm_mercurial_command:
+  scm_git_command:
+  scm_cvs_command:
+  scm_bazaar_command:
+  scm_darcs_command:
+
+  scm_subversion_path_regexp:
+  scm_mercurial_path_regexp:
+  scm_git_path_regexp:
+  scm_cvs_path_regexp:
+  scm_bazaar_path_regexp:
+  scm_darcs_path_regexp:
+  scm_filesystem_path_regexp:
+
+  scm_stderr_log_file: /home/blue/www/redmine/log/redmine_scm_stderr.log
+
+  database_cipher_key:
+
+  rmagick_font_path:
+
+production:
+
+development:
+
+
+修改config/environments/production.rb文件，开启异常及mail的日志
+
+Rails.application.configure do
+
+  config.cache_classes = true
+
+  config.eager_load = true
+
+  config.consider_all_requests_local = false
+  config.action_controller.perform_caching = true
+
+  config.action_mailer.raise_delivery_errors = true
+
+  config.active_support.deprecation = :log
+end
+
+
+
+
+######################################################################################################################
+
+配置smtp
+
+https://blog.rudeotter.com/redmine-smtp-sendmail-outgoing-email/
+
+
+重置管理员密码
+
+Reset password lost without admin redmine account but with admin redmine database account
+
+Found in file /app/models/user.rb: 'The hashed password is stored in the following form: SHA1\(salt +SHA1)'
+So you can reset password in two steps:
+- clear salt 
+- calculate sha1(sha1(new_password))
+For example for the password "password" (without quote) it will be "353e8061f2befecb6818ba0c034c632fb0bcae1b" 
+sah1(password)=0bd181063899c9239016320b50d3e896693a96df
+sha1(0bd181063899c9239016320b50d3e896693a96df)=353e8061f2befecb6818ba0c034c632fb0bcae1b
+
+You have to go to redmine database, find "users" table, find user to reset password, clear "salt" field's user and put "353e8061f2befecb6818ba0c034c632fb0bcae1b" in "hashed_password" field's user and log to redmine with new password 'password' (without quote). To do this redmine database changes, do the following from command line in the operating system where Redmine is working:
+
+note user and password from a file config/database.yml.
+For MySQL
+execute command:mysql -u <db user from database.yml> -p
+enter: <password from database.yml>
+execute:UPDATE users SET hashed_password='353e8061f2befecb6818ba0c034c632fb0bcae1b' WHERE login='admin';
+execute:UPDATE users SET salt='' WHERE login='admin';
+execute:exit
+Now you can go to Redmine login web page to login as user admin with 'password' as password.
+
+上面大概的意思就是 hashed_password 设置成 353e8061f2befecb6818ba0c034c632fb0bcae1b ，另外把salt 清空，密码就成了 password.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,21 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  namespace: own-project
+  name: kibana
+  labels:
+    name: kibana
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        name: kibana
+    spec:
+      containers:
+      - name: kibana
+        image: 192.168.81.97:5000/kibana:latest
+        ports:
+        - containerPort: 5601
+
+

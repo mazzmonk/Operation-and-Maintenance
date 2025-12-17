@@ -1,0 +1,20 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  namespace: test
+  name: nexus-test
+  labels:
+    name: nexus-test
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        name: nexus-test
+    spec:
+      containers:
+      - name: nexus-test
+        image: 192.168.81.97:5000/centos:6.8.1
+        ports:
+        - containerPort: 8081
+

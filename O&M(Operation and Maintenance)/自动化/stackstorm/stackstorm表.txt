@@ -1,0 +1,39 @@
+1.查询的数据记录条数		轮询时间
+2.报警类型				可处理的报警
+3.写数据表频率	
+4.数据表写入逻辑
+5.多个st2实例一起工作
+
+
+
+
+人工智能表结构为：
+ ID（自增长），AlertDateTime(告警时间)，AlertDevice（设备）, AlertService（服务），AlertContent（内容）, AlertLevel （级别）   
+ 
+#人工智能表alert表所在数据库
+10.136.173.96:3307  
+数据库：baiops
+user：root
+password：root
+
+
+
+数据表结构		
+
+id		AlertService	operation_command		describle
+
+
+
+
+
+IP地址,执行命令
+
+
+
+
+
+
+
+
+
+

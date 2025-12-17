@@ -1,0 +1,123 @@
+这里介绍boost::function及boost::bind的用法
+
+头文件<boost/function.hpp> <boost/bind.hpp>
+
+function和bind不是一定需要一起使用
+
+#include <iostream>
+#include <boost/function.hpp>
+#include <boost/bind.hpp>
+
+int get(int a, int b) {
+	std::cout << a + b <<  std::endl;
+}
+
+class ex {
+public:
+	int get(int a, int b) { std::cout << "ex.get: " << a + b << std::endl; }
+	int doit(int a, int b) { std::cout << "doit: " << a + b << std::endl; }
+};
+
+int main() 
+{
+	boost::function<int (int x,int y)> f(get);
+	boost::function<int (ex*,int a,int b)> f1(&ex::get);           //第一种方式
+
+  f(1,3);
+  ex abc;
+  f1(&abc,3,5);
+  
+	ex aa;
+  boost::function<int (int x,int y)> f3(boost::bind(&ex::doit,&aa,_1,_2));      //第二种方式
+	f3(4,5);
+	
+	return 0;
+}
+
+boost::function指定了相应的仿函数以后,使用方式有2种,上述表示的两种,但是第二种方式的可读性更好些.
+
+下边有诡异的第三种方式
+
+class Foo {
+ public:
+  void methodA();
+  void methodInt(int a);
+  void methodString(const std::string& str);
+};
+
+class Bar {
+ public:
+  void methodB();
+};
+
+int main(int argc, char* argv[]) {
+
+	boost::function<void(void)> f1;       //诡异的第三种方式,这里的方法在定义访函数的时候,完全可以无视绑定成员函数的返回和参数类型.
+  Foo foo;
+  f1 = boost::bind(&Foo::methodA, &foo);  //绑定的时候,需要把实参直接通过bind绑定,不能通过传递参数的方式,即上述第二种方式.
+  f1();
+
+  f1 = boost::bind(&Foo::methodInt, &foo, 42);  //这里绑定实参
+  f1();
+
+  f1 = boost::bind(&Foo::methodString, &foo, "hello"); //这里绑定实参,但是函数原型是string类型,这里是const char类型
+  f1();
+
+  boost::function<void(const std::string)> f2;         //第二种用法,传入参数.
+  f2 = boost::bind(&Foo::methodString, &foo, _1);
+  std::string str("world");
+  f2(str);
+
+return 0 
+}
+
+
+
+使用
+class Thread {
+	public:
+		typedef boost:function<void()> ThreadCallback;
+		
+		Thread(ThreadCallback cb) : cb_(cb) {}
+		
+		void start() {} 
+	private:
+		void run() { cb_(); }
+		ThreadCallback cb_;
+};
+
+class Foo {
+	public:
+		void runInThread();
+		void runInAnotherThread(int);
+};
+
+Foo foo;
+Thread thread1(boost::bind(&Foo::runInThread,&foo));                //这里的构造函数与原型不同
+Thread thread2(boost::bind(&Foo::runInAnotherThread,&foo,43)); 
+//原则就是只需要提供一个能转换成ThreadCallback的对象(可以是函数函数),就可以创建一份Thread实体,这里用的就是bind函数
+thread1.start();
+thread2.start();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

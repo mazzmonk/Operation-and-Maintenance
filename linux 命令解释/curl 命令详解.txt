@@ -1,0 +1,793 @@
+原文链接:
+https://catonmat.net/cookbooks/curl
+
+* 发出POST请求(TLDR: 使用-X POST参数)
+
+这些curl配方向您展示了如何使用curl发送POST请求.默认情况下,curl发送GET请求.要使其发送POST请求,请使用-X POST命令行参数.要将POST数据添加到请求,请使用-d参数.要更改Content-Type告知Web服务器您正在发送的数据类型的标头,请使用该-H参数.
+
+1. 发送空POST请求
+2. 发送带有表单数据的POST请求
+3. 跳过-X参数
+4. 一种更便捷的POST数据方式
+5. 发送POST请求并遵循重定向
+6. 发送带有JSON数据的POST请求
+7. 使用XML数据发送POST请求
+8. 发送包含纯文本数据的POST请求
+9. 使用文件中的数据发送POST请求
+10. URL编码POST数据
+11. 发布二进制文件
+12. POST一个二进制文件并设置其MIME类型
+13. POST一个二进制文件并更改其文件名
+
+
+1. 发送空POST请求
+curl -X POST https://catonmat.net
+此配方使用-X POST使curl发送POST请求的选项https://catonmat.net.一旦它从服务器收到响应,它就会将响应主体打印到屏幕上.它不发送任何POST数据.
+
+2. 发送带有表单数据的POST请求
+curl -d 'login=emma&password=123' -X POST https://google.com/login
+此https://google.com/login配方向login=emma&password=123请求主体中的数据发送POST请求.使用-d参数时,curl还会将Content-Type标头设置为application/x-www-form-urlencoded.此外,当设置-d选项时,-X POST可以跳过参数,因为curl会自动将请求的类型设置为POST.
+
+3. 跳过-X参数
+curl -d 'login=emma&password=123' https://google.com/login
+在这个配方中,我们跳过-X POST明确告诉curl发送POST请求的参数.我们可以跳过它,因为我们已经指定了-d参数.当-d使用,袅袅隐式设置请求的类型POST.
+
+4. 一种更便捷的POST数据方式
+curl -d 'login=emma' -d 'password=123' https://google.com/login
+上一个配方使用单个-d选项发送所有数据,login=emma&password=123但这里有一个更简洁的方法来执行相同的操作,使命令更容易阅读.不是-d对所有数据使用单个参数,而是-d为每个key=value数据块使用多个参数！如果这样做,则curl &在创建请求时使用分隔符符号连接所有数据.此配方会跳过-X POST参数,因为当-d存在参数时,curl会隐式发出POST请求.
+
+5. 发送POST请求并遵循重定向
+curl -L -d 'tweet=hi' https://api.twitter.com/tweet
+此配方使用-L命令行选项,告诉curl遵循它可能遇到的任何可能的重定向.默认情况下,curl不遵循重定向,因此您必须添加-L以使其跟随它们.此配方跳过-X POST参数,因为-d参数强制curl发出POST请求.
+
+6. 发送带有JSON数据的POST请求
+curl -d '{"login": "emma", "pass": "123"}' -H 'Content-Type: application/json' https://google.com/login
+在这个配方中,curl发送一个带有JSON数据的POST请求.这是通过将JSON传递给-d选项并使用-H将Content-Type标头设置为的选项来完成的application/json.设置内容类型标头application/json是必要的,否则,Web服务器将不知道这是什么类型的数据.我也删除了-X POST参数,因为它可以跳过,因为-d强制POST请求.
+
+7. 使用XML数据发送POST请求
+curl -d '<user><login>ann</login><password>123</password></user>' -H 'Content-Type: text/xml' https://google.com/login
+此配方将XML数据POST到https://google.com/login.就像表单数据和JSON数据一样,XML数据在-d参数中指定.要告知Web服务器请求包含XML,Content-Type标头将text/xml通过-H参数更改为.
+
+8. 发送包含纯文本数据的POST请求
+curl -d 'hello world' -H 'Content-Type: text/plain' https://google.com/login
+此配方hello world在请求的正文中发送带有纯文本字符串的POST请求.它还设置Content-Type标题以text/plain告诉Web服务器它只是纯文本进来.
+
+9. 使用文件中的数据发送POST请求
+curl -d '@data.txt' https://google.com/login
+此配方从名为的文件加载POST数据data.txt.注意@文件名前面的额外符号.这就是你告诉curl这data.txt是一个文件而不仅仅是一个应该放在POST体内的字符串的方法.
+
+10. URL编码POST数据
+curl --data-urlencode 'comment=hello world' https://google.com/login
+到目前为止,所有配方都使用该-d参数将POST数据添加到请求中.此参数假定您的数据已经过URL编码.如果不是,那么可能会有一些麻烦.如果您的数据不是URL编码的,请替换-d为--data-urlencode.它的工作方式与完全相同-d,除了数据在线路上发送之前通过curl进行URL编码.
+
+11. 发布二进制文件
+curl -F 'file=@photo.png' https://google.com/profile
+此配方使用-F强制curl生成多部分表单数据POST请求的参数.这是一种更复杂的内容类型,在发送二进制文件时效率更高.此配方使curl读取图像photo.png并将其上传到https://google.com/profile名称file.该-F参数还将Content-Type标头设置为multipart/form-data.
+
+12. POST一个二进制文件并设置其MIME类型
+curl -F 'file=@photo.png;type=image/png' https://google.com/profile
+与上一个配方类似,此配方使用-F参数photo.png通过多部分POST请求上载二进制文件(带文件名的照片).它还指定此文件的MIME类型并将其设置为image/png.如果未指定类型,则curl将其设置为application/octet-stream.
+
+13. POST一个二进制文件并更改其文件名
+curl -F 'file=@photo.png;filename=me.png' https://google.com/profile
+与前两个配方类似,此配方使用-F参数photo.png通过POST请求上传.此外,在此配方中,发送到Web服务器的文件名将更改photo.png为me.png.Web服务器只看到文件名me.png,并且不知道原始文件名是photo.png.
+
+
+* 将POST数据添加到请求(TLDR: 使用 -d var=val参数)
+
+这些curl配方向您展示如何将POST数据添加到curl请求中.要添加URL编码的表单数据,请使用-d参数.要为您创建curl URL-escape表单数据,请使用--data-urlencode参数.要发送多部分表单数据,请使用-F参数.
+
+1. 发送表格数据
+2. URL编码和发送表单数据
+3. 使用多个-d参数
+4. 发送多部分数据
+5. 上传图片
+6. 上传图像并更改其文件名
+7. 发送JSON数据
+8. 发送XML数据
+
+1. 发送表格数据
+curl -d 'name=johnny%20depp' https://google.com/login
+此配方使用-d参数添加name=johnny%20depp到POST请求的主体https://google.com/login.使用-d参数时,curl会自动添加Content-Type: application/x-www-form-urlencoded标题,告诉Web服务器发送URL编码的表单数据.请注意,key=value数据应该是URL转义的.
+
+2. URL编码和发送表单数据
+curl --data-urlencode 'name=john depp' https://google.com/login
+此配方使用--data-urlencode参数将name=john depp表单数据添加到POST请求.这个参数就像-d上一个配方中的参数一样,除了它还对数据进行URL编码.因此,此配方添加到POST请求正文的数据name=johnny%20depp是,然后发送请求https://google.com/login.
+
+3. 使用多个-d参数
+curl -d 'foo=bar' -d 'baz=quux' https://google.com
+前两个配方在POST请求中只发送了一个变量,但您可以根据需要发送任意数量的变量.只需一个接一个地指定它们.这个食谱POST两个变量,foo=bar和baz=quux.
+
+4. 发送多部分数据
+curl -F 'name=johnny' https://google.com/search
+此配方使用-F参数在POST请求中发送多部分表单数据.发送多部分数据时,curl将Content-Type标头设置为multipart/form-data.当您需要上传图像或其他二进制文件时,发送多部分数据非常有用.
+
+5. 上传图片
+curl -F 'pic=@me.jpg' https://google.com/profile
+此配方也使用-F参数,但不发送文本数据,而是发送文件me.jpg.它https://google.com/profile通过POST请求上传它.由于此配方使用-F参数,此图像将作为多部分base64编码的表单数据上载.
+
+6. 上传图像并更改其文件名
+curl -F 'pic=@me.jpg;filename=x.jpg' https://google.com/profile
+这个食谱filename=x.jpg后面加了一个特殊的参数me.jpg.这告诉curl使用附加文件的新文件名.Curl会读取me.jpg但告诉服务器文件名是x.jpg.
+
+7. 发送JSON数据
+curl -H 'Content-Type: application/json' -d '{"query": "cats"}' https://google.com/search
+此配方发送带有JSON数据的POST请求.它将JSON数据本身指定为-d交换机的参数,并且还application/json通过-H参数设置请求的内容类型,以便Web服务器知道传入的数据是JSON而不是纯文本.
+
+8. 发送XML数据
+curl -H 'Content-Type: text/xml' -d 'hello' https://google.com/msg
+此配方将内容类型标头设置为text/xml,这是XML的MIME类型.然后,它会将<message>hello</message>数据添加到请求并将其POST https://google.com/msg.发送XML数据,JSON数据或任何其他文本数据非常相似.您所要做的就是将内容类型标题更改为正确的MIME类型,以便服务器和应用程序知道它是什么类型的数据.
+
+
+* 构造查询字符串(TLDR: 使用-G参数)
+
+此curl配方向您展示如何为GET请求构造查询字符串.这是通过-G命令行参数结合-dor --data-urlencode参数完成的.该-G参数将附加在指定的数据-d和--data-urlencode在请求URL的末尾参数,与结合所有数据段&字符,并从与该URL将它们分离?的字符.
+
+1. 构造两个查询参数
+2. URL编码查询参数
+
+1. 构造两个查询参数
+curl -G -d 'q=kitties' -d 'count=20' https://google.com/search
+在这个配方中,我们让curl为我们构造查询字符串和最终请求URL.此配方使用-G选项和-d选项两次创建两个查询参数.Curl将它们连接在一起q=kitties&count=20,并将此字符串附加到https://google.com/search请求URL 的末尾,并向其发出GET请求https://google.com/search?q=kitties&count=20.小心 - 如果你忘记了-G参数,那么curl会发出一个POST请求！
+
+2. URL编码查询参数
+curl -G --data-urlencode 'comment=this cookbook is awesome' https://catonmat.net
+此配方使用--data-urlencode参数.它与-d参数类似,但curl也对值进行URL编码.在这个配方中,comment获取URL编码this%20cookbook%20is%20awesome和GET请求https://catonmat.net?comment=this%20cookbook%20is%20awesome.
+
+
+* 添加HTTP标头(TLDR: 使用-H参数)
+
+这些curl配方向您展示如何添加自定义HTTP标头以curl请求.这是通过-H 'Header: Value'命令行参数完成的.
+
+1. 添加单个标题
+2. 添加两个标题
+3. 添加空标题
+
+1. 添加单个标题
+curl -H 'Accept-Language: en-US' https://google.com
+此配方使用-H参数将Accept-Language: en-US标头添加到GET请求https://google.com.此标题告知Google提供该页面的英文版本.
+
+2. 添加两个标题
+curl -H 'Accept-Language: en-US' -H 'Secret-Message: xyzzy' https://google.com
+此配方向Google的GET请求添加了两个标头.第一个标题与上一个食谱相同,另一个是Secret-Message: xyzzy.
+
+3. 添加空标题
+curl -H 'Puppies;' https://google.com
+在这个配方中,我们为curl请求添加一个空标题.我们传递Puppies;(在末尾用分号)作为-H选项的参数,curl将其转换为Puppies:没有值的空标题.
+
+
+* 更改用户代理(TLDR: 使用-A参数)
+最近更新1周前
+这些curl配方向您展示如何更改User-Agentcurl请求中的HTTP标头.默认情况下,curl将User-Agent标头设置为,curl/version但通常您需要发出请求,就好像您是真正的浏览器,Google机器人或其他一些生物.为此,请使用-A 'User Agent String'命令行选项.
+
+1. 将用户代理更改为Firefox
+2. 将用户代理更改为Chrome
+3. 假装是谷歌机器人
+4. 删除用户代理
+5. 通过-H参数更改用户代理
+6. 发送空用户代理
+
+1. 将用户代理更改为Firefox
+curl -A 'Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:60.0) Gecko/20100101 Firefox/60.0' https://google.com
+此配方使用-A参数并将用户代理设置为Firefox 60,如下所示Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:60.0) Gecko/20100101 Firefox/60.0.
+
+2. 将用户代理更改为Chrome
+curl -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/76.0.3809.100 Safari/537.36' https://google.com
+与上一个配方类似,此配方将用户代理设置为Chrome 76,如下所示Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/76.0.3809.100 Safari/537.36.
+
+3. 假装是谷歌机器人
+curl -A 'Googlebot/2.1 (+http://www.google.com/bot.html)' https://washingtonpost.com
+通常,网站会将内容提供给谷歌机器人(以便将它们编入索引),但是当真正的浏览器请求它们时,它们将显示付费专区.要绕过此操作,请将用户代理设置为Googlebot.
+
+4. 删除用户代理
+curl -A '' https://google.com
+此配方将空字符串传递''给-A命令行选项.空字符串告诉curl删除用户代理标头而不是发送User-AgentHTTP标头.
+
+5. 通过-H参数更改用户代理
+curl -H 'User-Agent: php/1.0' https://google.com
+此配方显示了如何更改用户代理的另一种方法.-A 'User Agent String'它使用而不是使用-H 'User-Agent: php/1.0'.这个参数直接添加HTTP头字段,现在网站会认为我们是PHP.
+
+6. 发送空用户代理
+curl -A '' -H 'User-Agent;' https://google.com
+这个食谱变得棘手.要发送一个空的用户代理(只是User-Agent:没有值的标头),首先我们必须通过该-A ''选项删除curl自己的用户代理,然后通过该选项添加一个空标头-H 'User-Agent;'.注意字符串;末尾的分号User-Agent.它必须在那里,因为它告诉curl它是一个没有值的空头.
+
+
+* 设置Cookie(TLDR: 使用-b name = value参数)
+
+这些curl配方向您展示如何添加cookie以curl请求.默认情况下,curl不会发送任何cookie,但您可以通过-b 'name=value'命令行参数添加自己的cookie .要从响应中保存cookie,请使用该-c file选项.要从文件加载Cookie,请使用该-b file选项.
+
+1. 添加Cookie
+2. 添加两个Cookie
+3. 添加空Cookie
+4. 将Cookie保存到文件
+5. 从文件加载Cookie
+
+1. 添加Cookie
+curl -b 'session=abcdef' https://google.com
+此配方使用-b name=value参数设置一个cookie,其名称session为abcdefGET请求中的值https://google.com.curl为此请求设置的完整标头如下所示Cookie: session=abcdef.
+
+2. 添加两个Cookie
+curl -b 'session=abcdef' -b 'loggedin=true' https://google.com
+此配方使用-b name=value参数两次并设置两个cookie.第一个cookie与上一个配方中的cookie相同,第二个cookie loggedin与值相同true.
+
+3. 添加空Cookie
+curl -b 'session=' https://google.com
+此配方仅使用-b name=value选项的前半部分,仅将cookie名称设置为session但将cookie值留空.在这种情况下,curl发送一个空的cookie,在HTTP标头中看起来像这样Cookie: session=.
+
+4. 将Cookie保存到文件
+curl -c cookies.txt https://www.google.com
+此配方使用-c cookies.txt将响应cookie保存到cookies.txt文件的选项.当curl发出GET请求时https://www.google.com,Web服务器会响应一个或多个Set-Cookie: name=value标头值.Curl接受它们并将它们保存到您可以通过加载的文件中-b cookies.txt(参见下一个配方).
+
+5. 从文件加载Cookie
+curl -b cookies.txt https://www.google.com
+此配方使用-b cookies.txt从cookies.txt文件加载cookie 的选项.请注意,curl使用-b选项在命令行上设置cookie(当参数为时name=value)并从文件加载cookie(当参数不包含=符号时).
+
+
+* 添加推荐人(TLDR: 使用-e参数)
+
+此curl配方显示如何将引用者添加到curl请求.Web服务器通常在允许请求之前检查引用者,因此您最好知道如何设置它.要设置引荐来源,请使用-e 'https://url.com'参数.
+
+1. 添加推荐人
+2. 发送空推荐人
+3. 通过-H参数发送Referer
+
+1. 添加推荐人
+curl -e 'https://google.com?q=cats' http://catonmat.net
+此配方使用-e参数设置HTTP引用并向https://google.com?q=cats其发出GET请求https://catonmat.net.当catonmat.net的所有者查看他的access.log文件时,他会认为有人在搜索猫时来自谷歌,但实际上,我们将把所有者catonmat.net竹子化.
+
+2. 发送空推荐人
+curl -e '' http://catonmat.net
+此配方还使用该-e选项设置引用,但它将参数留空''(设置为空).这将清除Referer:HTTP标头的值部分,并且curl发送一个空的HTTP引用程序.
+
+3. 通过-H参数发送Referer
+curl -H 'Referer: https://digg.com' http://catonmat.net
+此配方仅供专业人士使用.通常,您将通过引用来发送引用-e(如前面的配方中所示),但您也可以通过-H 'Referer: URL'设置完整HTTP标头的参数发送它.在此配方中,HTTP标头设置为,Referer: https://digg.com因此catonmat.net上的Web服务器会认为请求来自此地址.
+
+
+* 遵循3XX重定向(TLDR: 使用-L参数)
+
+此curl配方向您显示如何使curl始终遵循301,302,303或任何其他3XX重定向.默认情况下,curl不遵循重定向.要使其遵循所有重定向,请使用-L命令行选项.
+
+1. 遵循任何重定向
+
+遵循任何重定向
+curl -L http://catonmat.net
+此配方使用-L强制curl遵循所有可能重定向的参数.在此配方中,curl正在请求,http://catonmat.net但是当此网站已移至https时,它会向其发送301重定向响应https://catonmat.net.Curl看到它,跟着它,并获取网站的https版本.
+
+
+* 使用基本HTTP身份验证(TLDR: 使用-u user: pass参数)
+
+这些curl配方向您展示了如何执行基本的HTTP服务器授权.为此,请使用-u user:pass命令行参数.如果您跳过密码(但保留冒号),则不设置密码.如果您也跳过冒号,则curl会提示输入密码.
+
+1. 通过-u参数设置用户名和密码
+2. 在URL中设置用户名和密码
+3. 使用空密码
+4. 使密码curl提示
+
+1. 通过-u参数设置用户名和密码
+curl -u 'bob:12345' https://google.com/login
+此配方使用-u 'bob:12345'参数将用户名设置为bob和密码12345.然后,此用户名和密码由curl进行base64编码,并https://google.com/login在AuthorizationHTTP标头中发送到服务器.对于用户名和密码bob:12345,此标头设置为Authorization: Basic Ym9iOjEyMzQ1.
+
+2. 在URL中设置用户名和密码
+curl https://bob:12345@google.com/login
+此配方将用户名和密码bob:12345放在URL本身中.Curl足够聪明,可以解决它,它与前一个配方完全相同,并使用此用户名和密码执行基本的HTTP身份验证.
+
+3. 使用空密码
+curl -u 'bob:' https://google.com/login
+此配方仅设置用户名部分user:,user:pass不指定密码.在这种情况下,密码为空.如果Web服务器允许无密码用户,则此请求将成功,否则将失败.
+
+4. 使密码curl提示
+curl -u 'bob' https://google.com/login
+此配方完全跳过密码部分(包括冒号).在这种情况下,curl在命令行上要求输入密码.如果您不希望将密码保存在shell历史记录中,这将非常有用.
+
+
+* 打印响应标头(TLDR: 使用-i参数)
+
+这些curl配方向您展示如何从curl响应中打印HTTP标头.默认情况下,curl不会打印响应标头.它只打印响应体.要打印响应标头,请使用-i命令行参数.
+
+1. 打印响应标题和正文(一起)
+2. 仅打印响应标题
+
+1. 打印响应标题和正文(一起)
+curl -i https://catonmat.net
+此配方使用-i包含输出中HTTP标头的参数.它发出GET请求https://catonmat.net,当它收到响应时,它首先打印标题,然后是空白链接,然后是响应.许多其他在线资源错误地提到使用大写-I选项,但是此选项产生HEAD请求而不是GET请求,其具有非常不同的行为.
+
+2. 仅打印响应标题
+curl -s -o /dev/null -D - https://catonmat.net
+出于某种原因,在curl中几乎不可能打印响应头(并忽略响应体).curl开发人员错过了这个基本的,基本的,经常使用和需要的操作！在测试东西时,你必须做几十次这个操作,但你不能.这样做没有旗帜.唯一的方法是结合三个不同的参数来实现这一目标.首先是 -s 沉默curl(使其隐藏进度条和错误).第二个是 -o /dev/null(或-o NUL在Windows上)丢弃响应主体,第三个是-D -将头转储到文件,在这种情况下,文件-是stdout.通过组合所有这三个,curl奇迹般地只打印响应头.
+
+
+* 使用代理(TLDR: 使用-x参数)
+
+这些curl配方向您展示如何通过socks4,socks5或常规http(或https)代理代理您的curl请求.要设置代理,请使用-x protocol://user:password@host:port命令行参数.
+
+1. 使用Socks5代理
+2. 使用Socks4代理
+3. 使用HTTP代理
+4. 不要为Host.com使用代理
+
+1. 使用Socks5代理
+curl -x socks5://james:cats@myproxy.com:8080 https://catonmat.net
+在此配方中,curl使用-x参数将代理协议设置为socks5,代理用户名james,代理密码cats,代理主机名myproxy.com和代理端口8080.连接到代理后,curl然后发出GET请求https://catonmat.net.
+
+2. 使用Socks4代理
+curl -x socks4://james:cats@myproxy.com:8080 https://catonmat.net
+这个食谱是上一个食谱的副本.唯一的变化是协议已设置为socks4.
+
+3. 使用HTTP代理
+curl -x james:cats@myproxy.com:8080 https://catonmat.net
+在此配方中,protocol://未指定代理地址的一部分.在这种情况下,假定HTTP代理.与前两个配方一样,用户名和密码设置为james:cats,代理主机和端口设置为myproxy.com:8080.
+
+4. 不要为Host.com使用代理
+curl --no-proxy host.com -x https://myproxy.com:8080 host.com https://catonmat.net https://digg.com https://host.com
+在此配方中,使用--no-proxy host.com命令行参数.此参数可防止curl代理请求host.com.下一个参数是-x https://myproxy.com:8080将curl的HTTPS代理设置为myproxy.com:8080(没有用户名或密码).在此之后,curl提出了三个要求https://catonmat.net,https://digg.com和https://host.com.前两个请求被代理,myproxy.com:8080但最后一个请求未被代理,因为https://host.com匹配代理忽略列表.
+
+
+* 忽略SSL证书(TLDR: 使用-k参数)
+
+这些curl配方向您展示了如何使用curl进行不安全的请求,忽略SSL证书验证.这是通过指定-k命令行参数来完成的.通常,SSL证书已过时或损坏,此选项可帮助您解决问题.
+
+1. 不验证SSL证书详细信息
+2. 使用SSL版本1
+
+1. 不验证SSL证书详细信息
+curl -k https://catonmat.net
+在此配方中,curl使用-k进行HTTPS连接的参数(在端口443上),但不检查SSL证书的详细信息.如果它已损坏,过时或网络服务器配置错误,此请求仍将通过,但不会建立信任.
+
+2. 使用SSL版本1
+curl -1 https://catonmat.net
+在此配方中,curl使用-1参数告诉curl在协商SSL协议以使用Web服务器时使用SSLv1.参数-2,并-3告诉curl使用的SSLv2和SSLv3的.
+
+
+* 使curl无声(TLDR: 使用-s参数)
+最近更新1周前
+这些curl配方向您展示如何使curl静音,以便它不会打印进度条,错误和其他可能妨碍的输出.为此,请使用-s参数.要隐藏响应,请使用-o /dev/null放弃输出(-o NUL在Windows上).
+
+1. 隐藏错误和进度条(但打印响应)
+2. 使curl沉默
+3. 使curl沉默(但打印错误)
+
+1. 隐藏错误和进度条(但打印响应)
+curl -s https://catonmat.net
+在此配方中,curl使用-s隐藏所有错误和进度条的参数.如果请求成功,则curl仍将打印响应正文.如果出现错误,那么告诉它是什么的唯一方法是检查curl过程的退出代码.请参阅下一个配方,了解如何制作死静音curl请求.
+
+2. 使curl沉默
+curl -s -o /dev/null https://google.com
+在本文中,我们将-s上一个配方中使用的-o /dev/null选项与选项结合起来.这两个选项的组合使curl绝对安静.判断成功或失败的唯一方法是检查curl程序的返回码.如果它为零,则curl成功,否则失败.
+
+3. 使curl沉默(但打印错误)
+curl -S -s -o /dev/null https://google.com
+此配方将-S命令行参数添加到组合中.当与-s参数结合使用时,它会告诉curl是静默的,除非出现错误.在这种情况下,打印错误.当您希望curl保持沉默但仍想知道失败原因时,此配方非常有用.
+
+
+* 将响应保存到文件(TLDR: 使用-o参数)
+最近更新1周前
+这些curl配方向您展示如何将curl请求的响应保存到文件.默认情况下,curl将响应打印到屏幕.要使其保存对文件的响应,请使用-o file命令行选项.
+
+1. 将响应从GET请求保存到文件
+2. 使用URL的最后片段作为文件名
+
+1.将响应从GET请求保存到文件
+curl -o response.txt https://google.com?q=kitties
+在此配方中,curl使用-o response.txt命令行选项将响应从它发出的GET请求保存https://google.com?q=kitties到具有filename的文件response.txt.
+
+2. 使用URL的最后片段作为文件名
+curl -O https://catonmat.net/ftp/digg.pm
+此配方使用-O强制curl 的参数将URL的最后部分用作文件名.在这种情况下,URL是URL https://catonmat.net/ftp/digg.pm的最后一部分digg.pm.因此,curl将创建一个新文件digg.pm并将响应主体放在那里.
+
+
+* 使curl变慢(TLDR: 使用 - 限制 - 速率参数)
+
+这些curl配方向您展示如何使curl请求和响应变慢.默认情况下,curl使用最大可用带宽,但通常需要减慢测试速度.要使curl变慢,请使用该--limit-rate speed选项.
+
+1. 将curl限制为每秒200千字节
+2. 将Curl限制为每秒1个字节
+
+1. 将curl限制为每秒200千字节
+curl --limit-rate 200k https://google.com
+此配方使用--limit-rate 200k命令行选项将请求和响应速率限制为每秒200千字节.您还可以使用m每秒兆字节和g每秒千兆字节的后缀.
+
+2. 将Curl限制为每秒1个字节
+curl --limit-rate 1 https://google.com
+如果未指示速度单位,则curl使用每秒字节数.在这个配方中,我们这样做并将curl的速度设置为每秒1个字节.有了这个速度限制,请求和响应完成需要一个永恒的时间.
+
+
+* 调试curl请求(TLDR: 使用-v或--trace参数)
+
+这些curl配方向您展示如何调试curl请求以查看它发送和接收的内容.默认情况下,curl仅打印响应正文.要使其打印完整通信(包括请求标头,SSL证书信息,响应标头和响应正文),请使用-v命令行参数.要使其打印所有内容的hexdump,请使用--trace参数.要使其同时打印响应标头和正文,请使用-i命令行参数.
+
+1. 使curl详细
+2. 详细的痕迹
+3. 带时间戳的详细跟踪
+4. 在输出中包含响应标头
+5. 仅打印响应标题
+6. 仅打印请求标头
+7. 仅打印响应代码
+
+1. 使curl详细
+curl -v https://catonmat.net
+此配方使用-v参数使curl打印有关请求和响应的详细信息.前缀的行>是发送到服务器的数据,前缀的行<是从服务器接收的数据,以及开头的行*是misc信息,例如连接信息,SSL握手信息和协议信息.
+
+2. 详细的痕迹
+curl --trace - https://catonmat.net
+在此配方中,我们使用该--trace -参数来启用所有传入和传出数据的完整跟踪转储.跟踪转储打印发送和接收的所有字节的hexdump.
+
+3. 带时间戳的详细跟踪
+curl --trace - --trace-time https://catonmat.net
+这个食谱--trace-time为curl增加了论据.这个参数结合--trace -使curl打印出详细的跟踪日志.您还可以结合--trace-time使用-v以添加时间戳以curl详细输出.
+
+4. 在输出中包含响应标头
+curl -i https://catonmat.net
+默认情况下,curl将响应正文打印到屏幕.此配方使用-i参数使其也打印响应标头.指定此标志后,curl将首先打印响应标题,然后是空白行,然后是响应正文.
+
+5. 仅打印响应标题
+curl -s -o /dev/null -D - https://catonmat.net
+要仅打印响应标头(并丢弃主体),必须同时使用三个参数.该-s参数使curl保持静默并隐藏错误和进度条,然后-o /dev/null(如果你在Windows上,使用-o NUL)使curl忽略响应体,并将-D -响应头打印到stdout(-是stdout).
+
+6. 仅打印请求标头
+curl -v -s -o /dev/null --stderr - https://catonmat.net | grep '^>'
+没有简单的方法可以使用curl打印请求标头.您必须向外部帮助程序执行此操作并使用一组命令行选项来禁用所有其他输出.这个配方通过-v参数启用详细输出,然后通过参数使curl无声,然后使curl通过-s参数忽略服务器的输出-o /dev/null,然后使curl通过--stderr -参数将stderr重定向到stdout ,最后要求grep打印所有以其开头的行>包含请求标头.
+
+7. 仅打印响应代码
+curl -w '%{response_code}' -s -o /dev/null https://catonmat.net
+此配方使用在-w请求完成后使curl打印额外信息的参数.我们要求它打印的额外信息是请求%{response_code}的响应代码.为了使curl只打印代码而不打印内容或其他信息,我们还使用-s静音curl并-o /dev/null忽略响应输出.
+
+
+* 发出GET请求(TLDR: 不需要参数,这是默认值)
+
+这些curl配方向您展示了如何使用curl发送GET请求.GET方法是在curl中发出请求的默认方法,因此您不必指定任何参数.
+
+1. 发送GET请求并将响应打印到屏幕
+2. 发送GET请求并将响应保存到文件
+
+1. 发送GET请求并将响应打印到屏幕
+curl https://catonmat.net
+您不需要指定任何参数来发出GET请求.这是curl的默认请求方法.此配方发出GET请求https://catonmat.net并将返回的内容打印到屏幕.
+
+2. 发送GET请求并将响应保存到文件
+curl -o response.txt https://catonmat.net
+在这个配方中,curl向GET发出请求https://catonmat.net并使用该-o response.txt参数将HTTP响应的主体保存到response.txt文件中.
+
+--------------------------
+# curl -h 的完整参数解释：
+-a/--append                            	上传文件时，附加到目标文件
+--anyauth                              	可以使用“任何”身份验证方法
+--basic                                	使用HTTP基本验证
+-B/--use-ascii                         	使用ASCII文本传输
+-d/--data <data>                       	HTTP POST方式传送数据
+--data-ascii <data>                    	以ascii的方式post数据
+--data-binary <data>                   	以二进制的方式post数据
+--negotiate                            	使用HTTP身份验证
+--digest                               	使用数字身份验证
+--disable-eprt                         	禁止使用EPRT或LPRT
+--disable-epsv                         	禁止使用EPSV
+--egd-file <file>                      	为随机数据(SSL)设置EGD socket路径
+--tcp-nodelay                          	使用TCP_NODELAY选项
+-E/--cert <cert[:passwd]>              	客户端证书文件和密码 (SSL)
+--cert-type <type>                     	证书文件类型 (DER/PEM/ENG) (SSL)
+--key <key>                            	私钥文件名 (SSL)
+--key-type <type>                      	私钥文件类型 (DER/PEM/ENG) (SSL)
+--pass  <pass>                         	私钥密码 (SSL)
+--engine <eng>                         	加密引擎使用 (SSL). "--engine list" for list
+--cacert <file>                        	CA证书 (SSL)
+--capath <directory>                   	CA目   (made using c_rehash) to verify peer against (SSL)
+--ciphers <list>                       	SSL密码
+--compressed                           	要求返回是压缩的形势 (using deflate or gzip)
+--connect-timeout <seconds>            	设置最大请求时间
+--create-dirs                          	建立本地目录的目录层次结构
+--crlf                                 	上传是把LF转变成CRLF
+--ftp-create-dirs                      	如果远程目录不存在，创建远程目录
+--ftp-method [multicwd/nocwd/singlecwd]	控制CWD的使用
+--ftp-pasv                             	使用 PASV/EPSV 代替端口
+--ftp-skip-pasv-ip                     	使用PASV的时候,忽略该IP地址
+--ftp-ssl                              	尝试用 SSL/TLS 来进行ftp数据传输
+--ftp-ssl-reqd                         	要求用 SSL/TLS 来进行ftp数据传输
+-F/--form <name=content>               	模拟http表单提交数据
+-form-string <name=string>             	模拟http表单提交数据
+-g/--globoff                           	禁用网址序列和范围使用{}和[]
+-G/--get                               	以get的方式来发送数据
+-h/--help                              	帮助
+-H/--header <line>                     	自定义头信息传递给服务器
+--ignore-content-length                	忽略的HTTP头信息的长度
+-i/--include                           	输出时包括protocol头信息
+-I/--head                              	只显示文档信息
+-j/--junk-session-cookies              	读取文件时忽略session cookie
+--interface <interface>                	使用指定网络接口/地址
+--krb4 <level>                         	使用指定安全级别的krb4
+-k/--insecure                          	允许不使用证书到SSL站点
+-K/--config                            	指定的配置文件读取
+-l/--list-only                         	列出ftp目录下的文件名称
+--limit-rate <rate>                    	设置传输速度
+--local-port<NUM>                      	强制使用本地端口号
+-m/--max-time <seconds>                	设置最大传输时间
+--max-redirs <num>                     	设置最大读取的目录数
+--max-filesize <bytes>                 	设置最大下载的文件总量
+-M/--manual                            	显示全手动
+-n/--netrc                             	从netrc文件中读取用户名和密码
+--netrc-optional                       	使用 .netrc 或者 URL来覆盖-n
+--ntlm                                 	使用 HTTP NTLM 身份验证
+-N/--no-buffer                         	禁用缓冲输出
+-p/--proxytunnel                       	使用HTTP代理
+--proxy-anyauth                        	选择任一代理身份验证方法
+--proxy-basic                          	在代理上使用基本身份验证
+--proxy-digest                         	在代理上使用数字身份验证
+--proxy-ntlm                           	在代理上使用ntlm身份验证
+-P/--ftp-port <address>                	使用端口地址，而不是使用PASV
+-Q/--quote <cmd>                       	文件传输前，发送命令到服务器
+--range-file                           	读取（SSL）的随机文件
+-R/--remote-time                       	在本地生成文件时，保留远程文件时间
+--retry <num>                          	传输出现问题时，重试的次数
+--retry-delay <seconds>                	传输出现问题时，设置重试间隔时间
+--retry-max-time <seconds>             	传输出现问题时，设置最大重试时间
+-S/--show-error                        	显示错误
+--socks4 <host[:port]>                 	用socks4代理给定主机和端口
+--socks5 <host[:port]>                 	用socks5代理给定主机和端口
+-t/--telnet-option <OPT=val>           	Telnet选项设置
+--trace <file>                         	对指定文件进行debug
+--trace-ascii <file>                   	Like --跟踪但没有hex输出
+--trace-time                           	跟踪/详细输出时，添加时间戳
+--url <URL>                            	Spet URL to work with
+-U/--proxy-user <user[:password]>      	设置代理用户名和密码
+-V/--version                   	        显示版本信息
+-X/--request <command>         	        指定什么命令
+-y/--speed-time                	        放弃限速所要的时间。默认为30
+-Y/--speed-limit               	        停止传输速度的限制，速度时间'秒
+-z/--time-cond                 	        传送时间设置
+-0/--http1.0                   	        使用HTTP 1.0
+-1/--tlsv1                     	        使用TLSv1（SSL）
+-2/--sslv2                     	        使用SSLv2的（SSL）
+-3/--sslv3                     	        使用的SSLv3（SSL）
+--3p-quote                     	        like -Q for the source URL for 3rd party transfer
+--3p-url                       	        使用url，进行第三方传送
+--3p-user                      	        使用用户名和密码，进行第三方传送
+-4/--ipv4                      	        使用IP4
+-6/--ipv6                      	        使用IP6
+
+# Linux curl命令退出码
+下面是linux curl命令的错误代码和她们的相应的错误消息，可能会出现在恶劣的环境。
+
+退出码	错误描述
+1	    Unsupported protocol. This build of curl has no support for this protocol.
+2	    Failed to initialize.
+3	    URL malformed. The syntax was not correct.
+5	    Couldn't resolve proxy. The given proxy host could not be resolved.
+6	    Couldn't resolve host. The given remote host was not resolved.
+7	    Failed to connect to host.
+8	    FTP weird server reply. The server sent data curl couldn't parse.
+9	    FTP access denied. The server denied login or denied access to the particular resource or directory you wanted to reach. Most often you tried to change to a directory that doesn't exist on the server.
+11	  FTP weird PASS reply. Curl couldn't parse the reply sent to the PASS request.
+13	  FTP weird PASV reply, Curl couldn't parse the reply sent to the PASV request.
+14	  FTP weird 227 format. Curl couldn't parse the 227-line the server sent.
+15	  FTP can't get host. Couldn't resolve the host IP we got in the 227-line.
+17	  FTP couldn't set binary. Couldn't change transfer method to binary.
+18	  Partial file. Only a part of the file was transferred.
+19	  FTP couldn't download/access the given file, the RETR (or similar) command failed.
+21	  FTP quote error. A quote command returned error from the server.
+22	  HTTP page not retrieved. The requested url was not found or returned another error with the HTTP error code being 400 or above. This return code only appears if -f/--fail is used.
+23	  Write error. Curl couldn't write data to a local filesystem or similar.
+25	  FTP couldn't STOR file. The server denied the STOR operation, used for FTP uploading.
+26	  Read error. Various reading problems.
+27	  Out of memory. A memory allocation request failed.
+28	  Operation timeout. The specified time-out period was reached according to the conditions.
+30	  FTP PORT failed. The PORT command failed. Not all FTP servers support the PORT command, try doing a transfer using PASV instead!
+31	  FTP couldn't use REST. The REST command failed. This command is used for resumed FTP transfers.
+33	  HTTP range error. The range "command" didn't work.
+34	  HTTP post error. Internal post-request generation error.
+35	  SSL connect error. The SSL handshaking failed.
+36	  FTP bad download resume. Couldn't continue an earlier aborted download.
+37	  FILE couldn't read file. Failed to open the file. Permissions?
+38	  LDAP cannot bind. LDAP bind operation failed.
+39	  LDAP search failed.
+41	  Function not found. A required LDAP function was not found.
+42	  Aborted by callback. An application told curl to abort the operation.
+43	  Internal error. A function was called with a bad parameter.
+45	  Interface error. A specified outgoing interface could not be used.
+47	  Too many redirects. When following redirects, curl hit the maximum amount.
+48	  Unknown TELNET option specified.
+49	  Malformed telnet option.
+51	  The peer's SSL certificate or SSH MD5 fingerprint was not ok.
+52	  The server didn't reply anything, which here is considered an error.
+53	  SSL crypto engine not found.
+54	  Cannot set SSL crypto engine as default.
+55	  Failed sending network data.
+56	  Failure in receiving network data.
+58	  Problem with the local certificate.
+59	  Couldn't use specified SSL cipher.
+60	  Peer certificate cannot be authenticated with known CA certificates.
+61	  Unrecognized transfer encoding.
+62	  Invalid LDAP URL.
+63	  Maximum file size exceeded.
+64	  Requested FTP SSL level failed.
+65	  Sending the data requires a rewind that failed.
+66	  Failed to initialize SSL Engine.
+67	  The user name, password, or similar was not accepted and curl failed to log in.
+68	  File not found on TFTP server.
+69	  Permission problem on TFTP server.
+70	  Out of disk space on TFTP server.
+71	  Illegal TFTP operation.
+72	  Unknown TFTP transfer ID.
+73	  File already exists (TFTP).
+74	  No such user (TFTP).
+75	  Character conversion failed.
+76	  Character conversion functions required.
+77	  Problem with reading the SSL CA cert (path? access rights?).
+78	  The resource referenced in the URL does not exist.
+79	  An unspecified error occurred during the SSH session.
+80	  Failed to shut down the SSL connection.
+82	  Could not load CRL file, missing or wrong format (added in 7.19.0).
+83	  Issuer check failed (added in 7.19.0).
+XX	  More error codes will appear here in future releases. The existing ones are meant to never change.
+
+# 常见用法
+1 下载(option:-o或者option:-O)
+1.1 下载页面：
+
+curl -o dodo1.jpg http:www.linux.com/dodo1.JPG
+#要注意-O这里后面的url要具体到某个文件，不然抓不下来
+curl -O http://www.linux.com/dodo1.JPG
+
+1.2：循环下载
+有时候下载图片可以能是前面的部分名称是一样的，就最后的尾椎名不一样。这样就会把dodo1，dodo2，dodo3，dodo4，dodo5全部保存下来
+curl -O http://www.linux.com/dodo[1-5].JPG
+
+1.3：下载重命名
+在hello/dodo1.JPG的文件下载下来就会变成hello_dodo1.JPG,其他文件依此类推，从而有效的避免了文件被覆盖
+curl -o #1_#2.JPG http://www.linux.com/{hello,bb}/dodo[1-5].JPG
+
+由于下载的hello与bb中的文件名都是dodo1，dodo2，dodo3，dodo4，dodo5。因此第二次下载的会把第一次下载的覆盖，这样就需要对文件进行重命名。
+curl -O http://www.linux.com/{hello,bb}/dodo[1-5].JPG
+
+1.4：分块下载(option：-r)
+curl -r 0-100 -o dodo1_part1.JPG http://www.linux.com/dodo1.JPG
+curl -r 100-200 -o dodo1_part2.JPG http://www.linux.com/dodo1.JPG
+curl -r 200- -o dodo1_part3.JPG http://www.linux.com/dodo1.JPG
+cat dodo1_part* > dodo1.JPG  #这样就可以查看dodo1.JPG的内容了
+
+1.5：通过ftp下载文件(option：-u)
+curl可以通过ftp下载文件，curl提供两种从ftp中下载的语法
+curl -O -u 用户名:密码 ftp://www.linux.com/dodo1.JPG
+curl -O ftp://用户名:密码@www.linux.com/dodo1.JPG
+
+1.6:下载，显示进度条(option：-#)或不显示进度条(option：-s)
+curl -# -O http://www.linux.com/dodo1.JPG
+curl -s -O http://www.linux.com/dodo1.JPG
+
+1.7 下载，断点续传(-C <offset>)
+断点续转，从文件头的指定位置开始继续下载/上传；offset续传开始的位置，如果offset值为“-”，curl会自动从文件中识别起始位置开始传输；
+curl -# -o centos6.8.iso -C - http://mirrors.aliyun.com/centos/6.8/isos/x86_64/CentOS-6.8-x86_64-minimal.iso
+curl -C -O http://www.linux.com/dodo1.JPG
+
+2 上传文件(option:-T)
+curl -T dodo1.JPG -u 用户名:密码 ftp://www.linux.com/img/
+
+3 伪造来源页面|伪造referer|盗链 (option：-e)
+很多服务器会检查http访问的referer从而来控制访问。比如：你是先访问首页，然后再访问首页中的邮箱页面，这里访问邮箱的referer地址就是访问首页成功后的页面地址，如果服务器发现对邮箱页面访问的referer地址不是首页的地址，就断定那是个盗连了
+#这样就会让服务器其以为你是从www.linux.com点击某个链接过来的
+curl -e "www.linux.com" http://mail.linux.com
+#告诉爱E族，我是从百度来的
+curl -e http://baidu.com http://aiezu.com
+
+4 伪造代理设备(模仿浏览器)
+有些网站需要使用特定的浏览器去访问他们，有些还需要使用某些特定的版本。curl内置option:-A可以让我们指定浏览器去访问网站
+curl -A "Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 5.0)" http://www.linux.com
+#告诉爱E族，我是GOOGLE爬虫蜘蛛（其实我是curl命令）
+curl -A " Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)" http://aiezu.com
+#告诉爱E族，我用的是微信内置浏览器
+curl -A "Mozilla/5.0 AppleWebKit/600 Mobile MicroMessenger/6.0" http://aiezu.com
+
+5 设置http请求
+5.1 设置http请求头(或option:-H或option:--head)
+curl -H "Cache-Control:no-cache"  http://aiezu.com
+
+5.2 指定proxy服务器以及其端口(option::-x)
+#很多时候上网需要用到代理服务器(比如是使用代理服务器上网或者因为使用curl别人网站而被别人屏蔽IP地址的时候)，幸运的是curl通过使用内置option：-x来支持设置代理
+curl -x 192.168.100.100:1080 http://www.linux.com
+
+6 http响应头
+6.1 查看http响应头(option:-I)
+# 看看本站的http头是怎么样的
+curl -I  http://aiezu.com
+输出：
+HTTP/1.1 200 OK
+Date: Fri, 25 Nov 2016 16:45:49 GMT
+Server: Apache
+Set-Cookie: rox__Session=abdrt8vesprhnpc3f63p1df7j4; path=/
+Expires: Thu, 19 Nov 1981 08:52:00 GMT
+Cache-Control: no-store, no-cache, must-revalidate, post-check=0, pre-check=0
+Pragma: no-cache
+Vary: Accept-Encoding
+Content-Type: text/html; charset=utf-8
+
+6.2 保存http的response里面的header信息(option:-D)
+curl -D cookied.txt http://www.linux.com
+执行后cookie信息就被存到了cookied.txt里面了
+注意：-c(小写)产生的cookie和-D里面的cookie是不一样的。
+
+7 发送表单数据
+curl -F "pic=@logo.png" -F "site=aiezu"  http://aiezu.com/
+
+8 cookie
+8.1 发送cookie(option:-b）
+#有些网站是使用cookie来记录session信息。对于chrome这样的浏览器，可以轻易处理cookie信息，但在curl中只要增加相关参数也是可以很容易的处理cookie
+curl -b "domain=aiezu.com"  http://aiezu.com
+#很多网站都是通过监视你的cookie信息来判断你是否按规矩访问他们的网站的，因此我们需要使用保存的cookie信息。内置option: -b
+curl -b cookiec.txt http://www.linux.com
+
+8.2 保存http的response里面的cookie信息(option:-c）
+执行后http的response里面的cookie信息就被存到了cookiec.txt里面了
+curl -c cookiec.txt  http://www.linux.com
+
+9 测试一个网址
+9.1 测试一个网址是否可达
+curl -v http://www.linux.com
+
+9.2 测试网页返回值(option:-w [format])
+curl -o /dev/null -s -w %{http_code} www.linux.com
+
+10 保存访问的网页(>>)
+2.1:使用linux的重定向功能保存
+curl http://www.linux.com >> linux.html
+
+11 请求方式
+curl -i -v -H '' -X POST -d '' http:www.test.com/a/b
+其中，-X POST -d, -X GET -d, -X PUT -d 分别等价于-F, -G -d, -P
+
+以post请求为例：
+11.1  -X POST -d
+11.1.1 POST application/x-www-form-urlencoded
+application/x-www-form-urlencoded是默认的
+curl -X POST -d "param1=value1¶m2=value2" http://localhost:3000/data
+等价于
+curl -H "Content-Type:application/x-www-form-urlencoded" -X POST -d "param1=value1¶m2=value2" http://localhost:3000/data
+使用数据文件
+curl -X POST -d "@data.txt" http://localhost:3000/data
+其中data.txt内容如下：param1=value1¶m2=value2
+
+11.1.2 POST application/json
+curl -H "Content-Type:application/json" -X POST -d '{"key1":"value1","key2":"value2"}' http://localhost:3000/data
+使用数据文件的话：
+curl -X POST -d "@data.json" http://localhost:3000/data
+其中data.json内容如下：{"key1":"value1","key2":"value2"}
+再举个例子：
+curl -H "Content-type:application/json" -X POST -d "{\"app_key\":\"$appKey\",\"time_stamp\":\"$time\"}" http://www.test.com.cn/a/b
+
+11.2 -F
+curl  -v -H "token: 222" -F "file=@/Users/fungleo/Downloads/401.png" localhost:8000/api/v1/upimg
+
+curl -f http://www.linux.com/error
+
+11.3 其它举例
+11.3.1
+curl  -X POST "http://www.test.com/e/f" -H "Content-Type:application/x-www-form-urlencoded;charset=UTF-8" \
+-d "a=b" \
+-d "c=d" \
+-d "e=f" \
+-d "g=h"
+
+11.3.2 错误：curl -i -G -d "a=b#1&c=d" http://www.test.com/e/f
+正确：要把参数值是特殊符号的用urlencode转换过来
+curl -i -G -d "a=b%231&c=d" http://www.test.com/e/f
+
+12 调试
+curl -v可以显示一次http通信的整个过程，包括端口连接和http request头信息。
+如果觉得还不够，那么下面的命令可以查看更详细的通信过程：
+curl --trace output.txt www.baidu.com 或者 curl --trace-ascii output.txt www.baidu.com
+运行后，请打开output.txt文件查看。
+curl --trace output.txt  http://www.baidu.com
+curl --trace-ascii output2.txt  http://www.baidu.com
+curl --trace output3.txt --trace-time http://www.baidu.com
+curl --trace-ascii output4.txt --trace-time http://www.baidu.com
+
+
+举例:有需求每5分钟请求一次http://www.test.com/a/b生成一个日志文件。希望一月的日志(正确的和错误的)能写入一个日志文件
+day=`date +%F`
+logfile='/var/logs/www.test.com_'`date +%Y%m`'.log'
+/usr/bin/echo -e "\n\n[${day}] Start request \n " >> ${logfile}
+/bin/curl -v "http://www.test.com/a/b" -d "ccccc" 1>> ${logfile} 2>> ${logfile} --trace-time
+/usr/bin/echo -e "\n\n[${day}] End request\n" >> ${logfile}
+
+13 显示抓取错误
+curl -f http://www.linux.com/error
+
+
+

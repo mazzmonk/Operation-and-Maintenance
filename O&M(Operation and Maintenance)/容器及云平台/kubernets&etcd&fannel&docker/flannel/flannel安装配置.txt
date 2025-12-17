@@ -1,0 +1,50 @@
+flannel用于类似网桥的技术，用于docker容器间通讯
+
+版本:flannel-0.5.5-linux-amd64.tar.gz
+下载：https://github.com/coreos/flannel/releases 二进制版本
+
+1.安装
+解压以后建立目录$HOME/apps/flannel/bin
+
+
+docker节点
+192.168.81.97
+192.168.81.98
+
+必须用root启动
+
+###### 192.168.81.97 ######
+#!/bin/bash
+
+/home/blue/apps/flannel/bin/flanneld -etcd-endpoints="http://192.168.81.3:4001,http://192.168.81.5:4001,http://192.168.81.6:4001" &
+
+
+###### 192.168.81.98 ######
+#!/bin/bash
+
+/home/blue/apps/flannel/bin/flanneld -etcd-endpoints="http://192.168.81.3:4001,http://192.168.81.5:4001,http://192.168.81.6:4001" &
+
+
+启动以后有类似网桥的设备flannel0,并且得到一个ip地址，这个地址从etcd集群中得到，因此需要先设置地址段到etcd集群
+
+在任意一个etcd集群节点执行
+$etcdctl set /coreos.com/network/config '{ "Network": "172.17.0.0/16" }'
+
+etcdctl工具是etcd目录中具有的
+
+把flannel的地址覆盖到docker0
+*************************************************
+
+#!/bin/bash
+
+/home/blue/apps/flannel/bin/mk-docker-opts.sh -i
+source /run/flannel/subnet.env
+ifconfig docker0 ${FLANNEL_SUBNET}
+
+************************************************
+
+
+
+
+
+

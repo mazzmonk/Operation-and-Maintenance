@@ -1,0 +1,100 @@
+#include <iostream>
+
+class Target {
+ public:
+  Target() {
+  }
+  virtual ~Target() {
+  }
+  virtual void Request() {
+    std::cout << "Target::Request" << std::endl;
+  }
+};
+
+class Adaptee {
+ public:
+  Adaptee() {
+  }
+  ~Adaptee() {
+  }
+  void SpecificRequest() {
+    std::cout << "Adaptee::SpecificRequest" << std::endl;
+  }
+};
+
+class Adapter : public Target {
+ public:
+  Adapter(Adaptee* ade) {
+    this->_ade = ade;
+  }
+  ~Adapter() {
+  }
+  void Request() {
+    _ade->SpecificRequest();
+  }
+ private:
+  Adaptee* _ade;
+};
+
+
+#include "Adapter.h"
+
+int main(int argc,char* argv[]) {
+  Adaptee* ade = new Adaptee;               //子类对应的操作指向单独定义的另外一个类
+  Target* adt = new Adapter(ade);           //基类指针指向子类对象
+  adt->Request();
+  return 0;
+}
+
+这里从基类继承的子类类似一个代理,子类的操作都是指向到单独的这个类
+这种模式有2种,接口继承模式及类继承模式,分别对应上述,和下边的代码
+这个模式用的场景比如:自己写的类A,目前有个第三方类B,需要在A中调用B中的成员,因此写一个类C,继承A,C中的操作都实际操作B,这样,所有A调用B的行为都可以使用C调用B来实现.
+
+
+#include <iostream>
+
+class Target {
+ public:
+  Target() {
+  }
+  virtual ~Target() {
+  }
+  virtual void Request() {
+    std::cout << "Target::Request" << std::endl;
+  }
+};
+
+class Adaptee {
+ public:
+  Adaptee() {
+  }
+  ~Adaptee() {
+  }
+  void SpecificRequest() {
+    std::cout << "Adaptee::SpecificRequest" << std::endl;
+  }
+};
+
+class Adapter : public Target, private Adaptee {
+ public:
+  Adapter() {
+  }
+  ~Adapter() {
+  }
+  void Request() {
+    this->SpecificRequest();
+  }
+};
+
+
+#include "Adapter.h"
+
+int main(int argc,char* argv[]) {
+  Adaptee* ade = new Adaptee;               //子类对应的操作指向单独定义的另外一个类
+  Target* adt = new Adapter(ade);           //基类指针指向子类对象
+  adt->Request();
+  return 0;
+}
+
+
+

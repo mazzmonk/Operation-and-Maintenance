@@ -1,0 +1,157 @@
+W0822 15:49:54.302508    3064 start_master.go:297] Warning: assetConfig.loggingPublicURL: Invalid value: "": required to view aggregated container logs in the console, master start will continue.
+W0822 15:49:54.302861    3064 start_master.go:297] Warning: assetConfig.metricsPublicURL: Invalid value: "": required to view cluster metrics in the console, master start will continue.
+W0822 15:49:54.302994    3064 start_master.go:297] Warning: auditConfig.auditFilePath: Required value: audit can not be logged to a separate file, master start will continue.
+I0822 15:49:54.310180    3064 plugins.go:101] No cloud provider specified.
+E0822 15:49:54.346754    3064 controllermanager.go:337] Server isn't healthy yet.  Waiting a little while.
+I0822 15:49:54.669881    3064 start_master.go:529] Starting master on 0.0.0.0:8443 (v3.6.0+c4dd4cf)
+I0822 15:49:54.670202    3064 start_master.go:530] Public master address is https://192.168.112:8443
+I0822 15:49:54.670332    3064 start_master.go:534] Using images from "openshift/origin-<component>:v3.6.0"
+I0822 15:49:54.673234    3064 run_components.go:91] Using default project node label selector: 
+I0822 15:49:54.675423    3064 master.go:182] Starting OAuth2 API at /oauth
+I0822 15:49:54.675690    3064 master.go:190] Starting Web Console /console/
+I0822 15:49:54.679320    3064 clusterquotamapping.go:160] Starting ClusterQuotaMappingController controller
+E0822 15:49:54.681419    3064 reflector.go:201] github.com/openshift/origin/pkg/authorization/generated/informers/internalversion/factory.go:45: Failed to list *authorization.ClusterPolicyBinding: Get https://192.168.1.112:8443/apis/authorization.openshift.io/v1/clusterpolicybindings?resourceVersion=0: dial tcp 192.168.1.112:8443: getsockopt: connection refused
+E0822 15:49:54.681793    3064 reflector.go:201] github.com/openshift/origin/pkg/authorization/generated/informers/internalversion/factory.go:45: Failed to list *authorization.ClusterPolicy: Get https://192.168.1.112:8443/apis/authorization.openshift.io/v1/clusterpolicies?resourceVersion=0: dial tcp 192.168.1.112:8443: getsockopt: connection refused
+E0822 15:49:54.681993    3064 reflector.go:201] github.com/openshift/origin/pkg/authorization/generated/informers/internalversion/factory.go:45: Failed to list *authorization.PolicyBinding: Get https://192.168.1.112:8443/apis/authorization.openshift.io/v1/policybindings?resourceVersion=0: dial tcp 192.168.1.112:8443: getsockopt: connection refused
+E0822 15:49:54.682142    3064 reflector.go:201] github.com/openshift/origin/pkg/authorization/generated/informers/internalversion/factory.go:45: Failed to list *authorization.Policy: Get https://192.168.1.112:8443/apis/authorization.openshift.io/v1/policies?resourceVersion=0: dial tcp 192.168.1.112:8443: getsockopt: connection refused
+E0822 15:49:54.682271    3064 reflector.go:201] github.com/openshift/origin/pkg/quota/generated/informers/internalversion/factory.go:45: Failed to list *quota.ClusterResourceQuota: Get https://192.168.1.112:8443/apis/quota.openshift.io/v1/clusterresourcequotas?resourceVersion=0: dial tcp 192.168.1.112:8443: getsockopt: connection refused
+W0822 15:49:54.752989    3064 genericapiserver.go:295] Skipping API autoscaling/v2alpha1 because it has no resources.
+W0822 15:49:54.801636    3064 genericapiserver.go:295] Skipping API rbac.authorization.k8s.io/v1alpha1 because it has no resources.
+I0822 15:49:54.829578    3064 openshift_apiserver.go:237] Starting Origin API at /apis/oauth.openshift.io/v1
+I0822 15:49:54.830354    3064 openshift_apiserver.go:237] Starting Origin API at /apis/project.openshift.io/v1
+I0822 15:49:54.831955    3064 openshift_apiserver.go:237] Starting Origin API at /apis/network.openshift.io/v1
+I0822 15:49:54.833097    3064 openshift_apiserver.go:237] Starting Origin API at /apis/route.openshift.io/v1
+I0822 15:49:54.834956    3064 openshift_apiserver.go:237] Starting Origin API at /apis/user.openshift.io/v1
+I0822 15:49:54.836550    3064 openshift_apiserver.go:237] Starting Origin API at /apis/apps.openshift.io/v1
+I0822 15:49:54.843551    3064 openshift_apiserver.go:237] Starting Origin API at /apis/authorization.openshift.io/v1
+I0822 15:49:54.846792    3064 openshift_apiserver.go:237] Starting Origin API at /apis/template.openshift.io/v1
+I0822 15:49:54.851794    3064 openshift_apiserver.go:237] Starting Origin API at /apis/security.openshift.io/v1
+I0822 15:49:54.872056    3064 openshift_apiserver.go:237] Starting Origin API at /apis/build.openshift.io/v1
+I0822 15:49:54.873650    3064 openshift_apiserver.go:237] Starting Origin API at /apis/quota.openshift.io/v1
+I0822 15:49:54.876650    3064 openshift_apiserver.go:237] Starting Origin API at /apis/image.openshift.io/v1
+I0822 15:49:54.945876    3064 openshift_apiserver.go:243] Started Origin API at /oapi/v1
+[restful] 2017/08/22 15:49:55 log.go:30: [restful/swagger] listing is available at https://192.168.112:8443/swaggerapi
+[restful] 2017/08/22 15:49:55 log.go:30: [restful/swagger] https://192.168.112:8443/swaggerui/ is mapped to folder /swagger-ui/
+I0822 15:49:55.248692    3064 serve.go:86] Serving securely on 0.0.0.0:8443
+E0822 15:49:55.349210    3064 controllermanager.go:337] Server isn't healthy yet.  Waiting a little while.
+W0822 15:49:55.355046    3064 run_components.go:60] Binding DNS on port 8053 instead of 53, which may not be resolvable from all clients
+I0822 15:49:55.356329    3064 logs.go:41] skydns: ready for queries on cluster.local. for tcp4://0.0.0.0:8053 [rcache 0]
+I0822 15:49:55.356479    3064 logs.go:41] skydns: ready for queries on cluster.local. for udp4://0.0.0.0:8053 [rcache 0]
+I0822 15:49:55.455896    3064 run_components.go:86] DNS listening at 0.0.0.0:8053
+I0822 15:49:55.464299    3064 ensure.go:231] No cluster policy found.  Creating bootstrap policy based on: openshift.local.config/master/policy.json
+I0822 15:49:55.848618    3064 trace.go:76] Trace[48575142]: "Create /api/v1/namespaces/default/services" (started: 2017-08-22 15:49:55.328493445 +0800 HKT) (total time: 519.673492ms):
+Trace[48575142]: [501.862409ms] [501.825861ms] About to store object in database
+W0822 15:49:55.897719    3064 lease_endpoint_reconciler.go:176] Resetting endpoints for master service "kubernetes" to [192.168.1.112]
+I0822 15:49:56.497979    3064 start_master.go:715] Started serviceaccount-token controller
+E0822 15:50:01.940562    3064 util.go:45] Metric for serviceaccount_controller already registered
+I0822 15:50:01.941145    3064 start_master.go:783] Started "serviceaccount"
+I0822 15:50:01.943721    3064 serviceaccounts_controller.go:122] Starting ServiceAccount controller
+W0822 15:50:02.072654    3064 shared_informer.go:298] resyncPeriod 120000000000 is smaller than resyncCheckPeriod 600000000000 and the informer has already started. Changing it to 600000000000
+E0822 15:50:02.129440    3064 serviceaccounts_controller.go:186] kube-system failed with : [User "system:serviceaccount:openshift-infra:serviceaccount-controller" cannot create serviceaccounts in project "kube-system", User "system:serviceaccount:openshift-infra:serviceaccount-controller" cannot create serviceaccounts in project "kube-system", User "system:serviceaccount:openshift-infra:serviceaccount-controller" cannot create serviceaccounts in project "kube-system"]
+E0822 15:50:02.134825    3064 serviceaccounts_controller.go:186] default failed with : [User "system:serviceaccount:openshift-infra:serviceaccount-controller" cannot create serviceaccounts in project "default", User "system:serviceaccount:openshift-infra:serviceaccount-controller" cannot create serviceaccounts in project "default", User "system:serviceaccount:openshift-infra:serviceaccount-controller" cannot create serviceaccounts in project "default"]
+E0822 15:50:02.145616    3064 serviceaccounts_controller.go:186] kube-public failed with : [User "system:serviceaccount:openshift-infra:serviceaccount-controller" cannot create serviceaccounts in project "kube-public", User "system:serviceaccount:openshift-infra:serviceaccount-controller" cannot create serviceaccounts in project "kube-public", User "system:serviceaccount:openshift-infra:serviceaccount-controller" cannot create serviceaccounts in project "kube-public"]
+I0822 15:50:02.153705    3064 start_master.go:783] Started "openshift.io/service-serving-cert"
+E0822 15:50:02.244028    3064 serviceaccounts_controller.go:186] default failed with : [User "system:serviceaccount:openshift-infra:serviceaccount-controller" cannot create serviceaccounts in project "default", User "system:serviceaccount:openshift-infra:serviceaccount-controller" cannot create serviceaccounts in project "default", User "system:serviceaccount:openshift-infra:serviceaccount-controller" cannot create serviceaccounts in project "default"]
+E0822 15:50:02.245409    3064 serviceaccounts_controller.go:186] openshift-infra failed with : [User "system:serviceaccount:openshift-infra:serviceaccount-controller" cannot create serviceaccounts in project "openshift-infra", User "system:serviceaccount:openshift-infra:serviceaccount-controller" cannot create serviceaccounts in project "openshift-infra", User "system:serviceaccount:openshift-infra:serviceaccount-controller" cannot create serviceaccounts in project "openshift-infra"]
+E0822 15:50:02.246633    3064 serviceaccounts_controller.go:186] kube-system failed with : [User "system:serviceaccount:openshift-infra:serviceaccount-controller" cannot create serviceaccounts in project "kube-system", User "system:serviceaccount:openshift-infra:serviceaccount-controller" cannot create serviceaccounts in project "kube-system", User "system:serviceaccount:openshift-infra:serviceaccount-controller" cannot create serviceaccounts in project "kube-system"]
+I0822 15:50:02.270043    3064 start_master.go:783] Started "openshift.io/deployer"
+I0822 15:50:02.270360    3064 start_master.go:783] Started "openshift.io/cluster-quota-mapping"
+I0822 15:50:02.270624    3064 clusterquotamapping.go:160] Starting ClusterQuotaMappingController controller
+I0822 15:50:02.271231    3064 factory.go:83] Starting deployer controller
+E0822 15:50:02.356750    3064 serviceaccounts_controller.go:186] openshift-infra failed with : [User "system:serviceaccount:openshift-infra:serviceaccount-controller" cannot create serviceaccounts in project "openshift-infra", User "system:serviceaccount:openshift-infra:serviceaccount-controller" cannot create serviceaccounts in project "openshift-infra"]
+E0822 15:50:02.368065    3064 serviceaccounts_controller.go:186] kube-public failed with : [User "system:serviceaccount:openshift-infra:serviceaccount-controller" cannot create serviceaccounts in project "kube-public", User "system:serviceaccount:openshift-infra:serviceaccount-controller" cannot create serviceaccounts in project "kube-public"]
+E0822 15:50:02.385853    3064 serviceaccounts_controller.go:186] default failed with : [User "system:serviceaccount:openshift-infra:serviceaccount-controller" cannot create serviceaccounts in project "default", User "system:serviceaccount:openshift-infra:serviceaccount-controller" cannot create serviceaccounts in project "default"]
+I0822 15:50:02.492478    3064 start_master.go:783] Started "deployment"
+I0822 15:50:02.494163    3064 deployment_controller.go:147] Starting deployment controller
+I0822 15:50:03.094024    3064 start_master.go:783] Started "resourcequota"
+W0822 15:50:03.099070    3064 core.go:80] ServiceLoadBalancer controller will not start - no cloud provider configured
+W0822 15:50:03.099371    3064 start_master.go:780] Skipping "service"
+I0822 15:50:03.094386    3064 resource_quota_controller.go:240] Starting resource quota controller
+I0822 15:50:03.354517    3064 ensure.go:216] Created default security context constraint privileged
+I0822 15:50:03.359499    3064 ensure.go:216] Created default security context constraint nonroot
+I0822 15:50:03.367335    3064 ensure.go:216] Created default security context constraint hostmount-anyuid
+I0822 15:50:03.384363    3064 ensure.go:216] Created default security context constraint hostaccess
+I0822 15:50:03.393931    3064 ensure.go:216] Created default security context constraint restricted
+I0822 15:50:03.400324    3064 ensure.go:216] Created default security context constraint anyuid
+I0822 15:50:03.418203    3064 ensure.go:216] Created default security context constraint hostnetwork
+W0822 15:50:03.905373    3064 shared_informer.go:298] resyncPeriod 300000000000 is smaller than resyncCheckPeriod 600000000000 and the informer has already started. Changing it to 600000000000
+I0822 15:50:03.905767    3064 start_master.go:783] Started "namespace"
+I0822 15:50:03.906499    3064 namespace_controller.go:184] Starting the NamespaceController
+I0822 15:50:04.057494    3064 start_master.go:783] Started "statefuleset"
+I0822 15:50:04.076377    3064 stateful_set.go:144] Starting statefulset controller
+I0822 15:50:04.655909    3064 start_master.go:783] Started "garbagecollector"
+I0822 15:50:04.656390    3064 garbagecollector.go:122] Garbage Collector: Initializing
+I0822 15:50:04.781251    3064 start_master.go:783] Started "disruption"
+I0822 15:50:04.781863    3064 disruption.go:269] Starting disruption controller
+I0822 15:50:04.886401    3064 start_master.go:783] Started "openshift.io/build-config-change"
+I0822 15:50:04.950548    3064 start_master.go:783] Started "openshift.io/deploymenttrigger"
+I0822 15:50:05.035533    3064 imagestream_controller.go:65] Starting image stream controller
+I0822 15:50:05.087043    3064 start_master.go:783] Started "openshift.io/image-import"
+I0822 15:50:05.088341    3064 scheduled_image_controller.go:59] Starting scheduled import controller
+I0822 15:50:05.237078    3064 start_master.go:783] Started "openshift.io/cluster-quota-reconciliation"
+I0822 15:50:05.294546    3064 start_master.go:783] Started "job"
+I0822 15:50:05.348123    3064 start_master.go:783] Started "replicaset"
+I0822 15:50:05.349005    3064 replica_set.go:155] Starting ReplicaSet controller
+I0822 15:50:05.403860    3064 start_master.go:783] Started "podgc"
+W0822 15:50:05.403890    3064 start_master.go:765] "bootstrapsigner" is skipped
+I0822 15:50:05.465552    3064 start_master.go:783] Started "openshift.io/origin-namespace"
+I0822 15:50:05.544187    3064 start_master.go:783] Started "openshift.io/deploymentconfig"
+I0822 15:50:05.544556    3064 factory.go:84] Starting deploymentconfig controller
+I0822 15:50:05.598406    3064 start_master.go:783] Started "attachdetach"
+I0822 15:50:05.598838    3064 attach_detach_controller.go:239] Starting Attach Detach Controller
+I0822 15:50:05.658890    3064 start_master.go:783] Started "cronjob"
+I0822 15:50:05.659220    3064 cronjob_controller.go:95] Starting CronJob Manager
+E0822 15:50:05.718402    3064 certificates.go:38] Failed to start certificate controller: open : no such file or directory
+W0822 15:50:05.719158    3064 start_master.go:780] Skipping "certificatesigningrequests"
+W0822 15:50:05.719275    3064 start_master.go:765] "openshift.io/templateinstance" is skipped
+I0822 15:50:05.779382    3064 start_master.go:783] Started "endpoint"
+I0822 15:50:05.834190    3064 start_master.go:783] Started "horizontalpodautoscaling"
+I0822 15:50:05.834950    3064 horizontal.go:140] Starting HPA Controller
+I0822 15:50:05.897759    3064 start_master.go:783] Started "daemonset"
+I0822 15:50:05.898175    3064 daemoncontroller.go:199] Starting Daemon Sets controller manager
+I0822 15:50:05.948267    3064 start_master.go:783] Started "openshift.io/ingress-ip"
+I0822 15:50:05.950219    3064 start_master.go:783] Started "openshift.io/origin-to-rbac"
+I0822 15:50:05.952869    3064 generic.go:33] Starting OriginClusterRoleToRBACClusterRoleController controller
+I0822 15:50:05.953134    3064 generic.go:33] Starting OriginClusterRoleBindingToRBACClusterRoleBindingController controller
+I0822 15:50:05.953287    3064 generic.go:33] Starting OriginRoleToRBACRoleController controller
+I0822 15:50:05.953415    3064 generic.go:33] Starting OriginRoleBindingToRBACRoleBindingController controller
+I0822 15:50:06.039687    3064 start_master.go:783] Started "persistentvolume-binder"
+W0822 15:50:06.040005    3064 core.go:33] NodeController failed parsing cluster CIDR : invalid CIDR address: 
+W0822 15:50:06.040516    3064 core.go:38] NodeController failed parsing service CIDR : invalid CIDR address: 
+I0822 15:50:06.094238    3064 nodecontroller.go:219] Sending events to api server.
+I0822 15:50:06.094689    3064 taint_controller.go:157] Sending events to api server.
+I0822 15:50:06.094883    3064 start_master.go:783] Started "node"
+I0822 15:50:06.150509    3064 start_master.go:783] Started "openshift.io/serviceaccount-pull-secrets"
+I0822 15:50:06.264317    3064 start_master.go:783] Started "openshift.io/build"
+I0822 15:50:06.348333    3064 start_master.go:783] Started "openshift.io/image-trigger"
+I0822 15:50:06.348719    3064 image_trigger_controller.go:214] Starting trigger controller
+I0822 15:50:06.555452    3064 master.go:42] Initializing SDN master of type "redhat/openshift-ovs-subnet"
+I0822 15:50:06.809389    3064 master.go:87] Created ClusterNetwork default (network: "10.128.0.0/14", hostSubnetBits: 9, serviceNetwork: "172.30.0.0/16", pluginName: "redhat/openshift-ovs-subnet")
+I0822 15:50:07.067202    3064 start_master.go:783] Started "openshift.io/sdn"
+I0822 15:50:07.549466    3064 start_master.go:783] Started "openshift.io/unidling"
+I0822 15:50:07.709552    3064 start_master.go:783] Started "replicationcontroller"
+W0822 15:50:07.709889    3064 start_master.go:765] "tokencleaner" is skipped
+W0822 15:50:07.710051    3064 start_master.go:765] "ttl" is skipped
+I0822 15:50:07.713189    3064 start_master.go:783] Started "openshift.io/scheduler"
+I0822 15:50:07.713711    3064 start_master.go:786] Started Origin Controllers
+I0822 15:50:07.715546    3064 replication_controller.go:150] Starting RC Manager
+I0822 15:50:07.847951    3064 factory.go:91] deploymentconfig controller caches are synced. Starting workers.
+I0822 15:50:07.924945    3064 build_controller.go:164] Starting build controller
+I0822 15:50:07.925705    3064 factory.go:90] Deployer controller caches are synced. Starting workers.
+I0822 15:50:07.926186    3064 disruption.go:277] Sending events to api server.
+I0822 15:50:07.926362    3064 buildconfig_controller.go:185] Starting buildconfig controller
+I0822 15:50:07.934455    3064 taint_controller.go:180] Starting NoExecuteTaintManager
+I0822 15:50:07.977407    3064 garbagecollector.go:127] Garbage Collector: All resource monitors have synced. Proceeding to collect garbage
+E0822 16:00:45.364964    3064 actual_state_of_world.go:473] Failed to set statusUpdateNeeded to needed true because nodeName="node01"  does not exist
+E0822 16:00:45.365627    3064 actual_state_of_world.go:487] Failed to update statusUpdateNeeded field in actual state of world: Failed to set statusUpdateNeeded to needed true because nodeName="node01"  does not exist
+I0822 16:00:45.408749    3064 subnets.go:95] Created HostSubnet node01 (host: "node01", ip: "192.168.1.117", subnet: "10.128.0.0/23")
+I0822 16:00:47.973932    3064 nodecontroller.go:633] Initializing eviction metric for zone: 
+W0822 16:00:47.975600    3064 nodecontroller.go:956] Missing timestamp for Node node01. Assuming now as a timestamp.
+I0822 16:00:47.976186    3064 nodecontroller.go:822] NodeController detected that all Nodes are not-Ready. Entering master disruption mode.
+I0822 16:00:47.979939    3064 event.go:217] Event(v1.ObjectReference{Kind:"Node", Namespace:"", Name:"node01", UID:"005c25f3-8710-11e7-a849-080027ea6dc2", APIVersion:"", ResourceVersion:"", FieldPath:""}): type: 'Normal' reason: 'RegisteredNode' Node node01 event: Registered Node node01 in NodeController
+I0822 16:00:57.976832    3064 nodecontroller.go:849] NodeController detected that some Nodes are Ready. Exiting master disruption mode.
+I0822 16:23:03.080224    3064 event.go:217] Event(v1.ObjectReference{Kind:"Node", Namespace:"", Name:"node01", UID:"005c25f3-8710-11e7-a849-080027ea6dc2", APIVersion:"", ResourceVersion:"", FieldPath:""}): type: 'Normal' reason: 'NodeNotReady' Node node01 status is now: NodeNotReady
+I0822 16:23:03.092487    3064 nodecontroller.go:822] NodeController detected that all Nodes are not-Ready. Entering master disruption mode.
+I0822 16:23:48.095936    3064 nodecontroller.go:849] NodeController detected that some Nodes are Ready. Exiting master disruption mode.
+
+

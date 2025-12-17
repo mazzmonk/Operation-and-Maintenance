@@ -1,0 +1,26 @@
+#include <iostream>
+#include <climits>
+#include <cfloat>
+
+using namespace std;
+
+int main()
+{
+	cout << "short maximum: " << sizeof(short) << endl;
+	cout << "int maximum: " << sizeof(int) << endl;
+	cout << "long maximum: " << sizeof(long) << endl << endl;
+		
+	cout << "double precision digits: " << DBL_DIG << endl;
+	cout << "double maximum exponent: " << DBL_MAX_10_EXP << endl;
+	cout << "double maximum: " << sizeof(double) << endl << endl;
+
+	cout << "long double precision: " << LDBL_DIG << endl;
+	cout << "long double maximum exponse: " << LDBL_MAX_10_EXP << endl;
+	cout << "long double maximum: " << sizeof(long double) << endl;
+ 
+
+	return 0;
+}
+
+
+

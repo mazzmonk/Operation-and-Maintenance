@@ -1,0 +1,256 @@
+将一个文件拷贝至多个目录
+
+xargs -n 1 cp -v filename<<<"/dir1/ /dir2/ /dir3/" 
+ 
+## OR ##
+echo "/dir1/ /dir2/ /dir3/" | xargs -n 1 cp -v filename
+
+
+
+xargs 命令的作用,是将管道前面标准输出转为 xargs 后面跟的命令的参数.
+
+$ echo "hello world" | xargs echo
+hello world
+
+上面的代码将管道左侧的标准输入,转为命令行参数 hello world,传给第二个 echo 命令.
+
+
+xargs 命令的格式如下.
+
+$ xargs [-options] [command]
+
+真正执行的命令,紧跟在 xargs 后面,接受 xargs 传来的参数.
+
+xargs的作用在于,大多数命令(比如rm、mkdir、ls)与管道一起使用时,都需要xargs将标准输入转为命令行参数.
+
+
+$ echo "one two three" | xargs mkdir
+
+上面的代码等同于 mkdir one two three.如果不加 xargs 就会报错,提示 mkdir 缺少操作参数.
+
+
+# xargs 的单独使用
+xargs 后面的命令默认是 echo.
+
+$ xargs
+
+等同于
+
+$ xargs echo
+
+
+大多数时候,xargs 命令都是跟管道一起使用的.但是,它也可以单独使用.
+
+输入 xargs 按下回车以后,命令行就会等待用户输入,作为标准输入.你可以输入任意内容,然后按下 Ctrl d,表示输入结束,这时 echo 命令就会把前面的输入打印出来.
+
+$ xargs
+hello (Ctrl + d)
+hello
+
+再看一个例子.
+
+$ xargs find -name
+"*.txt"
+./foo.txt
+./hello.txt
+
+上面的例子输入 xargs find -name 以后,命令行会等待用户输入所要搜索的文件.用户输入 "*.txt",表示搜索当前目录下的所有 TXT 文件,然后按下 Ctrl d,表示输入结束.这时就相当执行 find -name *.txt.
+
+
+# -d 参数与分隔符
+默认情况下,xargs 将换行符和空格作为分隔符,把标准输入分解成一个个命令行参数.
+
+$ echo "one two three" | xargs mkdir
+上面代码中,mkdir 会新建三个子目录,因为 xargs 将 one two three 分解成三个命令行参数,执行 mkdir one two three.
+
+
+-d参数可以更改分隔符.
+
+$ echo -e "a\tb\tc" | xargs -d "\t" echo
+a b c
+
+上面的命令指定制表符 \t 作为分隔符,所以 a\tb\tc 就转换成了三个命令行参数.echo 命令的 -e 参数表示解释转义字符.
+
+
+# -p 参数,-t 参数
+使用 xargs 命令以后,由于存在转换参数过程,有时需要确认一下到底执行的是什么命令.
+
+-p 参数打印出要执行的命令,询问用户是否要执行.
+
+$ echo 'one two three' | xargs -p touch
+touch one two three ?...
+上面的命令执行以后,会打印出最终要执行的命令,让用户确认.用户输入y以后(大小写皆可),才会真正执行.
+
+
+-t参数则是打印出最终要执行的命令,然后直接执行,不需要用户确认.
+
+$ echo 'one two three' | xargs -t rm
+rm one two three
+
+
+# -0 参数与 find 命令
+由于 xargs 默认将空格作为分隔符,所以不太适合处理文件名,因为文件名可能包含空格.
+
+find 命令有一个特别的参数 -print0,指定输出的文件列表以 null 分隔.然后,xargs 命令的 -0 参数表示用 null 当作分隔符.
+
+$ find /path -type f -print0 | xargs -0 rm
+
+上面命令删除 /path 路径下的所有文件.由于分隔符是 null,所以处理包含空格的文件名,也不会报错.
+
+还有一个原因,使得 xargs 特别适合find命令.有些命令(比如 rm)一旦参数过多会报错"参数列表过长",而无法执行,改用 xargs 就没有这个问题,因为它对每个参数执行一次命令.
+
+
+$ find . -name "*.txt" | xargs grep "abc"
+上面命令找出所有 TXT 文件以后,对每个文件搜索一次是否包含字符串 abc.
+
+
+例子:
+$ touch "a b.txt"       # 文件名中包含空格
+$ ls
+ a  'a b.txt'   b   c   d   e
+
+$ find . -type f -print0 |xargs  ls
+xargs: 警告: 输入中有个 NUL 字符.它不能在参数列表中传送.您是想用 --null 选项吗？
+ls: 无法访问 'b.txt': 没有那个文件或目录
+./a
+
+$ find . -type f -print0 |xargs -0 ls
+ ./a  './a b.txt'   ./b   ./c   ./d   ./e
+
+
+
+# -L 参数
+如果标准输入包含多行,-L 参数指定多少行作为一个命令行参数.
+意思就是当管道前一个命令的输出有多行的时候,-L 可以将这多行指定成多少行作为 xargs 后面接的命令的参数
+
+
+例子:
+$ echo -e "a\nb\nc"
+a
+b
+c
+
+$ echo -e "a\nb\nc" |xargs echo
+a b c
+
+$ echo -e "a\nb\nc" |xargs -L 2 echo
+a b
+c
+
+$ echo -e "a\nb\nc" |xargs -L 1 echo
+a
+b
+c
+
+$ ls
+ 1.txt   2.txt   3.txt   a  'a b.txt'   b   c   d   e
+
+$ find . -name "*.txt"
+./a b.txt
+./1.txt
+./2.txt
+./3.txt
+
+$ find . -name "*.txt" |xargs -L 3 
+./a b.txt ./1.txt ./2.txt
+./3.txt
+
+$ find . -name "*.txt" |xargs -L 2
+./a b.txt ./1.txt
+./2.txt ./3.txt
+
+$ find . -name "*.txt" |xargs -L 1
+./a b.txt
+./1.txt
+./2.txt
+./3.txt
+
+$ echo -e "one\ntwo\nthree" |xargs -L 1 echo > foo.txt
+$ more foo.txt 
+one
+two
+three
+
+
+# -n 参数
+-L 参数虽然解决了多行的问题,但是有时用户会在同一行输入多项.
+-n 参数和 -L 正好相反,当前一个命令输出是一行的时候,可以使用 -n 将其分成多行供后面的命令作为参数
+
+
+
+$ xargs -n 1 find -name
+上面命令指定将每一项(-n 1)标准输入作为命令行参数,分别执行一次命令(find -name).
+
+
+例子:
+$ echo {0..9}
+0 1 2 3 4 5 6 7 8 9
+
+$ echo {0..9} |xargs -n 2 echo
+0 1
+2 3
+4 5
+6 7
+8 9
+
+$ echo {0..9} |xargs -n 3 echo
+0 1 2
+3 4 5
+6 7 8
+9
+
+
+# -I 参数(非常的有用)
+如果xargs要将命令行参数传给多个命令,可以使用-I参数.
+可以将理解为 -I 参数后面跟一个占位符号或者说一个变量,在后续的命令中可以用这个变量作为参数,而这个变量的值则是前面命令的参数
+
+-I指定每一项命令行参数的替代字符串.
+
+
+$ cat foo.txt
+one
+two
+three
+
+$ cat foo.txt | xargs -I file sh -c 'echo file; mkdir file'
+one 
+two
+three
+
+$ ls 
+one two three
+
+上面代码中,foo.txt是一个三行的文本文件.我们希望对每一项命令行参数,执行两个命令（echo和mkdir）,使用-I file表示file是命令行参数的替代字符串.执行命令时,具体的参数会替代掉echo file; mkdir file里面的两个file.
+
+$ ls *.txt 
+ 1.txt   2.txt   3.txt  'a b.txt'   foo.txt
+
+$ ls *.txt |xargs -I file cp file one/
+$ ls one/
+ 1.txt   2.txt   3.txt  'a b.txt'   foo.txt
+
+这里的 file 这个变量在后面的 cp 这个命令中作为了参数
+有个细节需要注意,xargs 没有用 -n1 这个参数,此时后面的 cp 这个命令应该是 cp  1.txt   2.txt   3.txt  'a b.txt'   foo.txt one/,命令在执行的时候,仍然是按照如下的方式执行
+
+'1.txt' -> 'one/1.txt'
+'2.txt' -> 'one/2.txt'
+'3.txt' -> 'one/3.txt'
+'a b.txt' -> 'one/a b.txt'
+'foo.txt' -> 'one/foo.txt'
+
+即是把参数拆成一个一个的用,这是 cp 这个命令的特殊之处,如果碰到其他命令或者脚本之类的,-n1 这个参数是需要的
+
+
+# --max-procs 参数
+xargs 默认只用一个进程执行命令.如果命令要执行多次,必须等上一次执行完,才能执行下一次.
+
+--max-procs参数指定同时用多少个进程并行执行命令.--max-procs 2表示同时最多使用两个进程,--max-procs 0表示不限制进程数.
+
+$ docker ps -q | xargs -n 1 --max-procs 0 docker kill
+上面命令表示,同时关闭尽可能多的 Docker 容器,这样运行速度会快很多.
+
+
+
+
+
+

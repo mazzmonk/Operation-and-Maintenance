@@ -1,0 +1,43 @@
+使用的官方的监控模式
+连接：
+https://github.com/zabbix/zabbix/tree/master/templates/db/postgresql
+注意使用 4.4.6中的内容
+
+
+使用的zabbix 4.4.6,postgres 10.x
+
+1. 建立postgres用户用于监控
+CREATE USER zbx_monitor WITH PASSWORD 'zabbix' INHERIT;
+GRANT pg_monitor TO zbx_monitor;
+alter USER zbx_monitor PASSWORD 'zabbix';    # 修改用户密码
+
+2. 使用psql命令的时候，必须在对应的home目录下建立.pgpass文件,这样，在使用此命令的时候，不用明文密码，此命令也不允许使用明文密码
+
+内容为
+ip:port:dbname:user:passwd
+172.20.20.3:54321:postgres:zbx_monitor:zabbix
+
+3. 将脚本里的postgresql文件夹复制到/var/lib/zabbix
+
+4. template_db_postgresql.conf这个配置文件里的命令必须是绝对路径
+
+UserParameter=pgsql.bgwriter[*], /usr/local/bin/psql -qtAX -h "$1" -p "$2" -U '${3}' -d "$4" -f "/var/lib/zabbix/postgresql/pgsql.bgwriter.sql"
+
+UserParameter=pgsql.connections.sum[*], /usr/local/bin/psql -qtAX -h "$1" -p "$2" -U '${3}' -d "$4" -f "/var/lib/zabbix/postgresql/pgsql.connections.sum.sql"
+UserParameter=pgsql.connections[*], /usr/local/bin/psql -qtAX -h "$1" -p "$2" -U '${3}' -d "$4" -f "/var/lib/zabbix/postgresql/pgsql.connections.sql"
+UserParameter=pgsql.connections.prepared[*], /usr/local/bin/psql -qtAX -h "$1" -p "$2" -U '${3}' -d "$4" -f "/var/lib/zabbix/postgresql/pgsql.connections.prepared.sql"
+
+UserParameter=pgsql.dbstat.sum[*], /usr/local/bin/psql -qtAX -h "$1" -p "$2" -U '${3}' -d "$4" -f "/var/lib/zabbix/postgresql/pgsql.dbstat.sum.sql"
+UserParameter=pgsql.dbstat[*], /usr/local/bin/psql -qtAX -h "$1" -p "$2" -U '${3}' -d "$4" -f "/var/lib/zabbix/postgresql/pgsql.dbstat.sql"
+
+UserParameter=pgsql.transactions[*], /usr/local/bin/psql -qtAX -h "$1" -p "$2" -U '${3}' -d "$4" -f "/var/lib/zabbix/postgresql/pgsql.transactions.sql"
+UserParameter=pgsql.config.hash[*], /usr/local/bin/psql -qtAX -h "$1" -p "$2" -U '${3}' -d "$4" -f "/var/lib/zabbix/postgresql/pgsql.config.hash.sql"
+UserParameter=pgsql.wal.stat[*], /usr/local/bin/psql -qtAX -h "$1" -p "$2" -U '${3}' -d "$4" -f "/var/lib/zabbix/postgresql/pgsql.wal.stat.sql"
+UserParameter=pgsql.locks[*], /usr/local/bin/psql -qtAX -h "$1" -p "$2" -U '${3}' -d "$4" -f "/var/lib/zabbix/postgresql/pgsql.locks.sql"
+UserParameter=pgsql.queries[*], /usr/local/bin/psql -qtAX -h "$1" -p "$2" -U '${3}' -d "$4" -v tmax=$5 -f "/var/lib/zabbix/postgresql/pgsql.query.time.sql"
+UserParameter=pgsql.uptime[*], /usr/local/bin/psql -qtAX -h "$1" -p "$2" -U '${3}' -d "$4" -f "/var/lib/zabbix/postgresql/pgsql.uptime.sql"
+UserParameter=pgsql.cache.hit[*], /usr/local/bin/psql -qtAX -h "$1" -p "$2" -U '${3}' -d "$4" -f "/var/lib/zabbix/postgresql/pgsql.cache.hit.sql"
+UserParameter=pgsql.scans[*], /usr/local/bin/psql -qtAX -h "$1" -p "$2" -U '${3}' -d "$4" -f "/var/lib/zabbix/postgresql/pgsql.scans.sql"
+UserParameter=pgsql.frozenxid[*], /usr/local/bin/psql -qtAX -h "$1" -p "$2" -U '${3}' -d "$4" -f "/var/lib/zabbix/postgresql/pgsql.frozenxid.sql"
+
+在建立模板的以后，修改宏的ip地址，用户，数据库信息，哪里的信息将传给zabbix_agentd端，做为参数传给脚本

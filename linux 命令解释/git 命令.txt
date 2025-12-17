@@ -1,0 +1,77 @@
+# 克隆https://github.com/blue/abc.git的分支feature/librarySharing,潜克隆,最后的历史
+
+git clone --depth 1 -b feature/librarySharing https://github.com/blue/abc.git
+
+
+使用git lfs方式下载大的文件,包括二进制文件
+git lfs clone --depth 1 -b release/yuyuan --depth=1 https://github.com/blue/abc.git
+
+git命令没有办法下载dll,exe等等文件,可以使用git-lfs的工具来完成,
+https://coding.net/help/doc/git/git-lfs.html
+有安装及介绍
+
+并且使用git lfs来push的代码,都有.gitattributes文件
+
+ubuntu上安装git lfs 
+查看git版本
+因为安装 Git LFS 需要 Git 的版本不低于 1.8.5, 所以安装之前, 需要先查看自己的git版本. 
+
+$ curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | sudo bash
+$ sudo apt-get install git-lfs
+$ git lfs install
+
+$ git --version
+
+报错
+error: RPC 失败. curl 56 GnuTLS recv error (-9): A TLS packet with unexpected length was received.
+
+sudo apt-get update
+sudo apt-get install build-essential fakeroot dpkg-dev libcurl4-openssl-dev
+sudo apt-get build-dep git
+mkdir ~/git-openssl
+cd ~/git-openssl
+apt-get source git
+dpkg-source -x git_1.7.9.5-1.dsc
+cd git-1.7.9.5
+然后 , 编辑debian/control 文件并全部替换 libcurl4-gnutls-dev 为 libcurl4-openssl-dev. 删除debian/rules文件中的TEST=test 接下来编译并安装
+
+sudo dpkg-buildpackage -rfakeroot -b
+sudo dpkg -i ../git_1.7.9.5-1_i386.deb //for arch i386
+sudo dpkg -i ../git_1.7.9.5-1_amd64.deb // for arch x64
+一切顺利的话安装成功.重新使用repo sync.你会发现不再有GnuTLS recv error (-9): A TLS packet with unexpected length was received 这样的错误了. 然后新的错误又出来了error: RPC failed; curl 18 transfer closed with outstanding read data remaining 这说明我们费尽心思替换掉GnuTLS并没有什么卵用. 巨坑..
+
+设置git 的http.postBuffer,单位是b, 下边这个才500M, 估计要调到2G才足够大 (有用),记住设置https
+
+git config --global http.postBuffer 90000000000
+git config --global https.postBuffer 90000000000
+
+# 设置代理
+#git config --global http.proxy 'socks5://172.20.20.4:8888'
+#git config --global https.proxy 'socks5://172.20.20.4:8888'
+
+git config --global --unset http.proxy
+git config --global --unset https.proxy
+
+git config --global http.proxy 'http://172.20.20.4:808'
+git config --global https.proxy 'https://172.20.20.4:808'
+
+
+# git设置免用户密码pull
+$ git config --global credential.helper store 
+
+会生成~/.gitconfig 文件,其中会生成如下的内容
+[credential]
+	helper = store
+
+然后使用正常登录一次,密码及用户就会保存下来,会生成~/.git-credentials文件,其中的内容类似
+# 用户abc@abc.com,密码admin_123
+https://abc%40abc.com:admin_123@github.com
+
+ 
+
+
+
+
+
+
+

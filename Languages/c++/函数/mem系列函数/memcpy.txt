@@ -1,0 +1,72 @@
+函数原型
+void *memcpy(void*dest, const void *src, size_t n);
+功能
+由src指向地址为起始地址的连续n个字节的数据复制到以destin指向地址为起始地址的空间内。
+头文件
+#include<string.h>
+返回值
+　　函数返回一个指向dest的指针。
+说明
+　　1.source和destin所指内存区域不能重叠，函数返回指向destin的指针。
+　　2.与strcpy相比，memcpy并不是遇到'\0'就结束，而是一定会拷贝完n个字节。
+memcpy用来做内存拷贝，你可以拿它拷贝任何数据类型的对象，可以指定拷贝的数据长度；
+例：
+　　char a[100], b[50];
+　　memcpy(b, a,sizeof(b)); //注意如用sizeof(a)，会造成b的内存地址溢出。
+　　strcpy就只能拷贝字符串了，它遇到'\0'就结束拷贝；例：
+　　char a[100], b[50];
+strcpy(a,b);
+　　3.如果目标数组destin本身已有数据，执行memcpy（）后，将覆盖原有数据（最多覆盖n）。如果要追加数据，则每次执行memcpy后，要将目标数组地址增加到你要追加数据的地址。
+　　//注意，source和destin都不一定是数组，任意的可读写的空间均可。
+程序例
+example1
+　　作用：将s中的字符串复制到字符数组d中。
+　　//memcpy.c
+　　#include<stdio.h>
+　　#include<string.h>
+　　intmain()
+　　{
+　　char*s="Golden Global View";
+　　chard[20];
+　　clrscr();
+　　memcpy(d,s,strlen(s));
+　　d[strlen(s)]='\0';//因为从d[0]开始复制，总长度为strlen(s)，d[strlen(s)]置为结束符
+　　printf("%s",d);
+　　getchar();
+　　return0;
+　　}
+　　输出结果：GoldenGlobal View
+example2
+　　作用：将s中第14个字符开始的4个连续字符复制到d中。(从0开始)
+　　#include<string.h>
+　　intmain()
+　　{
+　　char*s="Golden Global View";
+　　chard[20];
+　　memcpy(d,s+14,4);//从第14个字符(V)开始复制，连续复制4个字符(View)
+　　//memcpy(d,s+14*sizeof(char),4*sizeof(char));也可
+　　d[4]='\0';
+　　printf("%s",d);
+　　getchar();
+　　return0;
+　　}
+　　输出结果：　View
+example3
+　　作用：复制后覆盖原有部分数据
+　　#include<stdio.h>
+　　#include<string.h>
+　　intmain(void)
+　　{
+　　charsrc[] = "******************************";
+　　chardest[] = "abcdefghijlkmnopqrstuvwxyz0123as6";
+　　printf("destinationbefore memcpy: %s\n", dest);
+　　memcpy(dest,src, strlen(src));
+　　printf("destinationafter memcpy: %s\n", dest);
+　　return0;
+　　}
+　　输出结果：
+　　destinationbefore memcpy:abcdefghijlkmnopqrstuvwxyz0123as6
+　　destinationafter memcpy: ******************************as6
+顶
+1
+

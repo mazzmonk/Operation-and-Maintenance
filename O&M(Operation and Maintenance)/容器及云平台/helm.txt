@@ -1,0 +1,62 @@
+helm的服务端是作为k8s的一个应用部署在集群上,所使用的Deployment,svc文件内容,如下查看:
+$ helm init --dry-run --debug
+
+查看那官方的Kubernetes charts repository
+$ helm search
+
+$ helm install stable/prometheus 或者 $ helm list
+出現錯誤提示：“default” is forbidden: User “system:serviceaccount:kube-system:default” cannot get namespaces in the namespace “default”
+解决方式:
+$kubectl --namespace kube-system create serviceaccount tiller
+$kubectl create clusterrolebinding tiller --clusterrole cluster-admin --serviceaccount=kube-system:tiller
+$helm init --service-account tiller --upgrade
+
+何时需要从群集中卸载或删除发行版时，请使用以下helm delete命令：
+$ helm delete happy-panda
+
+helm list命令查看所有当前部署的版本：
+$ helm list
+
+需要查看已删除的版本
+$ helm list --deleted
+
+并helm list --all显示所有版本(已删除和当前部署，以及失败的版本):
+$ helm list --all
+
+
+
+helm安装chart可以使用远程仓库,也可以是本地的文件
+
+
+# Error: repo istio.io not found
+
+
+
+
+
+# 项目中的文件及值的介绍
+
+在templates/deployment.yaml,_helpers.tpl,ingress.yaml,service.yaml文件中定义的变量的值对于上层目录中的Chart.yaml,values.yaml文件的值
+在deployment.yaml比如:
+.Values.replicaCount对应于values.yaml文件中的replicaCount的值
+.Chart.Name对应于Chart.yaml文件中的name的值
+
+
+.Release这个变量的解释如下:
+
+所有使用helm部署的应用中如果没有特别指定chart的名字都会生成一个随机的Release name，例如romping-frog、sexy-newton等，跟启动docker容器时候容器名字的命名规则相同，而真正的资源对象的名字是在YAML文件中定义的名字，我们成为App name，两者连接起来才是资源对象的实际名字：Release name-App name。
+
+而使用helm chart部署的包含依赖关系的应用，都会使用同一套Release name，在配置YAML文件的时候一定要注意在做服务发现时需要配置的服务地址，如果使用环境变量的话，需要像下面这样配置。
+
+env:
+ - name: SERVICE_NAME
+   value: "{{ .Release.Name }}-{{ .Values.image.env.SERVICE_NAME }}"
+这是使用了Go template的语法。至于{{ .Values.image.env.SERVICE_NAME }}的值是从values.yaml文件中获取的，所以需要在values.yaml中增加如下配置：
+
+image:
+  env:
+    SERVICE_NAME: k8s-app-monitor-test
+
+
+
+比如项目名称为mongodb的时候,mongodb.name,mongodb.chart这2个变量也未知

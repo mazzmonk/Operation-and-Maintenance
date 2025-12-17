@@ -1,0 +1,671 @@
+
+在设计class时候,优先考虑如下的问题.
+设计class犹如设计type	- Effective C++ 改善程序与设计的55个具体做法 [p57]
+*************************************************************************************
+如何设计高效的classes?必须了解你面对的问题.几乎每一个class都要求你面对如下的提问.
+1. 新type的对象应该如何被创建和销毁?这会影响到你的class的构造函数和析构函数以及内存分配函数和释放函数(operator new,operator new [],operator delete和operator delete [] - 见第8章)的设计,当然前提是如果你打算写他们.
+2. 对象的初始化和对象的赋值该有什么样的差别?这个答案决定你的构造函数和赋值(assignment)操作符的行为,以及其间的差异.很重要的别混淆了"初始化"和"赋值",因为它们对于不同的函数调用(见条款4)
+3. 新的type的对象如果被passed by balue(以值传递),意味着什么?记住,copy构造函数用来定义一个type的passed-by-value该如何实现.
+4. 什么是新type的"合法值"?对class的成员变量而言,通常只有某些数值集是有效的.那些数值决定了你的class必须维护的约束条件(invariants),也就决定了你的成员函数(特别是构造函数,赋值操作符和所谓"setter"函数)必须进行的错误检查工作.它也影响函数抛出的异常,已经(极少被使用的)函数异常明细列(exception specifications)
+5. 你的新type需要配合某个继承图系(inheritance graph)吗?如果你继承自某些既有的classes,你就受到那些classes的设计的束缚,特别是受到"他们的函数是virtual或non-virtual"的影响(见条款34和条款6).如果你允许其他classes继承你的class,那会影响你声明的函数 - 由其是析构函数 - 是否为virtual(见条款7)
+6. 你的新type需要什么样的转换?你的type生存于其他一海票types之间,因而彼此该有转换行为吗?如果你希望允许类型T1之物被隐式转换为类型T2之物,就必须在class T1内写一个类型转换函数(operator T2)或在class T2内写一个non-explicit-one-argument(可被单一实参调用)的构造函数.如果你只允许explicit构造函数存在,就得写出专门负责执行转换的函数,且不得为类型转换操作符(type conversion operators)或non-explicit-one-argument构造函数.(条款15有隐式和显示转换函数的范例).
+7. 什么样的操作符和函数对此新type而言是合理的?这个问题答案决定你将为你的class声明那些函数.其中某些是member函数,某些则否(见条款23,24,46)
+8. 什么样的标准函数应该驳回?那些正是你必须声明为private者(见条款6)
+9. 谁该取用新type的成员?这个提问可以帮助你决定那个成员为public,哪个为protected,哪个为private,它也帮助你决定那一个classes和/或functions应该是friends,以及将它们嵌套于另一个之内是否合理
+10. 什么是新type的"未声明接口"(undeclared interface)?它对效率,异常安全性(见条款29)以及资源运用(例如多任务锁定和动态内存)提供何种保证?你在这些方面提供的保证将为你的class实现代码加上相应的约束条件
+11. 你的新type有多么一般化?或许你其实并非定义一个新type,而是定义一整个types家族.果真如此你就不该定义一个新class,而是应该定义一个新的class template
+12. 你真的需要一个新type吗?如果只是定义新的derived class以便为既有的class添加机能,那么说不定单纯定义一个或多个non-member函数或templates,更能够达到目标
+*************************************************************************************
+
+
+* 关于指针和引用的选择	- More Effective C++ 35个改善编程与设计的有效方法 [p11]
+当你知道你需要指向某个东西,而且绝不会改变指向其他东西,或是当你实现一个操作符而语法需求无法由pointers达成,你就应该选择references.任何其他时候,请选择pointers.	
+
+* 绝对不要以多态方式处理数组	- More Effective C++ 35个改善编程与设计的有效方法 [p16]
+C++允许你通过base class的pointers和references来操作"derived class objects"所形成的数组.但它几乎不会如你预期般地运作.
+例子:
+class BST { ... };
+class BalancedBST: public BST { ... };
+
+现在有个函数,用来打印BSTs数组中的每一个BST的内容:
+void printBSTArray(ostream& s, const BST array[], int numElements) {
+  for (int i = 0; i < numElements; ++i) {
+    s << array[i];
+  }
+}
+
+当将一个由BST对象组成的数组传给此函数,没有问题:
+BST BSTArray[10];
+...
+printBSTArray(cout, BSTArray, 10);
+
+如果将一个BalancedBST对象所组成的数组交给printBSTArray函数,会发生什么事情:
+BalancedBST bBSTArray[10];
+...
+printBSTArray(cout, bBSTArray, 10);
+
+此时,你的编译器会被误导,这种情况下它仍假设数组中的每个元素的大小是BST的大小,但其实每一个元素的大小是BalancedBST的大小,我们可以预期一个BalancedBST object比一个 BST object打.如果是这样,编译器为printBSTArray函数产生的指针算数表达式,对于 BalancedBST objects所组成的数组而言就是错误的,结果不可预期.
+
+如果你尝试通过一个base class指针,删除一个由derived class object组成的数组,那么当数组被删除,数组中的每一个元素的destructor都必须被调用,必然会导致未定义的行为.
+
+C++语言规范中说,通过base class指针删除一个由derived classes objects构成的数组,其结果未定义.简单的说,多态和指针算术不能混用.数组对象几乎总是会涉及到指针的算术运算,所以数组和多态不要混用.
+
+* new,delete	- More Effective C++ 35个改善编程与设计的有效方法 [p38]
+如果你打算处理原始的,未设置初值的内存,应该完全回避new operator和delete operators,改用operator new取得内存并以operator delete归还给系统:
+void* buffer = operator new(50*sizeof(char));
+...
+operator delete(bufffer);
+
+
+当面对数组的时候,下面会发生什么事情:
+string* ps = new string[10];	//分配一个对象数组
+
+上述使用的new仍然是那个new operator,但由于诞生的是数组,内存不在以operator new分配,而是由一个叫operator new[]函数负责分配.
+"数组版"与"单一对象版"的new operator的第二个不同是,它所调用的constructor数量.数组版new operator必须针对数组中的每个对象调用一个constructor:
+string* ps = new string[10];	//调用operator new[]以分配足够容纳10个string对象的内存,然后针对每个元素调用string default ctor.
+
+同样,当delete operator被用于数组,它会针对数组中的每个元素调用其destructor,然后调用operator delete[]释放内存:
+delete [] ps;	//为数组中的每个元素调用string dtor,然后调用operator delete[]以释放内存.
+
+* 利用destructors避免泄漏资源	- More Effective C++ 35个改善编程与设计的有效方法 [p45]
+考虑如下的继承
+
+class ALA {
+  publc:
+		virutal void processAdoption() = 0;
+		...
+};
+
+class Puppy: public ALA{
+	public:
+		virtual void processAdoption();
+		...
+};
+
+class Kitten: public ALA {
+	public:
+		virtual void processAdoption();
+		...
+};
+
+你需要一个函数,读取文件,并视文件内容产生一个Puppy object或者Kitten object.
+以下是声明需要的:
+ALA* readALA(istream& s);
+
+核心函数大概是这样
+void processAdoptions(istream& dataSource) {
+  while (dataSource) {
+		ALA* pa = readALA(dataSource);
+		pa->processAdoption();
+		delete pa;
+	}
+}
+
+现在考虑,如果pa->processAdoption抛出异常,processAdoption无法捕捉,所以异常会传播到processAdoptions的调用端.位于pa->processAdoption之后的所有语句都会被跳过,不在执行,这意味pa不会被删除.结果就是,只要pa->processAdoption抛出一个异常,processAdoptions便发生一次资源泄漏.
+
+只要我们把"一定得执行的清理代码"移到processAdoptions函数的某个局部对象的destructor内即可.因为局部对象总是会在函数结束时被析构,不论函数如何结束.
+解决办法是,以一个"类似指针的对象"取代指针pa.如此一来,当这个类似指针的对象被(自动)销毁,我们可以令其destructor调用delete."行为类似指针"的对象我们称为smart pointers.C++标准程序库提供了一个名为auto_ptr的class template,其行为正是我们需要的.
+
+void processAdoptions(istream& dataSource) {
+  while (dataSource) {
+		auto_ptr<ALA> pa(readALA(dataSource));
+		pa->processAdoption();
+}
+
+这一版和原版差异只有两处.第一,pa被声明为一个auto_ptr<ALA>对象,不再是原始的ALA*指针;第二,循环最后不再有delete语句.
+隐藏在auto_ptr背后的观念-以一个对象存放"必须自动释放资源",并依赖该对象的destructor释放-亦可以对"以指针为本"以外的资源施行.
+
+* 了解临时对象的来源	- More Effective C++ 35个改善编程与设计的有效方法 [p99]
+  C++真正的所谓的临时对象是不可见--不会在你的源代码中出现.只要你产生一个no-heap object而没有为它命名,便诞生了一个临时对象.此等匿名对象通常发生于两种情况:一个当隐式类型转换被施行起来以求函数调用能够成功;二是当函数返回对象的时候.
+size_t countChar(const string& st, char ch);
+
+char buffer[MAX_STRING_LEN];
+char c;
+
+cin >> c >> setw(MAX_STRING_LEN) >> buffer;
+
+cout << "There are " << countChar(buffer, c) << " Occurrences of the character " << c << " in " << buffer << endl;
+
+请看countChar的调用动作.其第一自变量是个char数组,但是相应的函数参数类型是const string&.当"类型不吻合"的状态消除,此函数调用才会成功;编译器很乐意消除此状态,做法是产生一个类型为string的临时对象.该对象初始化方式是:以buffer作为自变量,调用string constructor.于是countChar的str参数会被绑定于此string临时对象上.当countChar返回,此临时对象会被自动销毁.
+
+只有当对象以by value(传值)方式传递,或是当对象被传递给一个reference-const参数时,这些转换才会发生.如果对象被传递给一个reference-to-non-const参数,并不会发生此类转换.
+
+void uppercasify(string& str);
+
+char subtleBookPlug[] = "Effective C++";
+uppercasify(subtleBookPlug);		//错误
+
+不在有任何临时对象被产生出来以成全此函数的调用.为什么?
+
+  假设编译器以此产生一个临时对象,然后此临时对象被传递给uppercasify,以便将其中的字符全部修改写为大写.此函数的实元--subtleBOOkPlug--并未受到影响,只有以subtleBookPlug为本产生的那个string临时对象受到影响.这当然不是希望的结果.将subtleBookPlug传给uppercasify,就是希望subtleBookPlug被修改.当期望"非临时对象"被修改,此时如果编译器针对references-to-non-const对象进行隐式类型转换,会允许临时对象被修改.这就是为什么C++语言禁止为non-const-reference参数产生临时对象的原因.Reference-to-const参数则不需要承担此问题,因为此等参数由于const之故,无法被改变.
+
+第二种会产生临时对象的情况是当函数返回一个对象时.
+
+对其他"返回对象"的函数而言,大多数难以被另一个函数替代,所以没办法避免返回值的构造和析构.
+
+任何时候只要看到一个reference-to-const参数,就极有可能会有一个临时对象被产生出来绑定至该参数上.任何时候只要你看到函数返回一个对象,就会产生临时对象(并于稍后销毁).
+
+
+* 协助完成"返回值优化(RVO)"	- More Effective C++ 35个改善编程与设计的有效方法 [p101]
+  我们可以用某种特殊写法来撰写函数,使它在返回对象时,能够让编译器消除临时对象的成本.我们的伎俩:返回所谓的constructor arguments以取代对象.
+
+可以这么做:
+const Rational operator*(const Rational& lhs, const Rational& rhs) {
+  return Rational(lhs.numerator() * rhs.numerator(), lhs.denominator() * rhs.denominator());
+}
+
+利用函数的return点消除一个局部临时对象.
+
+* 考虑以操作符复合形式(op=)取代其独身形式(op)	
+  操作符的"复合版本"(例如,operator+=)比其对应的"独身版本"(例如,operator+)有着更高效率的倾向.身为一位程序库设计者,你应该两者都提供;身为一位应用软件开发者,如果性能是重要因素的话,你应该考虑以"复合版本"操作符取代其"独身版本".
+
+* 尽量以const,enum,inline替换#define	- Effective C++ 改善程序与设计的55个具体做法 [p13]
+对于单纯常量,最好以const对象或enums替换#define
+对于形似函数的宏(macros),最好改用inline函数替换#define
+
+* 尽可能使用const	- Effective C++ 改善程序与设计的55个具体做法 [p17]
+运用const成员函数实现出其non-const孪生兄弟的技术是值得了解的
+但是,反向做法-令const版本调用non-const版本以避免重复-并不是你该做的事.记住,const成员函数承诺绝不改变其对象的逻辑状态,non-const成员函数却没有这边承诺.如果在const函数内调用non-const函数,就是冒了这样的风险:你曾经承诺不改动的那个对象被改动了.
+
+* 确定对象在使用之前已先被初始化	- Effective C++ 改善程序与设计的55个具体做法 [p26]
+C++规定,对象的成员变量的初始化动作发生在进入构造函数本体之前.
+C++有着十分固定的"成员初始化次序".是的,次序总是相同:base classes总是早于derived classes被初始化,而class的成员变量总是以其声明次序被初始化.
+
+而不同编译单元内定义之non-local static对象的初始化次序并没有明确的定义.
+所谓static对象,其寿命从被构造出来直到程序结束为止.这种对象包括global对象,定义于namespace作用域内的对象,在classes内,在函数内,以及在file作用域内被声明为static的对象.函数内的static对象称为local static对象,其他static对象称为non-local static对象.程序结束时static对象会被自动销毁,也就是它们的析构函数会在main()结束时被自动调用.
+所谓的编译单元是指产出单一目标文件的那些源码.基本上它是单一源码文件加上其所含入的头文件(#define files)
+
+幸运的是一个小小的设计便可完全消除这个问题.唯一需要做的是:将每个non-local static对象搬到自己的专属函数内(该对象在此函数内被声明为static).这些函数返回一个reference指向它所含的对象.然后用户调用这些函数,而不是直接指涉这些对象.换句话说,non-local static对象被local static对象替换了.
+这个手法的基础在于:C++保证,函数内的local static对象会在"该函数被调用期间""首次遇上该对象之定义式"时被初始化.
+
+class FileSystem { ... };
+FileSystem& tfs() {
+  static FileSystem fs;
+  return fs;
+}
+
+class Directory { ... };
+Directory::Directory { params } {
+  ...
+  std::size_t disks = tfs().numDisks();
+  ..
+}
+
+Directory& tempDir() {
+  static Directory td;
+  return td;
+}
+
+但是从另一个角度来看,这些函数"内含static对象"的事实使他们在多线程中带有不确定性.再说一次,任何一种non-local static对象,不论它是local或non-local,在多线程环境下"等待某事发生"都会有麻烦.处理这个麻烦的一种做法是:在程序的单线程启动阶段手工调用所有reference-returning函数,这着可消除与初始化有关的"竞速形势"
+
+* 了解C++默默编写并调用那些函数	- Effective C++ 改善程序与设计的55个具体做法 [p34]
+class Empty {
+public:
+  Empty() { ... }				//default构造函数
+  Empty(const Empty& rhs) { ... }		//copy构造函数
+  ~Empty() { ... }				//析构函数,是否该是virtual,后叙
+
+  Empty& operator=(const Empty& rhs) { ... }	//copy assignment操作符
+};
+
+至于copy构造函数和copy assignment操作符,编译器创建的版本只是单纯地将来源对象的每一个non-static成员变量拷贝到目标对象.
+
+如果你打算在一个"内含reference成员"的class内支持赋值操作,你必须自己定义copy assignment操作符.面对"内含const成员"的classes,编译器反应也一样.
+
+原因在于,如果有reference成员时候,拷贝构造及赋值操作符得到的对象,会导致生成的新class中的reference成员指向了原class中reference成员指向的对象.
+
+* 为多态基类声明virtual析构函数	- Effective C++ 改善程序与设计的55个具体做法 [p40]
+class TimeKeeper {
+public:
+  TimeKeeper();
+  virtual ~TimeKeeper();
+  ...
+};
+
+class AtomicClock : public TimeKeeper { ... }; 	//原子钟
+class WaterClock : public TimeKeeper { ... }; 	//水表
+class WristWatch : public TimeKeeper { ... };	//腕表
+
+factory(工厂)函数,返回指针指向一个计时对象.Fatory函数会"返回一个base class指针,指向新生成之derived class对象":
+  
+TimeKeeper* getTimeKeeper();	//返回一个指针,指向一个TimeKeeper派生类的动态分配对象
+
+将factory函数返回的每一个对象适当地delete掉很重要:
+
+TimeKeeper* ptk = getTimeKeeper();
+...
+delete ptk;
+
+* 令operator=返回一个reference to *this		- Effective C++ 改善程序与设计的55个具体做法 [p52]
+
+class Widget {
+public:
+  ...
+
+Widget& operator=(const Widget& rhs) {		//返回类型是个reference指向当前对象
+  ...
+  return *this;					//返回左侧对象
+}
+
+...
+};
+
+class Wiget {
+public:
+  ...
+  Widget& operator+=(const Widget& rhs) {	//这个协议适用于+=,-=,*=等等.
+    ...
+    return *this;
+  }
+
+  Widget& operator=(int rhs) {			//此函数也适用,即使此一操作符的参数类型不符协定
+    ...
+    return *this;
+  }
+  ...
+};
+
+* 复制对象时勿忘其每一个成分	- Effective C++ 改善程序与设计的55个具体做法 [p57]
+在一个继承体系中,子类的默认copy函数只是复制此类的成员变量,对于base classes继承而来的成员变量不做任何操作.
+
+因此,任何时候只要你承担起"为derived class撰写copying函数"的重大责任,必须很小心地也复制起base class成分.那些成分往往是private,所以你无法直接访问它们,你应该让derived class的copying函数调用相应的base class函数:
+
+class Customer {
+public:
+  ...
+  Customer(const Customer& rhs);
+  Customer& operator=(const Customer& rhs);
+  ..
+
+private;
+  std::string name;
+};
+
+class PriorityCustomer : public Customer {
+public:
+  ...
+  PriorityCustomer(const PriorityCustomer& rhs);
+  PriorityCustomer& operator=(const PriorityCustomer& rhs);
+  ..
+
+private:
+  int priority;
+};
+
+
+PriorityCustomer::PriorityCustomr(const PriorityCustomer& rhs) : Customer(rhs), priority(rhs.priority) {
+  logCall("PriorityCustomer copy constructor");
+}
+
+PriorityCustomer& PriorityCustomer::operator=(const PriorityCustomer& rhs) {
+  logCall("PriorityCustomer copy assignment constructor");
+  Customer::operator=(rhs);
+  priority = rhs.priority;
+  return *this;
+}
+
+当编写一个copying函数,请确保(1)复制所有的local成员变量,(2)调用所有base classes内适当的copying函数(可能是copy构造,或者copy assignment).
+
+这两个copying函数往往有近似相同的的实现本体,但是令某个copying函数调用另一个copying函数却无法达到你想要的目标.
+令copy assignment操作符调用copy构造函数是不合理的,因为这就像试图构造一个已经存在的对象.
+反方向-令copy构造函数调用copy assignment操作符-同样无意义.构造函数用来初始化新对象,而assignment操作符只施行与已初始化对象身上,对一个尚未构造好的对象赋值,就像在一个尚未初始化的对象上做"只对已初始化对象才有意义"的事一样.
+如果你发现你的copy构造函数和copy assignment操作符有相近的代码,消除重复代码的做法是,建立一个新的成员函数给两者调用.这样的函数往往是private而且常被命名为init.这个策略可以安全消除copy构造函数和copy assignment操作符之间的代码重复.
+
+* 宁以pass-by-reference-to-const替换pass-by-value	- Effective C++ 改善程序与设计的55个具体做法 [p86]
+缺省情况下C++以by value方式传递对象至函数(或来自)函数.除非你另外指定,否则函数参数都是以实际实参的复件(副本)为初值,而调用端所获得的亦是函数返回值的一个复件.这些复件(副本)系由对象的copy构造函数产出,这可能使得pass-by-value成为昂贵的(费时的)操作.
+举个例子:
+假设你在一组classes上工作,用来实现一个图形窗口系统:
+
+class Window {
+public:
+	...
+	std::string name() const;				//返回窗口名称
+	virtual void display() const;		//显示窗口和其内容
+};
+
+class WindowWithScrollBars : public Window {
+public:
+	...
+	virtual void display() const;
+};
+
+display是一个virtual函数,这意味base class Window对象的显示方式和WindowWithScrollBars对象的显示方式不同
+
+现在假设你希望写个函数打印窗口名称,然后显示该窗口.下面是错误示范:
+
+void printNameAndDisplay(Window w) {
+	std::cout << w.name();
+	w.display();
+}
+
+当你调用上述函数并交给它一个WindowWithScrollBars对象,会发生什么?
+WindowWithScrollBars wwsb;
+printNameAndDisplay(wwsb);
+
+这里,参数w会被构造成为一个Window对象;它是passed by value.而造成wwsb "之所以是个windowWithScrollBars对象"的所有特话信息都会被切除.在printNameAndDisplay函数内不论传递过来的对象原本是什么类型,参数w就像一个Window对象(因为其类型是Window).因此在printNameAndDisplay内调用display调用的总是Window::display,绝不会是WindowWithScrollBars::display.
+
+解决切割(slicing)问题的办法,就是以by reference-to-const的方式传递w:
+void printNameAndDisplay(const Window& w) {
+	std::cout << w.name();
+	w.display();
+}
+现在,传进来的窗口是什么类型,w就表示出那种类型.
+
+如果窥视C++编译器的底层,你会发现,references往往以指针实现出来,因此pass by reference通常意味真正传递的指针.因此如果你有个对象属于内置类型(例如int),pass by value往往比pass by reference的效率高.
+
+一般而言,你可以合理假设"pass-by-value并不昂贵"的唯一对象就是内置类型和STL的迭代器和函数对象.至于其他任何东西都请尽量以pass-by-reference-to-const替换pass-by-value.
+
+* 必须返回对象时,别妄想返回其reference	- Effective C++ 改善程序与设计的55个具体做法 [p90]
+当你必须在"返回一个reference和返回一个object"之间快择时,你的工作就是挑出行为正确的那个.
+
+绝不要返回pointer或reference指向一个local stack对象,或返回reference指向一个heap-allocated对象,或返回pointer或reference指向一个local static对象而有可能同时需要多个这样的对象.
+
+* 若所有参数皆需类型转换,请为此采用non-member函数	- Effective C++ 改善程序与设计的55个具体做法 [p102]
+如果你需要为某个函数的所有参数(包括被this指针所指的那个隐喻参数)进行类型转换,那么这个函数必须是non-member.
+
+* 将文件间的编译依存关系降至最低	- Effective C++ 改善程序与设计的55个具体做法 [p140]
+
+class Person {
+public:
+	Person(const std::string& name, const Date& birthday, const Address& addr);
+	std::string name() const;
+	std::string birthDate() const;
+	std::string address() const;
+	...
+private:
+	std::string theName;		//实现细目
+	Date thebirthDate;			//实现细目
+	Address theAddress;			//实现细目
+
+这里的class Person无法通过编译-如果编译器没有取得其实现代码所用到的classes string,Date和Address的定义式.这样的定义式通常由#include提示符提供,所有Person定义文件的最上方可能存在这样的东西:
+
+#include <string>
+#include "date.h"
+#include "address.h"
+
+不幸的是,这么一来便是在Person定义文件和其含入文件之间形成一种编译依存关系.如果这些头文件中有任何一个被改变,或这些头文件所依赖的其他头文件有任何改变,那么每一个含入Person class的文件就得重新编译,任何使用Person class的文件也必须重新编译.这样的连串编译依存关系会对许多项目造成难以形容的灾难
+
+针对Person我们可以这样做:把Person分割为两个classes,一个只提供接口,另一个负责实现该接口.如果负责实现的那个所谓implementation class取名为PersonImpl,Person将定义如下:
+
+#include <string>		//标准程序库组件不该被前置声明
+#include <memory>		//此乃为了tr1::shared_ptr而含入
+
+class PersonImpl;		//Person实现类的前置声明
+class Date;				//Person接口用到的classes的前置声明
+class Adress;
+class person {
+public:
+	Person(const std::string& name, const Date& birthday, const Address& addr);
+	std::string name() const;
+	std::string birthDate() const;
+	std::string address() const;
+	...
+private:
+	std::tr1::shared_ptr<PersonImpl> pImpl;		//指针,指向实现物
+};
+
+在这里,main class(Person)只含一个指针成员(这里使用tr1::shared_ptr),指向其实现类(PersonImpl).这种设计通常被成为pimpl idiom(pimpl是"pointer to implementation"的缩写)
+
+这样的设计之下,Person的客户就完全与Dates,Addresses以及Persons的实现细目分离.那些classes的任何实现修改都不需要Person客户端重新编译.此外由于客户无法看到Person的实现细目,也就不可能写出什么"取决于那些细目"的代码.这真正是"接口与实现分离"
+
+这个分离的关键在于"以声明的依存性"替换"定义的依存性",那正是编译依存性最小的本质:现实中让头文件尽可能自我满足,万一做不到,则让它与其他文件内的声明式(而非定义式)相依.其他每一件事都源自于这个简单的设计策略:
+1.如果使用object references或object pointers可以完成任务,就不要使用object.你可以只靠一个类型声明式就定义出指向该类型的references和pointers;但如果定义某类型的objects,就需要用到该类型的定义式.
+2.如果能够,尽量以class声明式替换class定义式.注意,当你声明一个函数而它用到某个class时,你并不需要该class的定义;纵使函数以by value方式传递该类型的参数(或返回值)亦然:
+class Date;							//class声名式
+Date today();						//没问题 - 这里并不需要
+void clearAppointments(Date d);		//Date的定义式
+3.为声明式和定义式提供不同的头文件.为了促使严守上述准则,需要另个头文件,一个用于声明式,一个用于定义式.当然,这些文件必须保持一致性,如果有个声明式被改变了,两个文件都得改变.因此程序库客户应该总是#include一个声明文件而非前置声明若干函数,程序库作者也应该提供这两个头文件.举个例子,Date的客户如果希望声明today和clearAppointments,他们不该想先前那样以手工方式前置声明Date,而是应该#include适当的,内含声明式的头文件:
+#include "datefwd.h"		//这个头文件内声明(但未定义)class Date
+Date today();				//同前
+void clearAppointments(Date d);		
+
+只含声明式的那个头文件名为"datefwd.h",命名方式取法C++标准程序库头文件的<iosfwd>.<iosfwd>内含iostream>各组件的声明式,其对应定义则分布在若干不同的头文件内,包括<sstream>,<streambuf>,<fstream>和<iostream>
+
+
+像Person这样使用pimpl idiom的classes,往往被称为Handle classes.这样的classes如何真正做点事情.办法之一是将它们的所有函数转交给相应的实现类(implementation classes)并由后者完成实际工作.例如下面是Person两个成员函数的实现:
+#include "Person.h"		//我们正在实现Person class
+						//所以必须#include其class定义式
+#include "PersonImpl.h"		//我们也必须#include PersonImpl的class定义式,否则无法调用其成员函数;注意,PersonImpl有着和Person完全相同的成员函	
+							//数,两者接口完全相同
+
+Person::Person(const std::string& name, const Date& birthday, const Address& addr) : pImpl(new PersonImpl(name, birthday, addr)) {}
+
+std::string Person::name() const {
+ return pImpl->name();
+}
+
+请注意,Person构造函数以new调用PersonImpl构造函数,以及Person::name函数内调用PersonImpl::name.这是重要的,让Person变成一个Handle class并不会改变它做的事,只会改变它做事的方法.
+
+另一个制作Handle class的办法是,令Person成为一种特殊的abstract base class(抽象基类),称为Interface class.这种class的目的是详细一一描述derived classes的接口,因此它通常不带成员变量,也没有构造函数,只有一个virtual析构函数以及一组pure virtual函数,用来叙述整个接口.
+一个针对Person而写的Interface class或许看起来像这样:
+
+class Person {
+public:
+	virtual ~Person();
+	virtual std::string name() const = 0;
+	virtual std::string birthDate() const = 0;
+	virtual std::string address() const = 0;
+	...
+};
+
+具体的设计不描述,书中似乎不明确.
+
+* 确定你的public继承塑模出is-a关系		- Effective C++ 改善程序与设计的55个具体做法 [p150]
+public继承主张,能够施行于base class对象身上的每件事情,也可以施行于derived class对象身上.
+"public继承"意味is-a.适用于base classes身上的每一件事情一定也适用于derived classes身上,因为每一个derived class对象也都是一个base class对象.
+
+* 区分接口继承和实现继承		- Effective C++ 改善程序与设计的55个具体做法 [p161]
+表面上直截了当的public继承概念,经过更严密的检查之后,发现它由两部分组成:函数接口继承和函数实现继承.这两种继承的差异,很像函数声明与函数定义之间的差异.
+身为class设计者,有时候你会希望derived classes只继承成员函数的接口(也就是声明);有时候你又会希望derived classes同时继承函数的接口和实现,但又希望能够覆写(ovreride)它们所继承的实现;又有时候你希望derived classes同时继承函数的接口和实现,并且不允许覆写任何东西.
+
+class Shape {
+public:
+	virtual void draw() const = 0;
+	virtual void error(const std::string& msg);
+	int objectID() const;
+	...
+};
+
+class Rectangle: public Shape { ... };
+class Ellipse: public Shape { ... };
+
+Shape是个抽象class;它的pure virtual函数draw使他成为一个抽象class.所以客户不能建立Shape class的实体,只能创建其derived classes的实体.尽管如此,Shape还是强烈影响了所有以public形式继承它的derived classes,因为:
+1.成员函数的接口总是会被继承.public继承意味着is-a,所以对base class为真的任何事情一定也对其derived classes为真.
+Shape class声明了三个函数.第一个是draw.第二个是error.第三个是objectID,返回的当前对象的一个独一无二的整数识别码.每个函数的声明方式都不同:draw是个pure virtual函数;error是个简朴的(非纯)impure virtual函数;objectID是个non-virtual函数.
+2.声明一个pure virtual函数的目的是为了让derived classes只继承函数接口.
+Shape::draw的声明式是对具象derived classes设计者说,"你必须提供一个draw函数,但我不干涉你怎么实现它."
+简朴的impure virtual函数背后的故事和pure virtual函数有点不同.一如既往,derived classes继承其函数接口,但impure virtual函数会提供一份实现代码,derived classes可能覆写(override)它.
+3.声明简朴的(非纯)impure virtual函数的目的,是让derived classes继承该函数的接口和缺省实现.
+如果成员函数是个non-virtual函数,意味是它并不打算在derived classes中有不同的行为.
+4.声明non-virtual函数的目的是为了令derived classes继承函数的接口及一份强制性实现.
+
+请记住
+1.在public继承之下,derived classes总是继承base class的接口.
+2.pure virtual函数只具体指定接口继承.
+3.简朴的(非纯)impure virtual函数具体指定接口继承及缺省实现继承.
+4.non-virtual函数具体指定接口继承以及强制性实现继承.
+
+* 绝不重新定义继承而来的缺省参数值		- Effective C++ 改善程序与设计的55个具体做法 [p180]
+你只能继承两种函数:virtual和non-virtual函数.重新定义一个继承而来的non-virtual函数永远是错的,所以后续的讨论局限于"继承一个带有缺省参数值的virtual函数".
+本条款成立的理由非常直接而明确:virtual函数系动态绑定(dynamically bound),而缺省参数值却是静态绑定(statically bound)
+
+对象的所谓静态类型,就是它在程序中被声明时采用的类型.
+
+class Shape {
+public:
+	enum ShapeColor { Red, Green, Blue };
+	virtual void draw(ShapeColor color = Red) const = 0;
+	...
+};
+
+class Rectangle: public Shape { 
+public:
+	virtual void draw(ShapeColor color = Green) const;
+	...
+};
+
+class Circle: public Shape {
+	virtual void draw(ShapeColor color) const;
+	...
+};
+
+现在考虑这些指针:
+Shape* ps;						//静态类型为Shape*
+Shape* pc = new Circle;			//静态类型为Shape*
+Shape* pr = new Rectangle;		//静态类型为Shape*
+
+对象的所谓动态类型(dynamic type)则是指"目前所指对象的类型".也就是说,动态类型可以表现出一个对象将会有什么行为.就以上而言,pc的动态类型是Circle*,pr的动态类型是Rectangle*.ps没有动态类型,因为它尚未指向任何对象.
+
+动态类型一如其名所示,可在程序执行过程中改变(通常是经由赋值动作):
+ps = pc;		//ps的动态类型如今是Circle*
+ps = pr;		//ps的动态类型如今是Rectangle*
+
+virtual函数系动态绑定而来,意思是调用一个virtual函数时,究竟调用哪一份函数实现代码,取决于发出调用的那个对象的动态类型:
+pc->draw(Shape::Red);		//调用Circle::draw(Shape::Red)
+pr->draw(Shape::Red);		//调用Rectangle::draw(Shape::Red)
+
+如果你试着遵守这条规则,并且同时提供缺省参数值给base和derived classes的用户,会发生什么?
+class Shape {
+public:
+	enum ShapeColor { Red, Green, Blue };
+	virutal void draw(ShapeColor color = Red) const = 0;
+	...
+};
+
+class Rectangle: public Shape {
+public:
+	virtual void draw(ShapeColor color = Red) const;
+	...
+};
+
+代码重复.更糟的是,代码重复又带有相依性:如果Shape內的缺省参数值改变了,所有"重复给定缺省参数值"的那些derived classes也必须改变,否则他们最终会导致"重复定义一个继承而来的缺省参数值"
+聪明的做法是考虑替代设计.
+
+
+* 通过复合塑模出has-a或"根据某物实现出"		- Effective C++ 改善程序与设计的55个具体做法 [p184]	
+复合(composition)是类型之间的一种关系,当某种类型的对象内含它种类型的对象,便是这种关系
+ 
+class Address { ... };		//某人的住址
+class PhoneNumber { ... };
+class Person {
+public:
+	...
+private:
+	std::string name;			//合成成分物(composed object)
+	Address address; 			//同上
+	PhoneNumber voiceNumber;	//同上
+	PhoneNumber faxNumber;		//同上
+};
+
+本例之中Person对象由string,Address,PhoneNumber构成
+
+复合也有它自己的意义.实际上它有两个意义.复合意味has-a(有一个)或is-implemented-in-terms-of(根据某物实现出).那是因为你正打算在你的软件中处理两个不同的领域.程序中的对象其实相当于你塑造的世界中的某些事物,例如人,汽车,一张张视频画面等等.这样的对象属于应用域部分.其他对象则纯粹是实现细节上的人工制品,像是缓冲区,互斥器,查找树等等.这些对象相当于你的软件的实现域.当复合发生于应用域内的对象之间,表现出has-a的关系;当它发生于实现域内则是表现is-implemented-in-terms-of的关系.
+上述的Person class示范has-a关系.
+
+template<class T>
+class Set {
+public:
+	bool member(const T& item) const;
+	void insert(const T& item);
+	void remove(const T& item);
+	std::size_t size() const;
+private:
+	std::list<T> rep;		//用来表述Set的数据
+};
+
+template<typename T>
+bool Set<T>::member(const T& item) const {
+	return std::find(rep.begin(), rep.end(), item) != rep.end();
+}
+
+template<typename T> {
+void Set<T>::insert(const T& item) {
+	if (!member(item)) rep.push_back(item);
+}
+
+template<typename T> {
+void Set<T>::remove(const T& item) {
+	typename std::list<T>::iterator it = std::find(rep.begin(), rep.end(), item);
+	if (it != rep.end()) rep.erase(it);
+}
+
+template<typename T>
+std::size_t Set<T>::size() const {
+	return rep.size();
+}
+
+在应用域,复合意味has-a(有一个).在实现域,复合意味is-implemented-in-terms-of(根据某物实现出),这里指的是依托某物,其他函数都是对某物的操作.就像上述的rep,其他的操作都是围绕rep.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+

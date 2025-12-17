@@ -1,0 +1,95 @@
+ 
+Perl代码
+ 
+
+#!/usr/bin/perl  
+usestrict;  
+usewarnings;  
+ 
+subfunc{  
+print"@_\n";  
+}  
+ 
+my$id=1;  
+my@info=('PHPfans','phpfans.net');  
+my%info=("name"=>"PHPfans","url"=>"phpfans.net");  
+ 
+func($id,@info);  
+ 
+[root@PHPfansperl]#perlsub.pl  
+1PHPfansphpfans.net  
+ 
+发现第一个参数和第二个参数合并成一个大数组了。Perl子程序参数如果是哈希表的话还会将键值也保存在@_数组中。问题是怎么将各个参数分出来。这里第一个是标量变量，还可以用shift获取，然后剩下的就是第二个参数。但如果两个都是数组变量的话，这种方法显然就不行。这就要用到引用的方式传递。引用和C的指针是一致的，就是某值的地址。Perl的引用和PHP又不太相同，Perl是用反斜线(\)操作符
+
+Perl代码
+ 
+
+#!/usr/bin/perl  
+usestrict;  
+usewarnings;  
+ 
+subfunc{  
+print"@_\n";  
+}  
+ 
+my$id=1;  
+my@info=('PHPfans','phpfans.net');  
+my%info=("name"=>"PHPfans","url"=>"phpfans.net");  
+ 
+func($id,\@info);  
+ 
+[root@PHPfansperl]#perlsub.pl  
+1ARRAY(0x81f0e24)  
+
+
+ 
+现在是要从该引用得倒改数组的值。如果$pointer的值为一个数组的指针，则通过形式@$pointer来访问数组中的元素。类似的，哈希表为%$pointer。
+
+Perl代码
+ 
+
+#!/usr/bin/perl  
+usestrict;  
+usewarnings;  
+ 
+subfunc{  
+my ($id,$info)=@_;   
+my @info=@$info;             ＃如果是哈希的话，这里是my @info = %$info;
+print"@info\n";  
+}  
+ 
+my$id=1;  
+my@info=('PHPfans','phpfans.net');  
+my%info=("name"=>"PHPfans","url"=>"phpfans.net");  
+ 
+func($id,\@info);            #如果是哈希的话，这里是func($id,\%info);
+ 
+[root@PHPfansperl]#perlsub.pl  
+PHPfansphpfans.net 
+
+
+
+#!/usr/bin/perl -w
+%hash=('Tom'=>'Male','Jerry'=>'Female');
+$href=\%hash;
+for $key (keys %$href) {
+  print $key." is ".$href->{$key};
+  print "\n";
+}
+if ( ref($href) eq "HASH" ) {
+  print "href is a reference to a hash.\n";
+}
+unless ( ref($href) ) {
+  print "href is not a reference at all.\n";
+}
+print "href is ",ref($href),".\n";
+
+
+$ perl testref.pl
+Jerry is Female
+Tom is Male
+href is a reference to a hash.
+href is HASH.
+
+
+上述代码中使用了ref函数，返回参数的类型，哈希，数组，标量等等

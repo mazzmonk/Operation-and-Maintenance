@@ -1,0 +1,297 @@
+所有节点
+yum -y install epel-release
+yum -y update
+
+yum -y install wget git net-tools bind-utils iptables-services bridge-utils bash-completion kexec-tools sos psacct 
+
+
+proxy=http://10.224.227.138:3128
+
+
+时间同步 
+yum -y install ntpdate
+ntpdate 192.168.10.1
+
+
+iptables -F 
+iptables -X
+iptables -F -t nat
+iptables -X -t nat
+service iptables save
+service iptables restart
+
+
+master01节点
+yum -y install python-cryptography python-lxml net-tools bind-utils ntpdate ansible 
+
+#ssh-keygen
+
+#for host in master01.myclusterA.net master02.myclusterA.net e01.myclusterA.net e02.myclusterA.net lb01.myclusterA.net node01.myclusterA.net; do ssh-copy-id -i ~/.ssh/id_rsa.pub  $host; done
+
+
+
+
+/etc/origin/master/master-config.yaml 注意此文件中的loaclhost地址
+/etc/origin/node/node-config.yaml 
+
+
+
+
+/root/openshift-ansible-openshift-ansible-3.6.173.0.48-1/roles/etcd_common/defaults/main
+去掉了etcd_v3_req	
+
+
+
+docker pull openshift/origin-sti-builder:v3.6.0
+docker pull openshift/origin-deployer:v3.6.0
+docker pull openshift/origin-docker-registry:v3.6.0
+docker pull openshift/origin-haproxy-router:v3.6.0
+docker pull openshift/origin:v3.6.0
+docker pull openshift/origin-pod:v3.6.0
+docker pull openshift/origin-metrics-cassandra:v3.6.0
+
+docker pull openshift/origin-metrics-hawkular-metrics:v3.6.0
+docker pull openshift/origin-logging-deployer:v3.6.0-rc.0
+docker pull openshift/origin-metrics-deployer:v3.6.0
+docker pull openshift/origin-metrics-heapster:v3.6.0
+
+
+
+
+
+docker.io/cockpit/kubernetes                          latest              3597d0fb4fba        13 days ago         413.6 MB
+openshift/origin-sti-builder                          v3.6.0              45f63c22354a        4 weeks ago         974.2 MB
+openshift/origin-deployer                             v3.6.0              ad03ec44312c        4 weeks ago         974.2 MB
+openshift/origin-docker-registry                      v3.6.0              ec456625b2a0        4 weeks ago         1.062 GB
+openshift/origin-haproxy-router                       v3.6.0              75e805233369        4 weeks ago         995.3 MB
+openshift/origin                                      v3.6.0              25e1f260f8ae        4 weeks ago         974.2 MB
+openshift/origin-pod                                  v3.6.0              fb52c4c8f037        4 weeks ago         213.4 MB
+openshift/origin-metrics-cassandra                    v3.6.0              5bcf4e0efd65        5 weeks ago         769.7 MB
+openshift/origin-metrics-hawkular-metrics             v3.6.0              70a100708eaf        5 weeks ago         890 MB
+docker.io/openshift/origin-metrics-heapster           v3.6.0              467abd37955a        5 weeks ago         819.9 MB
+docker.io/openshift/origin-metrics-deployer           v3.6.0              0c1ab3e2171f        5 weeks ago         1.221 GB
+openshift/origin-logging-deployer                     v3.6.0-rc.0         f684642c2bee        10 weeks ago        696.8 MB
+
+
+
+docker tag 3597d0fb4fba cockpit/kubernetes:latest
+docker tag ad03ec44312c openshift/origin-deployer:v3.6.0
+docker tag ec456625b2a0 openshift/origin-docker-registry:v3.6.0
+docker tag 75e805233369 openshift/origin-haproxy-router:v3.6.0
+docker tag fb52c4c8f037 openshift/origin-pod:v3.6.0
+
+
+
+
+
+startup 
+
+ansible nodes -m copy -a 'src=roles/openshift_repos/files/origin/gpg_keys/openshift-ansible-CentOS-SIG-PaaS dest=/etc/pki/rpm-gpg/openshift-ansible-CentOS-SIG-PaaS'
+
+ansible nodes -m shell -a 'rpm --import /etc/pki/rpm-gpg/openshift-ansible-CentOS-SIG-PaaS'
+
+
+
+master上先执行
+yum -y install origin-3.6.0
+
+etcd
+yum -y install etcd
+
+
+haproxy
+yum -y install haproxy
+
+
+
+
+ansible-playbook playbooks/byo/config.yml -e openshift_disable_check=memory_availability,disk_availability,docker_storage -vvv
+ansible-playbook playbooks/adhoc/uninstall.yml
+
+重试之前先卸载,不要轻易uninstall，会卸载掉很多rpm包
+
+
+
+*********************************************************8
+<master01.myclusterA.net> (1, '', 'Traceback (most recent call last):\n  File "/tmp/ansible_Disw9b/ansible_module_openshift_facts.py", line 2549, in <module>\n    main()\n  File "/tmp/ansible_Disw9b/ansible_module_openshift_facts.py", line 2536, in main\n    protected_facts_to_overwrite)\n  File "/tmp/ansible_Disw9b/ansible_module_openshift_facts.py", line 1944, in __init__\n    protected_facts_to_overwrite)\n  File "/tmp/ansible_Disw9b/ansible_module_openshift_facts.py", line 1981, in generate_facts\n    defaults = self.get_defaults(roles, deployment_type, deployment_subtype)\n  File "/tmp/ansible_Disw9b/ansible_module_openshift_facts.py", line 2028, in get_defaults\n    ip_addr = self.system_facts[\'ansible_default_ipv4\'][\'address\']\nKeyError: \'address\'\n')
+
+说明没有网关
+
+**********************************************************
+
+
+*********************************************************
+140332414035872:error:02001002:system library:fopen:No such file or directory:bss_file.c:175:fopen('/etc/etcd/ca/openssl.cnf','rb')
+
+
+scp /root/openshift-ansible-openshift-ansible-3.6.173.0.47-1/roles/nuage_ca/files/openssl.cnf e01:/etc/etcd/ca/
+
+*********************************************************
+
+
+
+
+
+启动docker
+
+
+
+
+/etc/origin/master/ca.key
+
+
+
+
+
+
+infra
+
+ yum -y install bind flannel glusterfs-fuse iptables-services iscsi-initiator-utils nfs-utils ntp pyparted
+
+
+master
+
+yum -y install PyYAML bash-completion bind ceph-common cockpit-bridge cockpit-docker cockpit-system cockpit-ws dnsmasq docker etcd firewalld flannel glusterfs-fuse httpd-tools iptables iptables-services iscsi-initiator-utils libselinux-python nfs-utils ntp openssl origin origin-clients origin-master origin-node origin-sdn-ovs pyparted python-httplib2 yum-utils openvswitch
+
+
+
+
+
+使用的网卡必须有网关，并且默认是第一块网卡	
+
+
+dnsmasq配置
+
+
+master
+yum install -y dnsmasq
+
+
+
+
+
+
+/etc/dnsmasq.d/目录中的目录必须是755的权限，文件是644的权限，否则，启动服务的时候有权限的报错提示(由于安全检查把umask改成了027)
+
+在启动api　server的时候，提示myclusterA.net是个非法的域，是无法联系dns服务，dns默认启动在53端口，但是/etc/origin/master/master-config.yaml
+文件中的是8053，因此需要修改
+
+
+
+/etc/dnsmasq.d/openshift.conf
+
+strict-order
+domain-needed
+local=/example.com/
+bind-dynamic
+log-queries
+
+address=/.cloudapps.example.com/192.168.122.152
+
+
+cp /etc/resolv.conf /etc/resolv.conf.upstream
+
+修改/etc/dnsmasq.conf
+port=53
+resolv-file=/etc/resolv.conf.upstream
+
+修改/etc/resolv.conf.upstream
+nameserver 114.114.114.114
+nameserver 8.8.8.8
+
+
+
+systemctl enable dnsmasq
+systemctl start dnsmasq
+
+systemctl restart NetworkManager dnsmasq
+systemctl status NetworkManager dnsmasq
+systemctl status dnsmasq.service
+
+
+
+禁止NetworkManager修改/etc/resolv.conf
+修改 /etc/NetworkManager/NetworkManager.conf 文件，在main部分添加 “dns=none” 选项：
+[main]
+plugins=ifcfg-rh
+dns=none
+
+NetworkManager重新装载上面修改的配置
+# systemctl restart NetworkManager.service
+手工修改 /etc/resolv.conf
+nameserver 114.114.114.114
+nameserver 8.8.8.8
+
+
+或者
+#修改网卡配置，禁止NetworkManager接管网络配置
+[root@master1.ipaas.seanzhau.com ~]# echo 'NM_CONTROLLED="no"' >> /etc/sysconfig/network-scripts/ifcfg-eth0
+
+
+master节点上执行(所有)
+htpasswd -c /etc/origin/master/htpasswd admin
+
+然后可以通过页面登录
+
+
+
+尝试
+oc login -u system:admin -n default --config=<homedir>/openshift.local.config/master/admin.kubeconfig
+
+I was not able to find master/admin.kubeconfig file. It's located in /etc/origin/master/admin.kubeconfig.
+
+I have copied it to .kube
+cp /etc/origin/master/admin.kubeconfig /home/fedora/.kube/admin.kubeconfig
+Change permission to fedora
+sudo chown fedora:fedora admin.kubeconfig
+Now I can login
+oc login -u system:admin -n default --config=.kube/admin.kubeconfig
+
+
+10.224.210.80
+10.224.216.126 8088
+
+
+
+docker添加
+
+修改/etc/sysconfig/docker原有参数后添加如下内容
+OPTIONS="--insecure-registry 172.30.0.0/16"
+
+
+
+修改/etc/origin/master/master-config.yaml中的dns选项，为53
+并且修改iptables中的端口
+
+
+
+
+ERROR
+
+node端报错
+
+
+cannot fetch "default" cluster network: x509:  certificate is valid for kubernetes
+https://bugzilla.redhat.com/show_bug.cgi?id=1381335
+
+
+
+127.0.0.1:8443
+关注~/.kube/下的内容
+
+
+openvswitch需要
+CentOS-OpenShift-Origin.repo
+
+
+
+
+
+
+
+
+
+
+
+
+

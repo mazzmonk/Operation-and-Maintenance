@@ -1,0 +1,29 @@
+error opening pid file /run/docker/libcontainerd/docker-containerd.pid: open /run/docker/libcontainerd/docker-containerd.pid: no such file or directory
+
+描述１：
+Tested with v1.2.0, Kubernetes1.4.6 on a 3 host setup. Kubelet logs on all the 3 hosts did not have the above errors.
+
+描述２：
+Kubelet not starting up on RHEL7.2 with Docker 1.12.1 (Kubernetes 1.4) to Kubelet not starting up on RHEL7.2 with Docker 1.12.1 and Docker 1.11.2 (Kubernetes 1.4) on 7 Oct 2016
+
+解决：
+
+sudo mount -o remount,rw '/sys/fs/cgroup'
+sudo ln -s /sys/fs/cgroup/cpu,cpuacct /sys/fs/cgroup/cpuacct,cpu
+
+https://github.com/kubernetes/kubernetes/issues/32728
+
+详细：
+https://github.com/rancher/rancher/issues/6095
+https://github.com/rancher/rancher/issues/6181
+
+
+
+
+ftp 192.168.0.158
+sjbss
+sjbss8280
+
+
+编译最新版kubernetes
+workspace/golang/src/k8s.io/kubernetes/_output/bin

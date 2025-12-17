@@ -1,0 +1,260 @@
+1 Docker准备
+1.1 操作系统
+    必须使用至少内核大于3.10的linux发行版,建议centos,ubuntu,redhat(可选),磁盘,内存,cpu的core数,取决于docker的启动以后要用的容器数量,建议至少50G/磁盘,4核/CPU,4G/内存
+
+1.2 容器版本
+    从docker 1.12以后开始,docker版本分为了2个分支,ce及ee版本,前一个是社区版,后一个是企业版,2个版本没有本质区别,只是企业版附带了服务
+    社区版1.13 → 17.03.0-ce → ……
+    企业版17.03.0-ee → ……
+    说明:17.03的版本,只是在1.13的版本上修改一些bug,重新命令为17.03
+
+    企业版不讨论,社区版下载地址:
+    https://download.docker.com/linux/static/stable/x86_64/
+
+2 Docker安装配置
+  安装有2种方式:
+  * 使用上述的连接下载二进制文件
+  * 使用yum(centos,redhat)或者apt-get(ubuntu)
+
+2.1 二进制启动方式
+    将上述的压缩包解压以后,将所有的文件复制到/usr/bin/下,然后执行:
+    #dockerd
+    如果有报错,请自行google
+
+2.2 使用yum,apt-get方式
+    https://download.docker.com/linux/centos/7/x86_64/stable/Packages/
+    https://download.docker.com/linux/ubuntu/dists/xenial/pool/stable/amd64/
+
+    上述连接有rpm包及deb包,但是建议不要直接用,在安装docker之前有些其他依赖
+
+    建议用如下方式:
+    #yum remove docker \
+                  docker-client \
+                  docker-client-latest \
+                  docker-common \
+                  docker-latest \
+                  docker-latest-logrotate \
+                  docker-logrotate \
+                  docker-selinux \
+                  docker-engine-selinux \
+                  docker-engine
+
+    #yum install -y yum-utils \
+                    device-mapper-persistent-data \
+                    lvm2
+
+    #yum-config-manager \
+            --add-repo \
+          https://download.docker.com/linux/centos/docker-ce.repo
+
+    //这里具体用那个版本,用下一个命令查看,如果直接使用下述的命令,当前会安装到最近的18.03.0版本
+    #yum install docker-ce
+
+    //这里会显示所有可用版本
+    #yum list docker-ce --showduplicates | sort -r
+
+    //启动
+    #systemctl start docker
+
+
+3 Docker镜像制作
+3.1 下载镜像
+    镜像是容器的基础，所有的容器都是从镜像启动，因此，镜像的制作是使用docker不能绕开的关卡，同时也是比较耗费时间的过程一般来说，要制作自己的应用镜像，都是从基础镜像上启动，安装自己的应用，然后打包成自己的镜像，因此优先需要基础镜像，所谓的基础镜像，可以理解为此镜像中包含一个操作系统，其下载的镜像库来之官方提供，如下：
+
+    https://hub.docker.com/
+
+    这里可以搜索需要的镜像，比如centos，Ubuntu等等具有official标签的都是各个官方提供的镜像，同时，点击进入相应的页面以后，都有提供相关的dockerfile文件，同时有个tags标签，此标签可以理解为是版本号。
+
+    此仓库实际不只提供了操作系统类似的基础镜像，同时也提供了很多应用的镜像，比如mysql，mongodb，redis等等，但是这些镜像可能都只是单机版，集群的版本，可能仍然需要自行制作镜像的下载使用如下的命令：
+
+    #docker pull library/centos:7.4.1708
+
+    //这是官方提供的连接 https://hub.docker.com/r/library/centos，
+
+    //注意pull命令的内容和上述连接的关系，”:”后边的内容是tags标签
+
+
+    #docker images |grep centos可以查看到，类似如下的内容
+
+    centos/php-70-centos7                                      latest              e93794991e4e        4 months ago        589MB
+
+    这里的镜像也是在官方下载，带有php应用，需要注意的是，这里的e93794991e4e是镜像ID，是唯一的，表示此镜像不论放到任何环境，都会是此值
+
+3.2 制作镜像
+    镜像制作有2种方式
+    1 通过运行中的容器制作成镜像，此种方式比较多用于测试
+    2 通过一个镜像A制作成另外一个镜像B，通过dockfile文件
+    分别介绍
+    使用容器制作镜像，举例使用一个jdk官方镜像制作一个tomcat镜像
+
+    #docker images |grep jdk
+    airdock/oracle-jdk   jdk-8u112           9fceed569cab        10 months ago       533MB
+
+    //镜像的信息
+    #docker run –dit 9fceed569cab /bin/bash
+    81c988707548        9fceed569cab        "/bin/bash"         4 seconds ago       Up 2 seconds                            inspiring_banach
+
+    //启动镜像成容器
+    #docker exec –it 81c988707548 /bin/bash
+
+    //连接到启动的容器中，剩下的操作就如同在一个操作系统中执行需要的内容
+    #docker commit 81c988707548 mytomcat:v0.1
+
+    //将此容器打包成另外一个叫mytomcat，tags是v0.1的镜像
+
+使用dockerfile文件从一个镜像生成另一个镜像是制作生成环境的通用做法
+如下是个dockerfile文件的例子：
+解释一下如下的内容：
+*************************************************************
+# 以openjdk:8-jre镜像为基础，如果本地没有，会从官方下载
+FROM openjdk:8-jre
+
+# grab gosu for easy step-down from root
+# 镜像启动成容器以后，具有环境GOSU_VERSION=1.10
+ENV GOSU_VERSION 1.10
+
+# 执行shell中的命令，此命令只会在制作镜像的时候执行一次，当制作镜
+# 像的时候会生成一个临时容器，执行此命令
+# 多数建立目录，设置用户，拷贝本地文件到镜像中等等命令都使用RUN
+# 来执行
+RUN set -x \
+	&& wget -O /usr/local/bin/gosu "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-$(dpkg --print-architecture)" \
+	&& wget -O /usr/local/bin/gosu.asc "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-$(dpkg --print-architecture).asc" \
+	&& export GNUPGHOME="$(mktemp -d)" \
+	&& gpg --keyserver ha.pool.sks-keyservers.net --recv-keys B42F6819007F00F88E364FD4036A9C25BF357DD4 \
+	&& gpg --batch --verify /usr/local/bin/gosu.asc /usr/local/bin/gosu \
+	&& rm -rf "$GNUPGHOME" /usr/local/bin/gosu.asc \
+	&& chmod +x /usr/local/bin/gosu \
+	&& gosu nobody true
+
+RUN set -ex; \
+# https://artifacts.elastic.co/GPG-KEY-elasticsearch
+	key='46095ACC8548582C1A2699A9D27D666CD88E42B4'; \
+	export GNUPGHOME="$(mktemp -d)"; \
+	gpg --keyserver ha.pool.sks-keyservers.net --recv-keys "$key"; \
+	gpg --export "$key" > /etc/apt/trusted.gpg.d/elastic.gpg; \
+	rm -rf "$GNUPGHOME"; \
+	apt-key list
+
+# https://www.elastic.co/guide/en/elasticsearch/reference/current/setup-repositories.html
+# https://www.elastic.co/guide/en/elasticsearch/reference/5.0/deb.html
+RUN set -x \
+	&& apt-get update && apt-get install -y --no-install-recommends apt-transport-https && rm -rf /var/lib/apt/lists/* \
+	&& echo 'deb https://artifacts.elastic.co/packages/5.x/apt stable main' > /etc/apt/sources.list.d/elasticsearch.list
+
+ENV ELASTICSEARCH_VERSION 5.6.8
+ENV ELASTICSEARCH_DEB_VERSION 5.6.8
+
+RUN set -x \
+	\
+# don't allow the package to install its sysctl file (causes the install to fail)
+# Failed to write '262144' to '/proc/sys/vm/max_map_count': Read-only file system
+	&& dpkg-divert --rename /usr/lib/sysctl.d/elasticsearch.conf \
+	\
+	&& apt-get update \
+	&& apt-get install -y --no-install-recommends "elasticsearch=$ELASTICSEARCH_DEB_VERSION" \
+	&& rm -rf /var/lib/apt/lists/*
+
+ENV PATH /usr/share/elasticsearch/bin:$PATH
+
+# 设置后续命令运行的当前目录
+WORKDIR /usr/share/elasticsearch
+
+RUN set -ex \
+	&& for path in \
+		./data \
+		./logs \
+		./config \
+		./config/scripts \
+	; do \
+		mkdir -p "$path"; \
+		chown -R elasticsearch:elasticsearch "$path"; \
+	done
+
+# 将本地的文件/目录拷贝到上述目录下
+COPY config ./config
+
+# 匿名卷，不建议如此做，这里一般通过k8s平台使用外挂卷
+VOLUME /usr/share/elasticsearch/data
+
+# 拷贝本地的docker-entrypoint.sh到镜像中的/下，这里最好使用官方的建
+# 议的脚本名称entrypoint.sh已经存放在镜像中的路径”/”下
+COPY docker-entrypoint.sh /
+# 将9200 9300端口开放，可以不用设置
+EXPOSE 9200 9300
+
+# 镜像启动成容器以后，执行的脚本，很重要，随容器一起启动的应用程序
+# 修改传入容器中的参数都必须写在此脚本，唯一
+ENTRYPOINT ["/docker-entrypoint.sh"]
+
+# 作用和上述类似，但是当CMD和ENTRYPOINT，同时存在的时候，CMD
+# 的内容将作为ENTRYPOINT后边命令的参数存在，唯一
+CMD ["elasticsearch"]
+*************************************************************
+
+有上述的dockerfile文件以后，同时将需要放到镜像中的文件和目录一起放到一个目录中，比如：example，此时example目录中至少有Dockerfile，entrypoint.sh 2个文件，执行命令
+#docker build –t mytomcat:v0.1 .
+将会生成mytomcat镜像，tag为v0.1
+
+Dockerfile文件中，还可以有其他很多的命令，可以自行官网查阅。
+
+3.4 entrypoint.sh脚本及运行逻辑
+   主要围绕着docker run –e ip=”192.168.0.9” ……
+   上述的-e参数主要用于传递参数到运行的容器中，传参数的目的是主要是因为大多数的容器中的应用在启动的时候需要自己的配置选项，比如：目前有一个tomcat镜像，其中有自己应用，包含一个连接数据库的配置文件，其中有连接数据库的信息，数据库的连接地址多数时候是不确定的，如果在此配置文件中写死，在使用镜像的时候，连接的数据库信息肯定是不对，因此，就必须在容器启动的时候使用参数传递数据库的信息。
+
+逻辑：
+当使用docker run –e参数启动镜像成容器时候，容器中将会产生环境变量，使用env可以查看到
+比如: docker run –e ip=”192.168.0.9” –dit 3454093ere /bin/bash
+启动以后，进入到容器中，使用命令env，就会看到如下的内容
+ip=”192.168.0.9”
+
+然后在entrypoint.sh中处理此环境变量，比如将此值替换为配置文件中相应的值，
+例子：webapps/example/conf/mysql-conn.conf文件中有如下一行
+MYSQL_CONNECT=”10.4.3.1”
+现在需要将10.4.3.1的值替换为192.168.0.9，此动作就在entrypoint.sh中处理。
+比如脚本中可能有如下的内容
+sed  -i “s/MYSQL_CONNECT=\”.*\”/MYSQL_CONNECT=\”$ip\”/” webapps/example/conf/mysql-conn.conf
+
+上述的变量名称“ip”，自行定义，但是此变量在docker run –e及脚本中都会使用。需要优先考虑好。
+如果文件中有很多的参数需要替换，则需要定义多个变量即：使用多个-e来表示，比如：
+#docker run –e ip=”192.168.0.9” –e username=”mysql” –e password=”mysql” –dit 3454093ere /bin/bash
+然后在entrypoint.sh中处理上述所有的参数，在脚本中的最后一行是启动相应应用程序的命令
+举例：
+脚本中SERVER_URL=http://1.2.3.4:5647/a/b/c/是-e 的参数，处理的文件为serverConfig.xml
+最重要的是最后一行
+gosu blue $TOMCAT_PREFIX/bin/catalina.sh run
+使用blue用户执行后边的命令，gosu是一个go语言开发的类似sudo程序，只有一个文件，建议在各种生产环境中使用，比sudo使用方便，
+catalina.sh run是指启动tomcat在当前窗口，即是前台
+注意：所有的docker容器启动的时候必须有一个前台进程，否则，容器启动以后会自动终止，使用entrypoint.sh的容器，就在脚本中启动在前台执行的应用，一般是此镜像中启用的应用。比如此镜像是一个tomcat应用镜像，最后一行就是tomcat启动到前台的命令
+#!/bin/bash
+#$SERVER_URL="http://1.2.3.4:5647/a/b/c/"
+####################
+set -e
+
+TOMCAT_PREFIX="/home/blue/apps/tomcat"
+TOMCAT_CONFIG="$TOMCAT_PREFIX/conf"
+
+
+if [ "$SERVER_URL" ];then
+  server_url_ip=`echo $SERVER_URL|awk -F"/" '{print $3}' |awk -F":" '{print $1}'`
+  server_url_port=`echo $SERVER_URL|awk -F"/" '{print $3}' |awk -F":" '{print $2}'`
+  server_url_context_01=`echo $SERVER_URL|awk -F"/" '{print $4}'`
+  server_url_context_02=`echo $SERVER_URL|awk -F"/" '{print $5}'`
+  server_url_context_03=`echo $SERVER_URL|awk -F"/" '{print $6}'`
+
+  sed -ri -e ':begin; /<!--/,/-->/ { /-->/! { $! { N; b begin }; }; s/<!--.*-->//; };' \
+          -e '/^[[:space:]]*$/d' $TOMCAT_CONFIG/serverConfig.xml
+  sed -ri "/<serverUrl>/s/<serverUrl>http:\/\/.*<\/serverUrl>/<serverUrl>http:\/\/$server_url_ip:$server_url_port\/$serve
+r_url_context_01\/$server_url_context_02\/$server_url_context_03\/<\/serverUrl>/" $TOMCAT_CONFIG/serverConfig.xml
+
+fi
+
+source /etc/profile
+
+gosu blue $TOMCAT_PREFIX/bin/catalina.sh run
+
+***************************************************************
+
+最后可以通过
+#docker run –e a=”1.1.1.1 –e b=”dfd” –dit f9dfdjg 方式启动
+

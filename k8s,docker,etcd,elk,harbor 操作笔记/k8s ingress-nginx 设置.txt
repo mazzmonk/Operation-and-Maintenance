@@ -1,0 +1,158 @@
+链接: https://kubernetes.github.io/ingress-nginx/deploy/
+
+整个 ingress-nginx 包括 2 部分, ingress-nginx-controller, ingress-nginx
+在 ingress-nginx-controller 其中以后,当有新的 ingress 或者原有的 ingress 产生变动,会引起 ingress-nginx-controller 所在的 pod 的一个 reload 操作,通过日志可以观测到,这是将后端需要转发的资源,url 等等加载到 ingress-nginx-controller 的配置文件中,并且 reload 
+
+通过 k8s 的说明, ingress 必须先有 controller,根据选择的 controller 对应相应的 ingress
+这里用的 nginx 这一套,需要 ingress-nginx-controller 及 ingress-nginx
+
+1. ingress-nginx-controller 的 yaml 文件
+
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.3.0/deploy/static/provider/cloud/deploy.yaml
+
+deploy.yaml 文件中的镜像需要优先下载
+
+registry.k8s.io/ingress-nginx/controller:v1.3.0@sha256:d1707ca76d3b044ab8a28277a2466a02100ee9f58a86af1535a3edf9323ea1b5
+registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.1.1@sha256:64d8c73dca984af206adf9d6d7e46aa550362b1d7a01f3a0a91b20cc67868660
+
+这 2 个镜像需要优先在 docker 官方下载下来,并且修改文件中的镜像名称,注意 controller,kube-webhook-certgent 都用的 v1.3.0 版本
+
+需要特别注意的是在上述的 deploy.yaml 中的
+
+containers:
+      - args:
+        - /nginx-ingress-controller
+        - --publish-service=$(POD_NAMESPACE)/ingress-nginx-controller  
+        - --election-id=ingress-controller-leader
+        - --controller-class=k8s.io/ingress-nginx
+        - --ingress-class=nginx                                                                                 # 这一行,必须特别注意,在后面 ingress 的 yaml 文件中,需要用到
+        - --configmap=$(POD_NAMESPACE)/ingress-nginx-controller
+        - --validating-webhook=:8443
+        - --validating-webhook-certificate=/usr/local/certificates/cert
+        - --validating-webhook-key=/usr/local/certificates/key
+
+以及如下在 service 中定义的如下部分: (二选一)
+
+type: LoadBalancer 
+
+或者 
+
+type: NodePort
+
+另外: 注意这里的部分,定义了 ingress class 
+
+apiVersion: networking.k8s.io/v1
+kind: IngressClass
+metadata:
+  labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-nginx
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+    app.kubernetes.io/version: 1.3.0
+  name: nginx
+spec:
+  controller: k8s.io/ingress-nginx
+
+
+2. ingress 的 yaml 文件
+ingress 文件的作用是将需要转发的 url,资源,或者后端定义出来
+
+建立一个 deployment, service
+
+# demo-deployment
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+  labels:
+    app: demo
+  name: demo
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: demo
+  template:
+    metadata:
+      labels:
+        app: demo
+    spec:
+      containers:
+      - image: httpd
+        imagePullPolicy: Always
+        name: httpd
+        ports:
+        - containerPort: 80
+          protocol: TCP
+
+# demo-service.yaml
+
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: demo
+  name: demo
+  namespace: default
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    app: demo
+type: ClusterIP
+
+# minimal-ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: minimal-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx                   # 这里注意和 ingress-nginx-controller 中的 --ingress-class 匹配
+  rules:
+  - http:
+      paths:
+      - path: /demo
+        pathType: Prefix
+        backend:
+          service:
+            name: demo                              # 这里注意是后端需要转发的 service 的名称
+            port:
+              number: 80
+
+# kubectl get svc,deployment,ingress 
+NAME                 TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)          AGE
+service/demo         ClusterIP   172.30.86.196    <none>        80/TCP           165m
+service/ingress-nginx-controller             LoadBalancer   172.30.128.224   <pending>     80:31928/TCP,443:31262/TCP   171m
+service/ingress-nginx-controller-admission   ClusterIP      172.30.70.155    <none>        443/TCP                      171m
+
+
+NAME                   READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/demo   1/1     1            1           166m
+
+NAME                                        CLASS   HOSTS   ADDRESS   PORTS   AGE
+ingress.networking.k8s.io/minimal-ingress   nginx   *                 80      145m
+
+3. 测试
+通过访问 
+
+http://172.30.128.224/demo      # 这里的 ip 地址是 service 的地 ip 地址
+
+或者 
+
+http://172.20.10.5:31928/demo   # 172.20.10.5 是物理机 ip 地址
+
+访问
+
+4. rancher 中的 ingress 配置
+要在  rancher 中使用 ingress,必须先在目标集群中安装好 ingress-nginx-controller,然后在 ui 上配置转发的连接,服务,端口
+但是比较重要的因为在下游的 k8s 集群中配置 ingress-nginx-controller 时候,配置了ingress class 这个值,在 rancher 的界面上是无法添加这个内容的,因此需要手动编辑 yaml 文件,修改此项,即可以用
+
+
+

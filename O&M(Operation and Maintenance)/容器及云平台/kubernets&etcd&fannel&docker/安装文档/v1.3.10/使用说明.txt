@@ -1,0 +1,42 @@
+软件部署次序如下：
+1.docker部署
+2.etcd部署
+3.flannel部署
+4.k8s部署
+4.1 master端　kube-apiserver,kube-controller-manager,kube-dns,kube-scheduler
+4.2 slave端　 kubelet,kube-proxy
+5.安装私有库
+6.导入镜像(gcr.io-google_containers-pause-amd64-3.0,kubernetes-dashboard-amd64-v1.5.1)
+
+
+说明
+1.所有运行docker的机器必须安装k8s的slave端(2个组件kubelet,kube-proxy),flannel
+2.etcd单独安装,集群化,不与任何机器复用
+3.k8s的master端单独安装，包括3个组件kube-apiserver,kube-controller-manager,kube-scheduler
+4.kube-dns用于容器组建的集群与容器组建的集群之间互相识别，建议在
+5.在k8s应用时需要的私有库建议单独安装，并且做好备份策略，后期所有的包含代码及应用的镜像都会存放在私有库中，类似代码仓库，
+　 私有库就是一个使用dockre镜像启动的容器
+
+安装流程
+注意：执行脚本的过程，都需要用root用户
+1.使用初始化脚本(init-os-centos7.x.sh)在每台服务器上执行，重启，脚本将做一些修改内核参数，设置用户等等操作．
+2.在准备使用私有库的机器上安装docker，并且导入镜像，生成容器，对外提供服务
+3.将slave-startup.sh,slave-install.sh,GLOBAL-ENV上传到安装docker的服务器的$HOME/bin目录中，将slave.tar.gz上传到$HOME/src目录中
+　将master-install.sh,master-startup.sh,GLOBAL-ENV上传到安装k8s master服务器的$HOME/bin目录中，将master.tar.gz上传到$HOME/src目录中
+4.登录master端机器，进入到$HOME/bin下，执行master-install.sh脚本，脚本将会把事先上传的程序及启动用的脚本部署到相应的位置
+5.登录docker端(所有)，进入到$HOME/bin下，执行slave-install.sh脚本，脚本将会把事先上传的程序及启动用的脚本部署到相应的位置
+6.修改每台机器的GLOBAL-ENV文件，其中描述见文件
+7.安装etcd，详细的文档，见文件夹中的etcd安装文档
+
+启动流程
+注意：执行脚本的过程，都使用root用户
+1.启动etcd,执行etcd-startup.sh脚本
+2.启动私有库上的docker进程，启动私有库容器(如果已经启动，不用管)
+2.启动master端,执行master-startup.sh脚本
+3.启动slave端，执行slave-startup.sh脚本(在所有docker端执行)
+
+
+
+
+
+

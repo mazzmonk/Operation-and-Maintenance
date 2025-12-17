@@ -1,0 +1,80 @@
+Dockerfile 文件格式
+
+ENTRYPOINT /usr/sbin/vsftpd && /bin/bash      //启动vsftpd服务
+
+注意：
+×××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××
+标准格式：
+
+ENTRYPOINT service tomcat7 start && /usr/sbin/sshd -D
+
+需要注意：
+
+ENTRYPOINT，表示镜像在初始化时需要执行的命令，不可被重写覆盖，需谨记
+CMD，表示镜像运行默认参数，可被重写覆盖
+ENTRYPOINT/CMD都只能在文件中存在一次，并且最后一个生效 多个存在，只有最后一个生效，其它无效！
+需要初始化运行多个命令，彼此之间可以使用 && 隔开，但最后一个须要为无限运行的命令，需切记！
+ENTRYPOINT/CMD，一般两者可以配合使用，比如：
+
+ENTRYPOINT ["/usr/sbin/sshd"]
+CMD ["-D"]
+
+在Docker　daemon模式下，无论你是使用ENTRYPOINT，还是CMD，最后的命令，一定要是当前进程需要一直运行的，才能够防容器退出。
+
+以下无效方式：
+
+ENTRYPOINT service tomcat7 start #运行几秒钟之后，容器就会退出
+CMD service tomcat7 start #运行几秒钟之后，容器就会退出
+这样有效：
+
+ENTRYPOINT service tomcat7 start && tail -f /var/lib/tomcat7/logs/catalina.out
+# 或者
+CMD service tomcat7 start && tail -f /var/lib/tomcat7/logs/catalina.out
+这样也有效：
+
+ENTRYPOINT ["/usr/sbin/sshd"]
+CMD ["-D"]
+
+×××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××
+
+CMD格式
+
+CMD ["executable","param1","param2"]	//exec命令格式(这里必须使用")
+CMD ["param1","param2"]			//传递给ENTRYPOINT的参数
+CMD command param1 param2		//shell命令格式	
+
+
+使用上述方式建立的容器，没有/bin/bash
+可以用docker exec -t -i daemon_dave /bin/bash 方式连接
+
+
+Dockfile文件内容
+
+************************************************** Dockfile **************************************************
+# setup images to use blue project
+FROM mycentos6.8:latest 
+MAINTAINER blue <blue@abc.com>
+
+RUN yum -y install vim* vsftpd* rsync* unzip && yum -y update 
+
+USER blue
+WORKDIR /home/blue
+COPY *.war *.tar.gz tmp/  
+
+RUN tar zxvf tmp/*.tar.gz -C apps/ 
+RUN /usr/bin/unzip -oq tmp/blue_point_exchange_portal.war -d apps/tomcat_blue_portal/webapps/ROOT/
+
+#CMD cd apps/tomcat_blue_portal/bin && ./startup.sh
+
+USER root
+ENTRYPOINT  /usr/sbin/vsftpd && \
+            /usr/sbin/sshd -D
+
+************************************************** Dockfile **************************************************
+
+说明：与Dockerfile文件同级内容如下：
+
+Dockerfile  blue_point_exchange_portal.war  tomcat_blue_portal.tar.gz
+
+编译镜像的时候，会到上一级目录(Dockerfile)，然后执行docker build -t project/blue_portal Dockerfile/
+

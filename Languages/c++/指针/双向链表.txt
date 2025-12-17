@@ -1,0 +1,85 @@
+struct student *ptr, *head, *current, *prev;
+
+struct student {
+  char name[20];
+  int score;
+  struct student* next;
+};
+
+void insert_func(void) {
+  char s_temp[4];
+  ptr = (struct student*) malloc(sizeof(struct student));
+  printf(" Student name: ");
+  gets(ptr->name);
+  printf(" Student score: ");
+  gets(s_temp);
+  ptr->score = atoi(s_temp);
+
+  prev = head;                    
+  current = head->next;
+  while ((current != NULL) && (current->score > ptr->score)) {
+    prev = current;
+    current = current->next;
+  }
+	//上述的几步操作实际是给prev和current这2个结点赋值
+
+  ptr->next = current;
+  prev->next = ptr;
+	//这2步是实际的插入链表操作
+
+}
+
+链表的插入操作,这里是建设head节点是个空指针,什么内容也没有,然后把插入的节点放到prev和current中间
+
+
+如下是一个比较完成的插入操作,来自于维基百科
+struct node_st {
+        void *datap;
+        struct node_st *next, *prev;
+};
+ 
+struct llist_st {
+        struct node_st head;
+        int elmsize;
+        int elmnr;
+};
+
+int
+llist_node_append(LLIST_T *ptr, const void *datap)
+{
+        struct llist_st *me=ptr;
+        struct node_st *newnodep;
+ 
+        newnodep = malloc(sizeof(struct node_st));
+        if (newnodep == NULL) {
+                return -1;
+        }
+        newnodep->datap = malloc(me->elmsize);
+        if (newnodep->datap == NULL) {
+                free(newnodep);
+                return -1;
+        }
+ 
+        memcpy(newnodep->datap, datap, me->elmsize);
+ 
+        me->head.prev->next = newnodep;
+        newnodep->prev = me->head.prev;
+        me->head.prev = newnodep;
+        newnodep->next = &me->head;
+ 
+        return 0;
+}
+
+链表有前节点,同时有后节点,插入的操作遵循的次序是,假设有A,B节点,目前把C节点插入到A与B之间
+1.修改A的next指针,指向C的地址
+2.修改C的prev指针,指向A的地址
+3.修改B的prev指针,指向C的地址
+4.修改C的next指针,指向B的地址
+
+这里执行的是在A的后边插入
+
+
+
+
+
+

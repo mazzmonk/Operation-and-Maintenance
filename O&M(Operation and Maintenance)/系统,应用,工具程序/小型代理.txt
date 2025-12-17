@@ -1,0 +1,4 @@
+yum install tinyproxy
+修改/etc/tinyproxy/tinyproxy.conf
+
+Allow 0.0.0.0/0

@@ -1,0 +1,71 @@
+singularity是一个类似marathon的任务调度的框架
+
+1.下载
+https://github.com/HubSpot/Singularity
+
+2.编译
+需要mvn环境
+解压，进入到目录中执行mvn clean package
+最后编译好的在SingularityService/target/中
+
+3.拷贝target到apps目录中为singularity，同时拷贝mysql目录到apps/singularity中
+
+建立singularity_config.yaml
+
+# Run SingularityService on port 7099 and log to /var/log/singularity-access.log
+server:
+  type: simple
+  applicationContextPath: /singularity
+  connector:
+    type: http
+    port: 7099
+  requestLog:
+    appenders:
+      - type: file
+        currentLogFilename: /home/blue/logs/singularity/singularity-access.log
+        archivedLogFilenamePattern: /home/blue/logs/singularity/singularity-access-%d.log.gz
+
+# omit this entirely if not using MySQL
+database: 
+  driverClass: com.mysql.jdbc.Driver
+  user: singularity
+  password: "bjtxj_*0987"
+  url: jdbc:mysql://192.168.81.100:3306/singularity
+
+mesos:
+  master: zk://192.168.81.4:2181,192.168.81.5:2181,192.168.81.6:2181/mesos
+  defaultCpus: 1
+  defaultMemory: 128
+  frameworkName: Singularity
+  frameworkId: Singularity
+  frameworkFailoverTimeout: 1000000
+
+zookeeper:
+  quorum: 192.168.81.4:2181,192.168.81.5:2181,192.168.81.6:2181
+  zkNamespace: singularity
+  sessionTimeoutMillis: 60000
+  connectTimeoutMillis: 5000
+  retryBaseSleepTimeMilliseconds: 1000
+  retryMaxTries: 3
+
+logging:
+  loggers:
+    "com.hubspot.singularity" : TRACE
+
+enableCorsFilter: true
+sandboxDefaultsToTaskId: false  # enable if using SingularityExecutor
+
+ui:
+  title: Singularity (local)
+  baseUrl: http://192.168.81.3:7099/singularity # If hosting singularity on another domain, use that domain instead of localhost
+
+编辑其中的关于mesos,zk及mysql的部分，环境见mesos文档
+
+4.执行
+cd /home/blue/apps/singularity && java -jar SingularityService-*-shaded.jar server singularity_config.yaml >> $HOME/logs/singularity/s
+ingularity.log 2>&1  &
+
+5.访问
+http://192.168.81.3:7099/singularity
+
+

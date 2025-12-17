@@ -1,0 +1,38 @@
+Name	Steps	Rows	Timespan**
+Hourly (1 Minute Average)	 1	 500	 14400	Delete
+Daily (5 Minute Average)	 1	 600	 86400	Delete
+Weekly (30 Minute Average)	 6	 700	 604800	Delete
+Monthly (2 Hour Average)	 24	 775	 2678400	Delete
+Yearly (1 Day Average)	 288	 797	 33053184	Delete
+
+
+修改/etc/profile
+添加
+
+# hadoop #
+export HADOOP_HOME=/home/blue/apps/hadoop
+export PATH=$PATH:$HDAOOP_HOME/bin
+
+
+从master到slave和slave到master的SSH信任都需要
+同时还需要master到master的信任
+
+同时修改conf/hadoop-env.sh文件，修改如下选项
+export HADOOP_SSH_OPTS="-p9922"
+
+
+配置文件修改文档
+
+
+注意hdfs-site.xml文件中如下部分暂时不添加
+
+<property>
+<name>dfs.name.dir</name>
+<value>/home/hadoop/name1, /home/hadoop/name2</value> #hadoop的name目录路径
+<description>  </description>
+</property>
+<property>
+<name>dfs.data.dir</name>
+<value>/home/hadoop/data1, /home/hadoop/data2</value>
+<description> </description>
+</property>

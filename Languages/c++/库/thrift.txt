@@ -1,0 +1,84 @@
+协议
+TBinaryProtocol —— 二进制编码格式进行数据传输
+使用方法如清单 3 和清单 4 所示。
+TCompactProtocol —— 高效率的、密集的二进制编码格式进行数据传输
+
+传输层
+用的传输层有以下几种：
+TSocket —— 使用阻塞式 I/O 进行传输，是最常见的模式
+TFramedTransport —— 使用非阻塞方式，按块的大小进行传输，类似于 Java 中的 NIO
+若使用 TFramedTransport 传输层，其服务器必须修改为非阻塞的服务类型
+
+服务端类型
+TSimpleServer —— 单线程服务器端使用标准的阻塞式 I/O
+TThreadPoolServer —— 多线程服务器端使用标准的阻塞式 I/O
+TNonblockingServer —— 多线程服务器端使用非阻塞式 I/O
+使用方法请参考 Thrift 异步客户端构建
+
+
+thrift 安装
+http://thrift.apache.org/tutorial/cpp/
+其中包括前置条件等等
+
+编译使用
+http://wiki.apache.org/thrift/ThriftUsageC%2B%2B
+
+
+thrift eclipse编译错误
+# error "Unable to determine the behavior of a signed right shift"
+添加头文件
+#include <config.h>
+
+
+error: uint32_t does not define a type" error
+在Thrift.h中添加
+#include <boost/cstdint.h>
+
+ error: there are no arguments to ‘htons’ that depend on a template parameter, so a declaration of ‘htons’ must be available
+  
+g++ -DHAVE_NETINET_IN_H
+
+
+############################################
+hadoop的php第三方模块thrift
+
+1.安装依赖包
+yum install automake libtool flex bison pkgconfig gcc-c++ boost-devel libevent-devel zlib-devel python-devel ruby-devel php php-devel
+
+2.安装thrift
+./configure --prefix=/home/blue/apps/thrift --with-php=/home/blue/apps/php/ --with-cpp --with-boost --without-csharp --without-java --without-erlang --without-perl --without-ruby --without-haskell --without-go
+make && make install
+
+3.安装php扩展
+cd /path/to/thrift-0.9.0/lib/php/src/ext/thrift_protocol
+
+/home/blue/apps/php/bin/phpize
+
+./configure --with-php-config=/home/blue/apps/php/bin/php-config --enable-thrift_protocol
+
+make && make install
+
+修改php.ini，添加extension=thrift_protocol.so
+
+
+
+上述安装安装php模块和客户端
+
+在服务器端，需要单独的编译安装
+
+yum -y install ant m4 autoconf automake libtool
+
+这里用的hadoop-1.2.1版本
+
+进入到安装好的hadoop目录里，执行
+
+  ant compile
+
+等待编译完成
+
+然后执行
+
+hadoop/src/contrib/thriftfs/scripts/start_thrift_server.sh 9999
+
+启动服务在9999端口
+

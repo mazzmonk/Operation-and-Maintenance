@@ -1,0 +1,23 @@
+#!/bin/bash
+# author:jack
+# date:20171024
+# startup flanneld service
+# execute with ROOT user
+# FILENAME:srv.flanneld
+###########################
+
+if [ -e GLOBAL-ENV ];then
+  source GLOBAL-ENV
+else
+  echo 'File GLOBAL-ENV does not exist.'
+  echo -1
+fi
+
+
+FLANNEL_PATH=$HOME_PATH/apps/flannel
+
+$FLANNEL_PATH/bin/flanneld \
+-etcd-endpoints="http://$ETCD_NODE01_IPADDRESS:4001,http://$ETCD_NODE02_IPADDRESS:4001,http://$ETCD_NODE03_IPADDRESS:4001" &
+
+
+

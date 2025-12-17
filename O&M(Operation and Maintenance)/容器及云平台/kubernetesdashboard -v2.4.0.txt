@@ -1,0 +1,79 @@
+dashborad IP: 172.20.10.5
+client IP: 172.20.10.10
+
+1. 安装
+在这里查找需要的版本,要和 kubernetes 版本对应,当前使用的 kubernetes 版本是 1.21.2 ,因此对应的 dashboard 版本是 v2.4.0 版本
+https://github.com/kubernetes/dashboard/releases
+
+在修改 yaml 文件的时候,没有修改 nodePort 这个选项了,完整的使用了 recommended.yaml ,事先下载好镜像
+
+kubernetesui/dashboard                           v2.4.0     72f07539ffb5   9 months ago    221MB
+kubernetesui/metrics-scraper                     v1.0.7     7801cfc6d5c0   13 months ago   34.4MB
+
+2. 访问
+由于 k8s 安全性的需求,在使用 kubectl proxy,然后访问 http 页面的时候,最下面有如下的报错,不论使用 token 还是 kubeconfig 文件,并且,sign in 按钮是不能点击的
+
+Insecure access detected. Sign in will not be available. Access Dashboard securely over HTTPS or using localhost. Read more here .
+
+为了解决上述的问题,使用了
+
+kubectl port-forward --namespace kubernetes-dashboard service/kubernetes-dashboard 10443:443 --address 0.0.0.0 
+
+命令
+
+通过 https://172.20.10.5:10443/ 访问,token 和 kubeconfig 都可以使用了
+
+3. 用户和 token
+
+dash-admin-user.yml:
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: admin-user
+  namespace: kubernetes-dashboard
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: admin-user
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: ServiceAccount
+  name: admin-user
+  namespace: kubernetes-dashboard
+
+$ kubectl apply -f dash-admin-user.yml
+
+$ kubectl -n kubernetes-dashboard describe secret $(kubectl -n kubernetes-dashboard get secret | grep admin-user | awk '{print $1}')
+
+使用上述的 token 来登陆
+
+4. 另附使用 kubectl proxy 访问
+
+$kubectl proxy --address='0.0.0.0' --accept-hosts='^*$'
+
+使用 
+
+http://172.20.10.5:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/#/login 
+
+访问,此种方式,会有
+
+Insecure access detected. Sign in will not be available. Access Dashboard securely over HTTPS or using localhost. Read more here .
+ 
+提示,并且 sign in 按钮是灰色的,因此,适合安装了 kubectl 的机器
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,14 @@
+$ gcc -g test.c -o test.exe
+$ gdb test.exe
+
+# 设置断点
+<gdb> b main
+
+# 运行
+<gdb> r
+
+# 运行下一行,单步运行
+<gdb> n
+
+# 显示变量 a
+<gdb> p a 

@@ -1,0 +1,11 @@
+boost::asio::streambuf request;  
+    std::ostream requestPacket(&request);  
+    requestPacket <<"GET " << "http://www.boost.org/" << "HTTP/1.0\r\n";  
+    requestPacket <<"Host: " << "www.boost.org" <<"\r\n";  
+    requestPacket <<"Accept: */*\r\n";  
+    requestPacket <<"Connection: close\r\n\r\n";  
+      
+    std::cout<<&request<<std::endl;  
+   
+    //通过SOCKET发送数据。  
+    boost::asio::write(socket,request);  

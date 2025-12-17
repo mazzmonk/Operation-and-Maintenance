@@ -1,0 +1,60 @@
+/* my.h */
+
+#include <iostream>
+#include <string>
+#include <boost/scoped_ptr.hpp>
+
+class MyClass {
+ public:
+  MyClass();
+  ~MyClass();
+  void get(int a, int b);
+  void get(std::string s1, std::string s2);
+
+ private:
+  class Impl;
+  boost::scoped_ptr<Impl> impl_;
+};
+
+/* my.cc */
+
+#include "my.h"
+
+class MyClass::Impl {
+ public:
+  void get(int a, int b) {
+    std::cout << a + b << std::endl;
+  }
+  void get(std::string s1, std::string s2) {
+    std::cout << s1 + s2 << std::endl;
+  }
+};
+
+MyClass::MyClass()
+    : impl_(new Impl()) {
+}
+MyClass::~MyClass() {
+}
+void MyClass::get(int a, int b) {
+  impl_->get(a,b);
+}
+void MyClass::get(std::string s1, std::string s2) {
+  impl_->get(s1,s2);
+}
+
+pimpl能解决一个二进制兼容性问题,即版本升级以后,保证原二机制文件仍然可以使用,同时能使用新增功能.
+
+关键点:
+1.私有类声明,比如:MyClass声明了Impl.
+2.指向此私有类的指针,比如:boost::scoped_ptr<Impl> impl_;这里用的智能指针.如果不是,在析构的时候必须删除指针.
+3.公有成员函数声明,比如2个get成员函数的声明.
+4.在定义文件(.cc)里定义私有类,同时声明和定义同名的成员函数.
+比如:上述MyClass里声明了2个get成员函数,在MyClass::Impl里声明和定义了2个get成员函数.
+5.类构造函数,初始化上述的智能指针.
+6.定义成员函数,使用智能指针类对应的成员函数.
+
+
+
+
+
+

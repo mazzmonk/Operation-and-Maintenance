@@ -1,0 +1,70 @@
+集群分为2个部分
+冗余
+多个Broker组合成一个集群,但是只有一个对外服务
+
+保证有多个Broker,当有一个失败的情况,尝试其他的,客户端使用此参数配置
+failover:(tcp://localhost:61616,tcp://remotehost:61616)?initialReconnectDelay=100
+
+静态配置多个Broker可以提供服务
+static:(tcp://localhost:61616,tcp://remotehost:61617?trace=false,vm://localbroker)?initialReconnectDelay=100
+
+动态发现Broker
+动态发现机制是在各个broker启动时通过Fanout transport来发现彼此
+<broker name="foo">
+   <transportConnectors>
+     <transportConnector uri="tcp://localhost:0" discoveryUri="multicast://default"/>
+   </transportConnectors>
+   ...
+</broker>
+
+
+为了保证冗余模式,使用zookeeper保持多个节点可以抢占master
+在<persistenceAdapter>部分展示
+
+
+
+
+
+负载均衡
+多个Broker组合成一个集群,当其中一个Broker有消息堆积,则通过Network of Broker方案将消息发送到其他的Broker
+
+使用Networks brokers来完成
+有2种方式
+static Broker Cluster
+Dynamic Broker Cluster
+
+
+
+<networkConnectors>
+      <networkConnectoruri="static:(tcp://localhost:62001)"/>
+</networkConnectors>
+
+static的地方可以用其他两种方式
+ multicast://default
+ masterslave:(tcp://host1:61616,tcp://host2:61616,tcp://..)  ##这里的配置未知
+
+
+static对应静态模式
+multicast对应动态模式
+
+在<networkConnectors>部分展示
+
+
+
+
+
+zookeeper与LevelDB的模式解决了单点故障,就是说,3个activeMQ组成的一个集群,有1个activeMQ在工作,其他2个备份,当有1个出现故障,会有一个master出来工作
+
+为了保证负载均衡,需要broker-cluster模式,就是多个master-slave一起工作,就是上述的模式的多个副本一起工作
+
+就是说要完成一个基本的负载均衡和高冗余方案,至少需要3X2,6个节点
+
+负载均衡有2个模式
+就是上述的static Broker Cluster/Dynamic Broker Cluster模式
+
+
+
+
+
+
+

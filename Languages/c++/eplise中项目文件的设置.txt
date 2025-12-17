@@ -1,0 +1,47 @@
+目录结构如下：
+test
+├── Debug
+│   ├── main
+│   │   ├── hello-world.d
+│   │   ├── hello-world.o
+│   │   └── subdir.mk
+│   ├── makefile
+│   ├── objects.mk
+│   ├── sources.mk
+│   ├── src
+│   │   ├── hello-greet.d
+│   │   ├── hello-greet.o
+│   │   ├── hello-time.d
+│   │   ├── hello-time.o
+│   │   └── subdir.mk
+│   └── test                    #这里以上都是编译以后生成
+├── include
+│   ├── hello-greet.h
+│   └── hello-time.h
+├── lib
+├── main
+│   └── hello-world.cc
+└── src
+    ├── hello-greet.cc
+    └── hello-time.cc
+
+
+结构是在hello-world.cc中包含hello-greet.h和hello-time.h文件，同时hello-greet.cc中包含hello-greet.h，hello-time.cc中包含hello-time.h
+这里很重要的地方是在eplise中设置include路径，具体是在项目属性中C/C++ General->Paths and Symbols右边includes加入上述的include目录路径（这里是/${ProjName}/include），同时需要在所有的.cc文件中加入头文件的路径，举例：
+
+/* hello-greet.cc */
+#include "hello-greet.h"
+
+/* hello-world.cc */
+#include "hello-greet.h"
+#include "hello-time.h"
+
+/* hello-time.cc */
+#include "hello-time.h"
+
+注意一定不要写成#include "include/hello-greet.h" "include/hello-time.h"这样
+
+
+
+
+

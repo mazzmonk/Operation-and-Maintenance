@@ -1,0 +1,160 @@
+符号引用(typeglob，别名)与全局变量的修改
+
+不能以为在子函数里修改了一个和全局变量同名的变量就会修改全局变量：
+#!/usr/bin/perl
+
+$glov = "hello";
+
+change;
+
+print $glov;
+
+sub change {
+        $glov = "world";
+}
+
+虽然在子程序 change 里的 $glov 变量和全局变量 $glov 名字相同，但两个并不是同一个变量，子程序里的变量为局部变量。
+
+在子程序里修改全局变量的一种方法是利用“符号引用”。
+
+符号引用类似与 Linux 里的软连接概念，它又称为别名。创建一个变量的别名的方法是在实际变量的前面加上一个 "*" 符号。星号("*") 适用于任意类型的变量，包括标量，数组，散列，文件句柄，子函数等。
+
+别名是符号表中针对同名标识符的另一个名称，比如 *name 可以表示 $name, @name 以及 %name, &name 等。
+
+当通过别名按引用传递方式将别名传递到函数中时，需要用 local 函数声明一个私有变量用以接收传递进来的别名，该私有变量也就是另外一个别名，然后修改该私有变量也就等效于修改了传递进来的全局变量。如下程序所示：
+#!/usr/bin/perl
+
+$glov = "hello";
+
+&change(*glov);
+
+print $glov, "\n";
+
+sub change {
+        local(*alias) = @_;
+        print "$alias\n";
+        $alias = "world";
+}
+
+运行输出：
+$ ./changeglobv.pl
+hello
+world
+
+上面，不能用 my 来声明这个私有变量，因为 my 函数所创建的变量名称并不保存在符号表中，而是位于临时缓冲区中。由于 typeglob 仅能关联到特定的符号表上，因此 my 不能对它进行私有化，所以要让 typeglob 本地化就必须使用 local 函数。
+
+测试代码2：
+#!/usr/bin/perl
+
+$colors = "rainbow";
+@colors = ("red", "green", "yellow");
+
+&printit(*colors);         #传递进 colors 数组的别名
+
+sub printit {
+        local(*whichone) = @_;
+        print *whichone, "\n";
+
+        $whichone = "hello world";
+        $whichone[0] = "BLUE";           #修改数组中的元素
+}
+
+运行输出：
+$ ./alias.pl
+*main::colors             #告知 *whichone 是 main 中 colors 的别名
+Out of subroutine.
+$colors is hello world.
+@colors is BLUE green yellow.
+
+
+测试代码3：
+#!/usr/bin/perl
+
+@n = split(' ', <STDIN>);
+
+&params(*n);
+
+sub params {
+        local (*arr) = @_;
+
+        print 'The values of the @arr array are ', @arr, "\n"; 
+
+        print "The first value is $arr[0]\n";
+
+        print "the last value is ", pop(@arr), "\n";
+
+        foreach $value (@arr) {
+                $value += 5;
+                print "The value is $value.\n";
+        }
+}
+print "Back in main\n";
+print "The new values are @n.\n";
+
+运行输出：
+$ ./alias2.pl
+1 2 3 4 5       #输入命令行参数
+The values of the @arr array are 12345
+The first value is 1
+the last value is 5
+The value is 6.
+The value is 7.
+The value is 8.
+The value is 9.
+Back in main
+The new values are 6 7 8 9.
+
+
+测试代码4：
+该例子演示通过引用传递文件句柄。如果要直接把文件句柄传递给子函数，唯一的途径就是通过引用(注意，还有个硬引用，这里不涉及)。
+#!/usr/bin/perl
+
+open (HD, "<hello.txt") || die "Can not open file: $!";     #以只读方式打开文件 hello.txt，并建立相应句柄 HD
+
+&readit (*HD);
+
+sub readit {
+        local(*myfile) = @_;       #给本地别名 myfile 赋值，即将别名传递给子例程
+        while (<myfile>) {       #别名是文件句柄 HD 的另一个名字，while 循环逐行读取文件句柄中的各行内容
+                print;
+        }
+}
+
+
+
+在上面，别名可以同时匹配多种类型。如果你只想匹配特定的一种，那么此时需要用反斜杠运算符，Perl 的引用机制允许对某类特定变量而不是所有变量类型使用别名，如：
+
+*array = \@array;   # *array只引用数组
+*scalar = \$scalar;    # *saclar 只引用变量
+*hash = \%assoc_array;    # *hash 只引用散列表
+*func = \&subroutine;   # *func 只引用子函数
+
+
+测试代码5：
+
+#!/usr/bin/perl
+
+@list = (1, 2, 3, 4, 5);
+
+*arr = \@list;  #*arr 此时只对 @list 数组引用
+print @arr, "\n";
+print "$arr\n";         #arr 已经只能引用数组而不能引用普通变量,这里内容为空
+
+sub alias {     #修改数组
+        local (*a) = @_;
+        $a[0] = 7;
+        pop @a;
+}
+
+&alias(*arr);
+print "@list\n";
+
+$num = 5;
+*alnum = \$num; # scalar 只引用变量而不能引用数组
+print "@alnum\n";
+
+运行输出：
+$ ./chalias.pl
+12345
+
+7 2 3 4

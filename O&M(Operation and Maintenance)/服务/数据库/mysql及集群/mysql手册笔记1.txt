@@ -1,0 +1,1998 @@
+安装
+1.如果你使用的gcc版本足够新，可以识别-fno-exceptions选项，则使用该选项非常重要。否则，你编译二进制时出现问题。我们建议你同时使用-felide-constructors和-fno-rtti选项。当有疑问时，执行下面操作：
+
+CFLAGS="-O3" CXX=gcc CXXFLAGS="-O3 -felide-constructors \
+       -fno-exceptions -fno-rtti" ./configure \
+       --prefix=/usr/local/mysql --enable-assembler \
+       --with-mysqld-ldflags=-all-static
+       
+在大多数系统中，可以得到快速、稳定的二进制。
+
+2.如果你想编译静态链接程序(例如，制作二进制分发版、获得更快的速度或与解决与RedHat分发版的一些问题)，像这样运行configure：
+
+shell>./configure --with-client-ldflags=-all-static\
+      --with-mysqld-ldflags=-all-static
+
+如果你正在使用gcc并且没有安装libg++或libstdc++，你可以告诉configure使用gcc作为C++编译器：
+
+shell> CC=gcc  CXX=gcc  ./configure
+
+
+3.对于所有最近的gcc版，整个configure行应为：
+
+CFLAGS="-O3 -mpentiumpro" CXX=gcc CXXFLAGS="-O3 -mpentiumpro \
+-felide-constructors -fno- exceptions -fno-rtti" ./ configure \
+--prefix=/usr/local/mysql --enable-assembler \
+--with-mysqld-ldflags=-all-static
+
+4.可以使用--with-big-tables选项构建支持大数据库表的MySQL。
+该选项使变量用来将表行数保存到unsigned long long中而不是unsigned long。结果是允许表有大约1.844E+19 ((232)2)行而不是232 (~4.295E+09) 行
+
+5.需要重新配置时候，如果configure在原来已经运行过这个命令的系统上再次运行，会收集原来的信息，这个信息存在config.cache里，同时为了重新编译，需要删掉原来已经make过的的目标文件，需要做如下操作
+shell>rm config.cache
+shell>make clean
+
+6.在Unix中，由mysql_install_db设置 授权表
+mysql_install_db 脚本的目的是生成新的MySQL授权表。它不覆盖已有的MySQL授权表，并且它不影响任何其它数据
+
+如果你想要重新创建授权表，首先停止mysqld服务器（如果它正运行）。然后重新命名数据目录下的MySQL目录并保存，然后运行mysql_install_db。例如：
+
+shell> mv mysql-data-directory/mysql mysql-data-directory/mysql-old
+shell> mysql_install_db --user=mysql
+
+7.使用mysqladmin验证服务器在运行中。以下命令提供了简单的测试，可检查服务器是否已经启动并能响应连接：
+
+shell> bin/mysqladmin version
+shell> bin/mysqladmin variables
+
+8.在sql-bench目录(在MySQL安装目录下)中有一个基准套件，可以用来比较MySQL在不同平台上的执行情况。
+必须安装以下模块：
+
+DBI
+DBD::mysql
+Data::Dumper
+Data::ShowTable
+sql-bench/Results目录包含了在不同数据库和平台上的各种运行结果。要想进行测试，执行命令：
+
+shell> cd sql-bench
+shell> perl run-all-tests
+
+9.mysql.server脚本可以被用来启动或停止服务器，通过用start或stop参数调用它：
+
+shell> mysql.server start
+shell> mysql.server stop
+
+如果从不自动安装mysql.server的源码分发版或二进制分发版格式来安装MySQL，可以手动安装它。可以在MySQL安装目录下或MySQL 源码树的support-files目录中找到脚本。
+
+要想手动安装mysql.server，用名称mysql将它复制到/etc/init.d目录，然后将它变为可执行文件。只需要将位置更改为mysql.serveris所在并执行这些命令的相应目录：
+
+shell> cp mysql.server /etc/init.d/mysql
+shell> chmod +x /etc/init.d/mysql
+
+10.在Unix中使用PASSWORD的方法：
+
+shell> mysql -u root
+mysql> SET PASSWORD FOR ''@'localhost' = PASSWORD('newpwd');
+mysql> SET PASSWORD FOR ''@'host_name' = PASSWORD('newpwd');
+用服务器主机名替换第二个SET PASSWORD语句中的host_name。这是指定的user表中的root non-localhost记录的Host列名。如果你不知道是哪个主机名，在SET PASSWORD之前执行下面的语句：
+
+mysql> SELECT Host, User FROM mysql.user;
+查找在User列有root和在Host列没有localhost的记录。然后在第二个SET PASSWORD语句中使用该Host值。
+
+为匿名账户指定密码的另一种方法是使用UPDATE直接修改用户表。用root连接服务器，运行UPDATE语句为相应user表记录的Password列指定一个值。在Windows和Unix中的过程是相同的。下面的UPDATE语句同时为两个匿名账户指定密码：
+
+shell> mysql -u root
+mysql> UPDATE mysql.user SET Password = PASSWORD('newpwd')
+    ->     WHERE User = '';
+mysql> FLUSH PRIVILEGES;
+在user表中直接使用UPDATE更新密码后，必须让服务器用FLUSH PRIVILEGES重新读授权表。否则，重新启动服务器前，不会使用更改。
+
+如果你宁愿删除匿名账户，操作方法是：
+
+shell> mysql -u root
+mysql> DELETE FROM mysql.user WHERE User = '';
+mysql> FLUSH PRIVILEGES;
+
+11.使用mysqldump --help来看有哪些选项可用。如果你正将数据移动到更新版本的MySQL，你应当使用mysqldump –opt来利用各种优化性能来产生更小、可以更快处理的转储文件。
+
+在两台机器之间移动数据库的最简单(尽管不是最快)的方法是在数据库所在的机器上运行下面的命令：
+
+shell> mysqladmin -h 'other_hostname' create db_name
+shell> mysqldump --opt db_name | mysql -h 'other_hostname' db_name
+
+如果你想要从远程机器通过慢速网络复制数据库，可以使用：
+
+shell> mysqladmin create db_name
+shell> mysqldump -h 'other_hostname' --opt --compress db_name | mysql db_name
+
+还可以将结果保存到文件中，然后将文件转移到目标机器上并将文件装载到数据库中。例如，可以在源机器上使用下面的命令将数据库备份到文件中：
+
+shell> mysqldump --quick db_name | gzip > db_name.contents.gz
+(该例子中创建的文件是压缩格式）。将含有数据库内容的文件到目标机上并运行命令：
+
+shell> mysqladmin create db_name
+shell> gunzip < db_name.contents.gz | mysql db_name
+还可以使用mysqldump和mysqlimport来转移数据库。对于大的表，比只是使用mysqldump要快得多。在下面的命令中，DUMPDIR代表用来保存mysqldump输出的目录全路径名。
+
+首先，创建保存输出文件的目录并备份数据库：
+
+shell> mkdir DUMPDIR
+shell>mysqldump --tab=DUMPDIR db_name
+
+然后将DUMPDIR目录中的文件转移到目标机上相应的目录中并将文件装载到MySQL：
+
+shell> mysqladmin create db_name           # create database
+shell> cat DUMPDIR/*.sql | mysql db_name   # create tables in database
+shell> mysqlimport db_name DUMPDIR/*.txt   # load data into tables
+不要忘记复制MySQL数据库，因为授权表保存在该数据库中。你可能需要在新机器上用MySQL root用户运行命令，直到产生MySQL数据库。
+
+将mysql数据库导入目标机器后，执行mysqladmin flush-privileges，以便服务器重载授权表信息。
+
+12.当使用LinuxThreads时，你应当至少可以看见有三个mysqld 进程在运行。这些实际上是线程。有一个线程是LinuxThreads管理器，一个线程处理连接，另一个线程处理告警和信号。
+
+13.LinuxThreads的STACK_SIZE常数控制在寻址空间中线程堆栈的占用空间。它需要足够大，以保证每个线程堆栈有足够的空间，但是应足够小，防止某些线程的堆栈运行全局mysqld数据。遗憾的是，根据我们的发现，如果你用mmap()映射目前正使用的寻址，Linux成功运行  后不会映射映射区，将会清空整个地址页上的数据而不会返回错误信息。因此，mysqld或其它线程应用程序的安全依靠创建线程的代码的“绅士”行为。用户必须采取措施以确保在任何时间运行线程的数目相对线程堆栈应足够低，以防止全局堆内存。使用mysqld时，你应当为max_connections变量设置合理的值强制该行为。
+
+如果你自己构建MySQL，你可以为LinuxThreads打补丁以便更好地使用堆栈。请参见2.12.1.3节，“Linux源码分发版说明”。如果你不想为LinuxThreads打补丁，你应当将max_connections的值设置为不超过500。如果你有大的关键字缓冲区、大的堆内存表，或其它使mysqld分配大量内存的东西，或如果你用2GB的补丁运行2.2内核，max_connections的值应当更低。如果你正使用我们的二进制或RPM版本，可以安全地将max_connections设置为1500（假定没有大的关键字缓冲区或有大量数据的堆内存表。将LinuxThreads中的STACK_SIZE降低得越低，可以安全地创建越多的线程。我们推荐的值的范围为128KB到256KB。
+
+
+
+使用
+
+1.mysql> SELECT VERSION(), CURRENT_DATE;
++-----------------+--------------+
+| VERSION()       | CURRENT_DATE |
++-----------------+--------------+
+| 5.1.2-alpha-log | 2005-10-11   |
++-----------------+--------------+
+
+2.mysql用作一个简单的计算器：
+
+MariaDB [(none)]> select sin(PI()/4),(4+1)*5;
++-------------------+---------+
+| sin(PI()/4)       | (4+1)*5 |
++-------------------+---------+
+| 0.707106781186547 |      25 |
++-------------------+---------+
+1 row in set (0.00 sec)
+
+3.你可以在一行上输入多条语句，只需要以一个分号间隔开各语句：
+
+mysql> SELECT VERSION(); SELECT NOW();
++-----------------+
+| VERSION()       |
++-----------------+
+| 5.1.2-alpha-log |
++-----------------+
+1 row in set (0.00 sec)
+ 
++---------------------+
+| NOW()               |
++---------------------+
+| 2005-10-11 15:15:00 |
++---------------------+
+1 row in set (0.00 sec)
+
+4.mysql> GRANT ALL ON menagerie.* TO 'your_mysql_name'@'your_client_host';
+ 这里your_mysql_name是分配给你的MySQL用户名，your_client_host是所连接的服务器所在的主机。
+
+5.创建数据库：
+ mysql> CREATE DATABASE menagerie;
+
+
+6.你可以创建一个文本文件“pet.txt”，每行包含一个记录，用定位符(tab)把值分开，并且以CREATE TABLE语句中列出的列次序给出。对于丢失的值(例如未知的性别，或仍   然活着的动物的死亡日期)，你可以使用NULL值。为了在你的文本文件中表示这些内容，使用\N（反斜线，字母N）。例如，Whistler鸟的记录应为(这里值之间的空白是一个定位符)：
+
+MariaDB [test]> select * from pet where name='Whistler';
++----------+-------+---------+------+------------+-------+
+| name     | owner | species | sex  | birth      | daeth |
++----------+-------+---------+------+------------+-------+
+| Whistler | Gwen  | bird    | NULL | 1997-12-09 | NULL  |
++----------+-------+---------+------+------------+-------+
+1 row in set (0.00 sec)
+
+
+文本"pet.txt"中的内容如下：
+Fluffy  Harold  cat     f       1993-02-04
+Claws   Gwen    cat     m       1994-03-17
+Whistler        Gwen    bird    \N      1997-12-09
+
+
+要想将文本文件“pet.txt”装载到pet表中，使用这个命令：
+
+mysql> LOAD DATA LOCAL INFILE '/path/pet.txt' INTO TABLE pet;
+请注意如果用Windows中的编辑器（使用\r\n做为行的结束符）创建文件，应使用：
+
+mysql> LOAD DATA LOCAL INFILE '/path/pet.txt' INTO TABLE pet
+    -> LINES TERMINATED BY '\r\n';
+
+7.mysql> INSERT INTO pet
+    -> VALUES ('Puffball','Diane','hamster','f','1999-03-30',NULL);
+注意，这里字符串和日期值均为引号扩起来的字符串。另外，可以直接用INSERT语句插入NULL代表不存在的值。不能使用LOAD DATA中所示的的\N。
+
+8.用一个UPDATE语句仅修正错误记录：
+ mysql> UPDATE pet SET birth = '1989-08-31' WHERE name = 'Bowser';
+ UPDATE只更改有问题的记录，不需要重新装载数据库表。
+
+9.哪个动物在1998以后出生的
+ mysql> SELECT * FROM pet WHERE birth > '1998-1-1';
+
+10.找出雌性的狗：
+ mysql> SELECT * FROM pet WHERE species = 'dog' AND sex = 'f';
+
+11.AND和OR可以混用，但AND比OR具有更高的优先级。如果你使用两个操作符，使用圆括号指明如何对条件进行分组是一个好主意：
+ mysql> SELECT * FROM pet WHERE (species = 'cat' AND sex = 'm')
+    -> OR (species = 'dog' AND sex = 'f');
+    
+12.请注意该查询只是简单地检索每个记录的owner列，并且他们中的一些出现多次。为了使输出减到最少，增加关键字DISTINCT检索出每个唯一的输出记录：
+
+MariaDB [test]> select distinct owner from pet;
++--------+
+| owner  |
++--------+
+| Harold |
+| Gwen   |
+| Diane  |
++--------+
+3 rows in set (0.02 sec)
+
+13.为了排序结果，使用ORDER BY子句
+
+MariaDB [test]> select name,birth from pet order by birth;
++----------+------------+
+| name     | birth      |
++----------+------------+
+| Bowser   | 1989-08-31 |
+| Fluffy   | 1993-02-04 |
+| Fluffy   | 1993-02-04 |
+| Claws    | 1994-03-17 |
+| Whistler | 1997-12-09 |
+| Puffball | 1999-03-30 |
++----------+------------+
+6 rows in set (0.00 sec)
+
+14.在字符类型列上，与所有其他比较操作类似，分类功能正常情况下是以区分大小写的方式执行的。这意味着，对于等同但大小写不同的列，并未定义其顺序。对于某一列，可以 使用BINARY强制执行区分大小写的分类功能，如：ORDER BY BINARY col_name.
+
+15.默认排序是升序，最小的值在第一。要想以降序排序，在你正在排序的列名上增加DESC（降序 ）关键字：
+
+MariaDB [test]> select name, birth from pet order by birth desc;
++----------+------------+
+| name     | birth      |
++----------+------------+
+| Puffball | 1999-03-30 |
+| Whistler | 1997-12-09 |
+| Claws    | 1994-03-17 |
+| Fluffy   | 1993-02-04 |
+| Fluffy   | 1993-02-04 |
+| Bowser   | 1989-08-31 |
++----------+------------+
+6 rows in set (0.00 sec)
+
+16.下边是order by,order by binary的区别
+
+MariaDB [test]> select name,birth from pet order by name;
++----------+------------+
+| name     | birth      |
++----------+------------+
+| Bowser   | 1989-08-31 |
+| Claws    | 1994-03-17 |
+| Fluffy   | 1993-02-04 |
+| Fluffy   | 1993-02-04 |
+| Puffball | 1999-03-30 |
+| puffball | 1995-01-01 |
+| Whistler | 1997-12-09 |
++----------+------------+
+7 rows in set (0.00 sec)
+
+MariaDB [test]> select name,birth from pet order by binary name;
++----------+------------+
+| name     | birth      |
++----------+------------+
+| Bowser   | 1989-08-31 |
+| Claws    | 1994-03-17 |
+| Fluffy   | 1993-02-04 |
+| Fluffy   | 1993-02-04 |
+| Puffball | 1999-03-30 |
+| Whistler | 1997-12-09 |
+| puffball | 1995-01-01 |
++----------+------------+
+7 rows in set (0.00 sec)
+
+17.按升序对动物的种类进行排序，然后按降序根据生日对各动物种类进行排序（最年轻的动物在最前面），使用下列查询：
+
+MariaDB [test]> select name,species,birth from pet order by species,birth desc;
++----------+---------+------------+
+| name     | species | birth      |
++----------+---------+------------+
+| Whistler | bird    | 1997-12-09 |
+| puffball | cat     | 1995-01-01 |
+| Claws    | cat     | 1994-03-17 |
+| Fluffy   | cat     | 1993-02-04 |
+| Fluffy   | cat     | 1993-02-04 |
+| Bowser   | dog     | 1989-08-31 |
+| Puffball | hamster | 1999-03-30 |
++----------+---------+------------+
+7 rows in set (0.00 sec)
+
+注意DESC关键字仅适用于在它前面的列名(birth)；不影响species列的排序顺序
+                
+                
+18.要想确定每个宠物有多大，可以计算当前日期的年和出生日期之间的差。如果当前日期的日历年比出生日期早，则减去一年。以下查询显示了每个宠物的出生日期、当前日期和年龄数值的年数字。
+
+MariaDB [test]> select name,birth,curdate(),(year(curdate())-year(birth))-(right(curdate(),5)<right(birth,5)) 
+    -> as age
+    -> from pet;
+
+此处，YEAR()提取日期的年部分，RIGHT()提取日期的MM-DD (日历年)部分的最右面5个字符。比较MM-DD值的表达式部分的值一般为1或0，如果CURDATE()的年比birth的年早，则年份应减去1。整个表达式有些难懂，使用alias (age)来使输出的列标记更有意义。
+
+
+19.可以使用一个类似的查询来确定已经死亡动物的死亡年龄。你通过检查death值是否是NULL来确定是哪些动物，然后，对于那些非NULL值的动物，需要计算出death和birth值之间的差：
+
+MariaDB [test]> select name,birth,daeth, (year(daeth) - year(birth)) - (right(daeth,5)<right(birth,5)) as age from pet where daeth is NOT NULL order by age;
++----------+------------+------------+------+
+| name     | birth      | daeth      | age  |
++----------+------------+------------+------+
+| Puffball | 1999-03-30 | 2003-10-05 |    4 |
+| Bowser   | 1989-08-31 | 1995-07-29 |    5 |
+| puffball | 1995-01-01 | 2001-01-01 |    6 |
+| Fluffy   | 1993-02-04 | 2000-03-05 |    7 |
+| Fluffy   | 1993-02-04 | 2000-03-05 |    7 |
++----------+------------+------------+------+
+
+20.MySQL提供几个日期部分的提取函数，例如YEAR( )、MONTH( )和DAYOFMONTH( )
+
+MariaDB [test]> select name,birth,month(birth),dayofmonth(birth) from pet;
++----------+------------+--------------+-------------------+
+| name     | birth      | month(birth) | dayofmonth(birth) |
++----------+------------+--------------+-------------------+
+| Fluffy   | 1993-02-04 |            2 |                 4 |
+| Fluffy   | 1993-02-04 |            2 |                 4 |
+| Claws    | 1994-03-17 |            3 |                17 |
+| Whistler | 1997-12-09 |           12 |                 9 |
+| Puffball | 1999-03-30 |            3 |                30 |
+| Bowser   | 1989-08-31 |            8 |                31 |
+| puffball | 1995-01-01 |            1 |                 1 |
++----------+------------+--------------+-------------------+
+
+21.找出下个月生日的动物,你甚至可以编写查询，不管当前月份是什么它都能工作。采用这种方法不必在查询中使用一个特定的月份，DATE_ADD( )允许在一个给定的日期上加上时间间隔。如果在NOW( )值上加上一个月，然后用MONTH()提取月份，结果产生生日所在月份：
+
+MariaDB [test]> select name,birth from pet  where month(birth) = month(date_add(curdate(),interval 1 month));
++----------+------------+                                                                                                             
+| name     | birth      |                                                                                                             
++----------+------------+                                                                                                             
+| Puffball | 1999-11-30 |                                                                                                             
++----------+------------+   
+
+相对的可以找出明天过生日的动物
+MariaDB [test]> select name,birth from pet  where month(birth) = month(date_add(curdate(),interval 1 day));
++----------+------------+
+| name     | birth      |
++----------+------------+
+| Puffball | 1999-10-17 |
++----------+------------+
+1 row in set (0.00 sec)
+
+另一个方法是加1以得出当前月份的下一个月(在使用取模函数(MOD)后，如果月份当前值是12，则“回滚”到值0)：
+
+mysql> SELECT name, birth FROM pet
+    -> WHERE MONTH(birth) = MOD(MONTH(CURDATE()), 12) + 1;
+注意，MONTH返回在1和12之间的一个数字，且MOD(something,12)返回在0和11之间的一个数字，因此必须在MOD( )以后加1，否则我们将从11月( 11 )跳到1月(1)。
+
+22.使用IS NULL和IS NOT NULL操作符才有意义
+
+23.SQL模式匹配允许你使用“_”匹配任何单个字符，而“%”匹配任意数目字符(包括零字符)。
+
+MariaDB [test]> select * from pet where name like 'b%';
++--------+-------+---------+------+------------+------------+
+| name   | owner | species | sex  | birth      | daeth      |
++--------+-------+---------+------+------------+------------+
+| Bowser | Diane | dog     | m    | 1989-08-31 | 1995-07-29 |
++--------+-------+---------+------+------------+------------+
+1 row in set (0.00 sec)
+
+MariaDB [test]> select * from pet where name like '%fy';
++--------+--------+---------+------+------------+------------+
+| name   | owner  | species | sex  | birth      | daeth      |
++--------+--------+---------+------+------------+------------+
+| Fluffy | Harold | cat     | f    | 1993-02-04 | 2000-03-05 |
+| Fluffy | Harold | cat     | f    | 1993-02-04 | 2000-03-05 |
++--------+--------+---------+------+------------+------------+
+2 rows in set (0.00 sec)
+
+MariaDB [test]> select * from pet where name like '%w%';
++----------+-------+---------+------+------------+------------+
+| name     | owner | species | sex  | birth      | daeth      |
++----------+-------+---------+------+------------+------------+
+| Claws    | Gwen  | cat     | m    | 1994-03-17 | NULL       |
+| Whistler | Gwen  | bird    | NULL | 1997-12-09 | NULL       |
+| Bowser   | Diane | dog     | m    | 1989-08-31 | 1995-07-29 |
++----------+-------+---------+------+------------+------------+
+3 rows in set (0.00 sec)
+
+五个字符
+MariaDB [test]> select * from pet where name like '_____';
++-------+-------+---------+------+------------+-------+
+| name  | owner | species | sex  | birth      | daeth |
++-------+-------+---------+------+------------+-------+
+| Claws | Gwen  | cat     | m    | 1994-03-17 | NULL  |
++-------+-------+---------+------+------------+-------+
+1 row in set (0.00 sec)
+
+24.正则表达式
+
+‘.’匹配任何单个的字符。
+
+字符类“[...]”匹配在方括号内的任何字符。例如，“[abc]”匹配“a”、“b”或“c”。为了命名字符的范围，使用一个“-”。“[a-z]”匹配任何字母，而“[0-9]”匹配任何数字。
+
+“ * ”匹配零个或多个在它前面的字符。例如，“x*”匹配任何数量的“x”字符，“[0-9]*”匹配任何数量的数字，而“.*”匹配任何数量的任何字符。
+
+如果REGEXP模式与被测试值的任何地方匹配，模式就匹配(这不同于LIKE模式匹配，只有与整个值匹配，模式才匹配)。
+为了定位一个模式以便它必须匹配被测试值的开始或结尾，在模式开始处使用“^”或在模式的结尾用“$”。
+
+为了找出以“b”开头的名字，使用“^”匹配名字的开始：
+MariaDB [test]> select * from pet where name regexp '^b';
++--------+-------+---------+------+------------+------------+
+| name   | owner | species | sex  | birth      | daeth      |
++--------+-------+---------+------+------------+------------+
+| Bowser | Diane | dog     | m    | 1989-08-31 | 1995-07-29 |
++--------+-------+---------+------+------------+------------+
+
+如果你想强制使REGEXP比较区分大小写，使用BINARY关键字使其中一个字符串变为二进制字符串。该查询只匹配名称首字母的大写‘B’。
+
+MariaDB [test]> select * from pet where name regexp binary '^B';
++--------+-------+---------+------+------------+------------+
+| name   | owner | species | sex  | birth      | daeth      |
++--------+-------+---------+------+------------+------------+
+| Bowser | Diane | dog     | m    | 1989-08-31 | 1995-07-29 |
++--------+-------+---------+------+------------+------------+
+
+为了找出包含正好5个字符的名字，使用“^”和“$”匹配名字的开始和结尾，和5个“.”实例在两者之间：
+MariaDB [test]> select * from pet where name regexp '^.....$';
++-------+-------+---------+------+------------+-------+
+| name  | owner | species | sex  | birth      | daeth |
++-------+-------+---------+------+------------+-------+
+| Claws | Gwen  | cat     | m    | 1994-03-17 | NULL  |
++-------+-------+---------+------+------------+-------+
+
+你也可以使用“{n}”“重复n次”操作符重写前面的查询：
+
+MariaDB [test]> select * from pet where name regexp '^.{5}$';
++-------+-------+---------+------+------------+-------+
+| name  | owner | species | sex  | birth      | daeth |
++-------+-------+---------+------+------------+-------+
+| Claws | Gwen  | cat     | m    | 1994-03-17 | NULL  |
++-------+-------+---------+------+------------+-------+
+
+25.COUNT(*)函数计算行数
+
+MariaDB [test]> select count(*) from pet;
++----------+
+| count(*) |
++----------+
+|        7 |
++----------+
+
+如果你想要知道每个主人有多少宠物，你可以使用COUNT( )函数：
+
+MariaDB [test]> select owner,count(*) from pet  group by owner;
++--------+----------+
+| owner  | count(*) |
++--------+----------+
+| Diane  |        2 |
+| Gwen   |        2 |
+| Gwn    |        1 |
+| Harold |        2 |
++--------+----------+
+注意，使用GROUP BY对每个owner的所有记录分组，没有它，你会得到错误消息
+
+
+26.多表
+
+MariaDB [test]> select * from event;
++----------+------------+----------+-----------------------------+
+| name     | date       | type     | remark                      |
++----------+------------+----------+-----------------------------+
+| name     | 0000-00-00 | type     | remark                      |
+| Fluffy   | 1995-05-15 | litter   | 4 kittens, 3 female, 1 male |
+| Buffy    | 1993-06-23 | litter   | 5 puppies, 2 female, 3 male |
+| Buffy    | 1994-06-19 | litter   | 3 puppies, 3 female         |
+| Chirpy   | 1999-03-21 | vet      | needed beak straightened    |
+| Slim     | 1997-08-03 | vet      | broken rib                  |
+| Bowser   | 1991-10-12 | kennel   | NULL                        |
+| Fang     | 1991-10-12 | kennel   | NULL                        |
+| Fang     | 1998-08-28 | birthday | Gave him a new chew toy     |
+| Claws    | 1998-03-17 | birthday | Gave him a new flea collar  |
+| Whistler | 1998-12-09 | birthday | First birthday              |
++----------+------------+----------+-----------------------------+
+
+当他们有了一窝小动物时，假定你想要找出每只宠物的年龄。我们前面看到了如何通过两个日期计算年龄。event表中有母亲的生产日期，但是为了计算母亲的年龄，你需要她的出生日期，存储在pet表中。说明查询需要两个表：
+
+MariaDB [test]> select pet.name, (year(date)-year(birth)) - (right(date,5) < right(birth,5)) as age, remark from pet,event where pet.name = event.name and event.type = 'litter';
++--------+------+-----------------------------+
+| name   | age  | remark                      |
++--------+------+-----------------------------+
+| Fluffy |    2 | 4 kittens, 3 female, 1 male |
+| Fluffy |    2 | 4 kittens, 3 female, 1 male |
++--------+------+-----------------------------+
+2 rows in set (0.01 sec)
+
+关于该查询要注意的几件事情：
+
+FROM子句列出两个表，因为查询需要从两个表提取信息。
+当从多个表组合(联结)信息时，你需要指定一个表中的记录怎样能匹配其它表的记录。这很简单，因为它们都有一个name列。查询使用WHERE子句基于name值来匹配2个表中的记录。
+因为name列出现在两个表中，当引用列时，你一定要指定哪个表。把表名附在列名前即可以实现。
+
+27.批模式运行，通过文件的方式得到语句，如下：
+
+a文件中的内容为
+use test
+select * from pet;
+
+默认情况下，得到的格式如下：
+[vlinko@system00 ~]$ mysql <a
+
+name    owner   species sex     birth   daeth
+Fluffy  Harold  cat     f       1993-02-04      2000-03-05
+Fluffy  Harold  cat     f       1993-02-04      2000-03-05
+Claws   Gwen    cat     m       1994-03-17      NULL
+Whistler        Gwen    bird    NULL    1997-12-09      NULL
+Puffball        Diane   hamster f       1999-10-17      2003-10-05
+Bowser  Diane   dog     m       1989-08-31      1995-07-29
+puffball        Gwn     cat     m       1995-01-01      2001-01-01
+
+加上-t参数得到的内容
+
+[vlinko@system00 ~]$ mysql -t <a
++----------+--------+---------+------+------------+------------+
+| name     | owner  | species | sex  | birth      | daeth      |
++----------+--------+---------+------+------------+------------+
+| Fluffy   | Harold | cat     | f    | 1993-02-04 | 2000-03-05 |
+| Fluffy   | Harold | cat     | f    | 1993-02-04 | 2000-03-05 |
+| Claws    | Gwen   | cat     | m    | 1994-03-17 | NULL       |
+| Whistler | Gwen   | bird    | NULL | 1997-12-09 | NULL       |
+| Puffball | Diane  | hamster | f    | 1999-10-17 | 2003-10-05 |
+| Bowser   | Diane  | dog     | m    | 1989-08-31 | 1995-07-29 |
+| puffball | Gwn    | cat     | m    | 1995-01-01 | 2001-01-01 |
++----------+--------+---------+------+------------+------------+
+
+使用-vvv时将得到语句同时得到交互时的格式
+[vlinko@system00 ~]$ mysql -vvv <a
+--------------
+select * from pet
+--------------
+
++----------+--------+---------+------+------------+------------+
+| name     | owner  | species | sex  | birth      | daeth      |
++----------+--------+---------+------+------------+------------+
+| Fluffy   | Harold | cat     | f    | 1993-02-04 | 2000-03-05 |
+| Fluffy   | Harold | cat     | f    | 1993-02-04 | 2000-03-05 |
+| Claws    | Gwen   | cat     | m    | 1994-03-17 | NULL       |
+| Whistler | Gwen   | bird    | NULL | 1997-12-09 | NULL       |
+| Puffball | Diane  | hamster | f    | 1999-10-17 | 2003-10-05 |
+| Bowser   | Diane  | dog     | m    | 1989-08-31 | 1995-07-29 |
+| puffball | Gwn    | cat     | m    | 1995-01-01 | 2001-01-01 |
++----------+--------+---------+------+------------+------------+
+7 rows in set (0.00 sec)
+
+28.列最大值
+
+shop表内容
+
+MariaDB [test]> select * from shop;
++---------+--------+-------+
+| article | dealer | price |
++---------+--------+-------+
+|    0001 | A      |  3.45 |
+|    0001 | B      |  3.99 |
+|    0002 | A      | 10.99 |
+|    0003 | B      |  1.45 |
+|    0003 | C      |  1.69 |
+|    0003 | D      |  1.25 |
+|    0004 | D      | 19.95 |
++---------+--------+-------+
+
+
+
+select max(article) as article from shop；
+
++---------+
+| article |
++---------+
+|       4 |
++---------+
+1 row in set (0.00 sec)
+
+29.拥有某个列最大数值的行
+
+MariaDB [test]> select article,dealer,price from shop where price = (select max(price) from shop);
++---------+--------+-------+
+| article | dealer | price |
++---------+--------+-------+
+|    0004 | D      | 19.95 |
++---------+--------+-------+
+
+MariaDB [test]> select * from shop order by price desc limit 1;
++---------+--------+-------+
+| article | dealer | price |
++---------+--------+-------+
+|    0004 | D      | 19.95 |
++---------+--------+-------+
+
+第二种方式如果有多个相同的最大数值，将只会显示1个
+
+30.列的最大数值
+
+任务：每项物品的的最高价格是多少？
+MariaDB [test]> select article,max(price) as price from shop group by article;
++---------+-------+
+| article | price |
++---------+-------+
+|    0001 |  3.99 |
+|    0002 | 10.99 |
+|    0003 |  1.69 |
+|    0004 | 19.95 |
++---------+-------+
+
+31.拥有某个字段的组间最大值的行
+
+任务：对每项物品，找出最贵价格的物品的经销商。
+
+MariaDB [test]> select * from shop s1 
+    -> where price = (select max(s2.price) from shop s2 where s1.article = s2.article);
++---------+--------+-------+
+| article | dealer | price |
++---------+--------+-------+
+|    0001 | B      |  3.99 |
+|    0002 | A      | 10.99 |
+|    0003 | C      |  1.69 |
+|    0004 | D      | 19.95 |
++---------+--------+-------+
+
+32.根据两个键搜索
+一个比较灵活的例子是寻找两个通过OR组合到一起的关键字：
+
+SELECT field1_index, field2_index FROM test_table
+WHERE field1_index = '1' OR  field2_index = '1'
+
+
+33.还可以使用UNION将两个单独的SELECT语句的输出合成到一起来更有效地解决该问题。
+
+每个SELECT只搜索一个关键字，可以进行优化：
+
+SELECT field1_index, field2_index
+    FROM test_table WHERE field1_index = '1'
+UNION
+SELECT field1_index, field2_index
+    FROM test_table WHERE field2_index = '1';
+    
+34.根据天计算访问量
+
+下面的例子显示了如何使用位组函数来计算每个月中用户访问网页的天数。
+
+在学习MySQL手册时，看到根据天数计算访问量时，出现了BIT_COUNT()和BIT_OR()两个函数来处理天数计算的问题
+
+所使用的表格信息如下：
+
+mysql> select year,month,day from t1;
++------+-------+------+
+| year | month | day  |
++------+-------+------+
+| 2000 |    01 |   01 |
+| 2000 |    01 |   20 |
+| 2000 |    01 |   30 |
+| 2000 |    02 |   02 |
+| 2000 |    02 |   23 |
+| 2000 |    03 |   13 |
+| 2000 |    02 |   23 |
++------+-------+------+
+7 rows in set (0.00 sec)
+
+在处理这个问题时，起初我也没有多想，无非是根据每个月的天数输出访问量，于是我做了如下的查询：
+
+mysql> select year,month,count(day) as day from t1 group by
+    -> year,month;
++------+-------+-----+
+| year | month | day |
++------+-------+-----+
+| 2000 |    01 |   3 |
+| 2000 |    02 |   3 |
+| 2000 |    03 |   1 |
++------+-------+-----+
+3 rows in set (0.02 sec)
+
+但是，此时我发现2月份有两个2月23日，这样没有去掉重复的天数，导致结果错误，看了手册的查询过程如下：
+
+mysql> select year,month, bit_count(bit_or(1<<day)) as days from t1 group by
+    -> year,month;
++------+-------+------+
+| year | month | days |
++------+-------+------+
+| 2000 |    01 |    3 |
+| 2000 |    02 |    2 |
+| 2000 |    03 |    1 |
++------+-------+------+
+3 rows in set (0.02 sec)
+
+它使用了BIT_COUNT()和BIT_OR()两个函数，这两个函数的用法如下：
+
+1、BIT_COUNT( expr )：返回 expr 的二进制表达式中”1“的个数。
+
+     例如：29 = 11101 则：BIT_COUNT（29）= 4；
+
+2、BIT_OR( expr )：返回 expr 中所有比特的bitwise OR。计算执行的精确度为64比特(BIGINT) 。
+　  例如：上面例子中，2000年02月中有一条2号的记录两条23号的记录，所以"1<<day"表示出来就是 “1＜＜2”和“1＜＜23”，得到二进制数 100 和 100000000000000000000000 。然后再OR运算。即 100 OR 10000000000000000000000 OR 10000000000000000000000 = 100000000000000000000100；这样再用BIT_COUNT处理得出的值就是2，自动去除了重复的日期。
+
+但是，我觉得这种使用2进制来进行计算的方法有些麻烦，我采用了一下的办法来解决这个问题：
+
+mysql> select year,month,count(distinct day) as day from t1 group by
+    -> year,month;
++------+-------+-----+
+| year | month | day |
++------+-------+-----+
+| 2000 |    01 |   3 |
+| 2000 |    02 |   2 |
+| 2000 |    03 |   1 |
++------+-------+-----+
+3 rows in set (0.02 sec)
+
+
+35.对于MyISAM和BDB表，你可以在第二栏指定AUTO_INCREMENT以及多列索引。此时，AUTO_INCREMENT列生成的值的计算方法为：MAX(auto_increment_column) + 1 WHERE prefix=given-prefix。如果想要将数据放入到排序的组中可以使用该方法。
+
+CREATE TABLE animals (
+    grp ENUM('fish','mammal','bird') NOT NULL,
+    id MEDIUMINT NOT NULL AUTO_INCREMENT,
+    name CHAR(30) NOT NULL,
+    PRIMARY KEY (grp,id)
+) engine=myisam;
+ 
+INSERT INTO animals (grp,name) VALUES 
+    ('mammal','dog'),('mammal','cat'),
+    ('bird','penguin'),('fish','lax'),('mammal','whale'),
+    ('bird','ostrich');
+ 
+SELECT * FROM animals ORDER BY grp,id;
+将返回：
+
++--------+----+---------+
+| grp    | id | name    |
++--------+----+---------+
+| fish   |  1 | lax     |
+| mammal |  1 | dog     |
+| mammal |  2 | cat     |
+| mammal |  3 | whale   |
+| bird   |  1 | penguin |
+| bird   |  2 | ostrich |
++--------+----+---------+
+请注意在这种情况下（AUTO_INCREMENT列是多列索引的一部分），如果你在任何组中删除有最大AUTO_INCREMENT值的行，将会重新用到AUTO_INCREMENT值。对于MyISAM表也如此,对于该表一般不重复使用AUTO_INCREMENT值。
+
+如果AUTO_INCREMENT列是多索引的一部分，MySQL将使用该索引生成以AUTO_INCREMENT列开始的序列值。。例如，如果animals表含有索引PRIMARY KEY (grp, id)和INDEX(id)，MySQL生成序列值时将忽略PRIMARY KEY。结果是，该表包含一个单个的序列，而不是符合grp值的序列。
+
+要想以AUTO_INCREMENT值开始而不是1，你可以通过CREATE TABLE或ALTER TABLE来设置该值，如下所示:
+
+mysql> ALTER TABLE tbl AUTO_INCREMENT = 100;
+
+上述的primary key有2个值，这种用法限于myisam和DBD的表，有些类似于order by 2个值的用法，其他引擎用不了，另外可以比较一下单primay key的情况，如下：
+
+在建表的时候有个enum，表示枚举类型，就是说只能用后边的几个值，其他的值都会为空
+
+
+MariaDB [test]> CREATE TABLE ans (
+    ->     grp ENUM('fish','mammal','bird') NOT NULL,
+    ->     id MEDIUMINT NOT NULL AUTO_INCREMENT,
+    ->     name CHAR(30) NOT NULL,
+    ->     PRIMARY KEY (id)
+    -> );
+
+    
+MariaDB [test]> INSERT INTO ans (grp,name) VALUES 
+    ->     ('mammal','dog'),('mammal','cat'),
+    ->     ('bird','penguin'),('fish','lax'),('mammal','whale'),
+    ->     ('bird','ostrich');
+
+得到的表数据
+
+MariaDB [test]> select * from ans;
++--------+----+---------+
+| grp    | id | name    |
++--------+----+---------+
+| mammal |  1 | dog     |
+| mammal |  2 | cat     |
+| bird   |  3 | penguin |
+| fish   |  4 | lax     |
+| mammal |  5 | whale   |
+| bird   |  6 | ostrich |
++--------+----+---------+
+
+36.与Apache一起使用MySQL
+
+将日志文件写入MySQL数据库表。
+你可以将以下内容放到Apache配置文件中，更改Apache日志格式，使MySQL更容易读取：
+
+LogFormat \
+        "\"%h\",%{%Y%m%d%H%M%S}t,%>s,\"%b\",\"%{Content-Type}o\",  \
+        \"%U\",\"%{Referer}i\",\"%{User-Agent}i\""
+要想将该格式的日志文件装载到MySQL，你可以使用以下语句:
+
+LOAD DATA INFILE '/local/access_log' INTO TABLE tbl_name
+FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '"' ESCAPED BY '\\'
+所创建的表中的列应与写入日志文件的LogFormat行对应。
+
+
+mysql管理控制
+
+37.MYSQL服务器和服务器启动脚本：
+
+mysqld是MySQL服务器
+
+mysqld_safe、mysql.server和mysqld_multi是服务器启动脚本
+
+mysql_install_db初始化数据目录和初始数据库
+
+38.mysql是一个命令行客户程序，用于交互式或以批处理模式执行SQL语句。
+
+mysqladmin是用于管理功能的客户程序。
+
+mysqlcheck执行表维护操作。
+
+mysqldump和mysqlhotcopy负责数据库备份。
+
+mysqlimport导入数据文件。 
+
+mysqlshow显示信息数据库和表的相关信息
+
+39.独立于服务器操作的工具程序：
+
+myisamchk执行表维护操作。
+
+myisampack产生压缩、只读的表。
+
+mysqlbinlog是处理二进制日志文件的实用工具。
+
+perror显示错误代码的含义。
+
+
+40.
+连接到mysql test库
+shell> mysql test
+显示参数
+shell> mysqladmin extended-status variables
+
+
+41.mysql客户端支持--column-names选项，确定是否在查询结果开头显示一行栏目名。默认情况，该选项被启用。但是可能在某些情况下你想要禁用它，例如将mysql的输出发送到另一个只希望看到数据而不希望看到开始的标题行的程序中。
+
+要想禁用列名，可以使用下面的形式来指定选项：
+
+--disable-column-names
+--skip-column-names
+--column-names=0
+--disable和--skip前缀与=0后缀的效果相同：它们均关闭选项。
+
+mysql test --column-names=0 -e 'select * from pet';
++----------+--------+---------+------+------------+------------+
+|   Fluffy | Harold |     cat |    f | 1993-02-04 | 2000-03-05 |
+|   Fluffy | Harold |     cat |    f | 1993-02-04 | 2000-03-05 |
+|    Claws |   Gwen |     cat |    m | 1994-03-17 |       NULL |
+| Whistler |   Gwen |    bird | NULL | 1997-12-09 |       NULL |
+| Puffball |  Diane | hamster |    f | 1999-10-17 | 2003-10-05 |
+|   Bowser |  Diane |     dog |    m | 1989-08-31 | 1995-07-29 |
+| puffball |    Gwn |     cat |    m | 1995-01-01 | 2001-01-01 |
++----------+--------+---------+------+------------+------------+
+
+--disable和--skip前缀与=0后缀的效果相同：它们均关闭选项。
+
+用下述方法“启用”选项：
+
+--column-names
+--enable-column-names
+--column-names=1
+
+42.
+mysqld				SQL后台程序(即MySQL服务器)
+mysqld-max			包括更多特性的一个服务器版本
+mysqld_safe			服务器启动脚本。如果mysqld-max存在,mysqld_safe试图启动它，否则启动mysqld
+mysql.server		服务器启动脚本。该脚本用于使用包含为特定级别的运行启动服务的脚本的运行目录的系统。它调用mysqld_safe来启动MySQL服务器
+mysqld_multi		服务器启动脚本，可以启动或停止系统上安装的多个服务器
+mysql_install_db	该脚本用默认权限创建MySQL授权表。通常只是在系统上首次安装MySQL时执行一次
+mysql_fix_ privilege_tables		在升级安装后，如果新版本MySQL中的 授权表有更改，则使用该脚本来更改授权表
+myisamchk			用来描述、检查、优化和维护MyISAM表的实用工具
+make_binary_distribution		该程序可以生成编译过的MySQL的二进制版本
+mysqlbug			MySQL 缺陷报告脚本
+
+
+43.
+找出你的服务器支持哪个存储引擎，执行下面的语句：
+mysql> SHOW ENGINES;
+
+检查你感兴趣的存储引擎的变量值：
+mysql> SHOW VARIABLES LIKE 'have%';
+
+44.
+mysql.server从 [mysql.server]和选项文件的[mysqld]部分读取选项
+
+45.
+mysqld_multi可以管理多个帧听不同Unix套接字文件和TCP/IP端口的连接的mysqld 进程
+
+程序寻找my.cnf中的[mysqldN]组(或--config-file选项指定的文件)。下面的讨论中该数字指选项组号，或GNR。组号区别各选项组，并用作mysqld_multi的参数来指定想要启动、停止哪个服务器或获取哪个服务器的状态报告。这些组中的选项与将用来启动mysqld的[mysqld]组中的相同。
+shell> mysqld_multi [options] {start|stop|report} [GNR[,GNR] ...]
+
+start、stop和report表示你想要执行的操作。你可以在单个服务器或多个服务器上执行指定的操作，取决于选项名后面的GNR 列。如果没有该列，mysqld_multi为选项文件中的所有服务器执行该操作。
+
+每个GNR值代表一个选项组号或组号范围。GNR值应为选项文件中组名末尾的号。例如，组[mysqld17]的GNR为17。要想指定组号的范围，用破折号间隔开第1个和最后1个号。GNR值10-13代表组[mysqld10]到[mysqld13]。可以在命令行中指定多个组或组范围，用逗号间隔开。GNR列不能有空格字符(空格或tab)；空格字符后面的内容将被忽略掉。
+
+该命令使用选项组[mysqld17]启动单个服务器：
+
+shell> mysqld_multi start 17
+该命令停止多个服务器，使用选项组[mysql8]和[mysqld10]至[mysqld13]：
+
+shell> mysqld_multi stop 8,10-13
+
+如下例子：
+
+[mysqld_multi]
+mysqld     = /usr/local/mysql/bin/mysqld_safe
+mysqladmin = /usr/local/mysql/bin/mysqladmin
+user       = multi_admin
+password   = my_password
+
+[mysqld2]
+socket     = /tmp/mysql.sock2
+port       = 3307
+pid-file   = /usr/local/mysql/data2/hostname.pid2
+datadir    = /usr/local/mysql/data2
+language   = /usr/local/mysql/share/mysql/english
+user       = unix_user1
+
+[mysqld3]
+mysqld     = /path/to/mysqld_safe
+ledir      = /path/to/mysqld-binary/
+mysqladmin = /path/to/mysqladmin
+socket     = /tmp/mysql.sock3
+port       = 3308
+pid-file   = /usr/local/mysql/data3/hostname.pid3
+datadir    = /usr/local/mysql/data3
+language   = /usr/local/mysql/share/mysql/swedish
+user       = unix_user2
+
+[mysqld4]
+socket     = /tmp/mysql.sock4
+port       = 3309
+pid-file   = /usr/local/mysql/data4/hostname.pid4
+datadir    = /usr/local/mysql/data4
+language   = /usr/local/mysql/share/mysql/estonia
+user       = unix_user3
+ 
+[mysqld6]
+socket     = /tmp/mysql.sock6
+port       = 3311
+pid-file   = /usr/local/mysql/data6/hostname.pid6
+datadir    = /usr/local/mysql/data6
+language   = /usr/local/mysql/share/mysql/japanese
+user       = unix_user4
+
+mysqld_multi的一些注解：
+
+确保停止mysqld服务器(用mysqladmin程序)的MySQL账户在各个服务器中的用户名和密码相同。并且应确保账户具有SHUTDOWN权限。如果你想要管理的服务器的管理账户有许多不同的用户名或密码，你需要在每个服务器上创建一个账户，并具有相同的用户名和密码。例如，你可以执行下面的命令为每个服务器设置一个普通multi_admin账户：
+shell> mysql -u root -S /tmp/mysql.sock -proot_password
+mysql> GRANT SHUTDOWN ON *.* TO 'multi_admin'@'localhost' IDENTIFIED BY 'multipass'；
+
+
+实例：
+# This file should probably be in your home dir (~/.my.cnf)
+# or /etc/my.cnf
+# Version 2.1 by Jani Tolonen
+ 
+[mysqld_multi]
+mysqld     = /usr/local/bin/mysqld_safe
+mysqladmin = /usr/local/bin/mysqladmin
+user       = multi_admin
+password   = multipass
+ 
+[mysqld2]
+socket     = /tmp/mysql.sock2
+port       = 3307
+pid-file   = /usr/local/mysql/var2/hostname.pid2
+datadir    = /usr/local/mysql/var2
+language   = /usr/local/share/mysql/english
+user       = john
+ 
+[mysqld3]
+socket     = /tmp/mysql.sock3
+port       = 3308
+pid-file   = /usr/local/mysql/var3/hostname.pid3
+datadir    = /usr/local/mysql/var3
+language   = /usr/local/share/mysql/swedish
+user       = monty
+ 
+[mysqld4]
+socket     = /tmp/mysql.sock4
+port       = 3309
+pid-file   = /usr/local/mysql/var4/hostname.pid4
+datadir    = /usr/local/mysql/var4
+language   = /usr/local/share/mysql/estonia
+user       = tonu
+ 
+[mysqld6]
+socket     = /tmp/mysql.sock6
+port       = 3311
+pid-file   = /usr/local/mysql/var6/hostname.pid6
+datadir    = /usr/local/mysql/var6
+language   = /usr/local/share/mysql/japanese
+user       = jani
+
+
+46.mysqld服务器维护两种变量。全局变量影响服务器的全局操作。会话变量影响具体客户端连接相关操作。这2种变量是服务器的系统变量
+
+服务器启动时，将所有全局变量初始化为默认值。可以在选项文件或命令行中指定的选项来更改这些默认值。服务器启动后，通过连接服务器并执行SET GLOBAL var_name语句可以更改动态全局变量。要想更改全局变量，必须具有SUPER权限。
+
+服务器还为每个客户端连接维护会话变量。连接时使用相应全局变量的当前值对客户端会话变量进行初始化。客户可以通过SET SESSION var_name语句来更改动态会话变量。设置会话变量不需要特殊权限，但客户可以只更改自己的会话变量，而不更改其它客户的会话变量。
+
+运行时，使用SET语句来设置系统变量。此时，不能使用后缀，但值可以采取下列表达式：
+
+mysql> SET sort_buffer_size = 10 * 1024 * 1024;
+要想显式指定是否设置全局或会话变量，使用GLOBAL或SESSION选项：
+
+mysql> SET GLOBAL sort_buffer_size = 10 * 1024 * 1024;
+mysql> SET SESSION sort_buffer_size = 10 * 1024 * 1024;
+两个选项均没有，则语句设置会话变量。
+
+47.通过SHOW VARIABLES语句查看系统变量及其值
+
+48.auto_increment_increment和auto_increment_offset用于主服务器－主服务器（master-to-master）复制，并可以用来控制AUTO_INCREMENT列的操作。两个变量均可以设置为全局或局部变量，并且假定每个值都可以为1到65,535之间的整数值。将其中一个变量设置为0会使该变量为1。如果试图将这些变量设置为大于65,535或小于0的值，则会将该值设置为65,535。如果向将auto_increment_increment或auto_increment_offset设置为非整数值，则会给出错误，并且变量的实际值在这种情况下保持不变。
+
+这两个变量影响AUTO_INCREMENT列的方式：
+
+auto_increment_increment控制列中的值的增量值。例如:
+
+mysql> SHOW VARIABLES LIKE 'auto_inc%';
++--------------------------+-------+
+| Variable_name            | Value |
++--------------------------+-------+
+| auto_increment_increment | 1     |
+| auto_increment_offset    | 1     |
++--------------------------+-------+
+2 rows in set (0.00 sec)
+                 
+mysql> CREATE TABLE autoinc1 (col INT NOT NULL AUTO_INCREMENT PRIMARY KEY);
+Query OK, 0 rows affected (0.04 sec)
+  
+mysql> SET @auto_increment_increment=10;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> SHOW VARIABLES LIKE 'auto_inc%';
++--------------------------+-------+
+| Variable_name            | Value |
++--------------------------+-------+
+| auto_increment_increment | 10    |
+| auto_increment_offset    | 1     |
++--------------------------+-------+
+2 rows in set (0.01 sec)
+               
+mysql> INSERT INTO autoinc1 VALUES (NULL), (NULL), (NULL), (NULL);
+Query OK, 4 rows affected (0.00 sec)
+Records: 4  Duplicates: 0  Warnings: 0
+                      
+mysql> SELECT col FROM autoinc1;
++-----+
+| col |
++-----+
+|   1 |
+|  11 |
+|  21 |
+|  31 |
++-----+
+4 rows in set (0.00 sec)
+(注明如何使用SHOW VARIABLES来获取这些变量的当前值）。
+
+auto_increment_offset确定AUTO_INCREMENT列值的起点。假定在与前面的例子的相同的会话中执行下面的命令：
+
+mysql> SET @auto_increment_offset=5;
+Query OK, 0 rows affected (0.00 sec)
+                     
+mysql> SHOW VARIABLES LIKE 'auto_inc%';
++--------------------------+-------+
+| Variable_name            | Value |
++--------------------------+-------+
+| auto_increment_increment | 10    |
+| auto_increment_offset    | 5     |
++--------------------------+-------+
+2 rows in set (0.00 sec)
+
+mysql> CREATE TABLE autoinc2 (col INT NOT NULL AUTO_INCREMENT PRIMARY KEY);
+Query OK, 0 rows affected (0.06 sec)
+
+mysql> INSERT INTO autoinc2 VALUES (NULL), (NULL), (NULL), (NULL);
+Query OK, 4 rows affected (0.00 sec)
+Records: 4  Duplicates: 0  Warnings: 0
+                     
+mysql> SELECT col FROM autoinc2;
++-----+
+| col |
++-----+
+|   5 |
+|  15 |
+|  25 |
+|  35 |
++-----+
+4 rows in set (0.02 sec)
+                    
+如果auto_increment_offset的值大于auto_increment_increment的值，则auto_increment_offset的值被忽略。
+
+mysql> SELECT col FROM autoinc1;
++-----+
+| col |
++-----+
+|   1 |
+|  11 |
+|  21 |
+|  31 |
+|  35 |
+|  45 |
+|  55 |
+|  65 |
++-----+
+
+auto_increment_increment和auto_increment_offset所示的值可以生成系列5 + N * 10,即，[5,15,25,35,45,...]。在INSERT前col 列内最大的值为31,AUTO_INCREMENT数列的下一个值为35,因此col中插入的值从该点开始，结果如SELECT查询所示。
+
+一定要记住不可能将这两个变量的结果限制到一个表中，因此不会替代其它数据库管理系统提供的序列；这些变量控制MySQL服务器上all表AUTO_INCREMENT列的所有行为。如果某个变量设为全局变量，则只有通过局部设置将全局值更改和覆盖后或mysqld重启后其作用方可改变；如果局部设置，则新值影响所有表的AUTO_INCREMENT列，在这个会话期间当前用户在这些表中插入了新行，除非在会话期间更改了这些值。
+
+
+49.key_buffer_size
+MyISAM表的索引块分配了缓冲区，由所有线程共享。key_buffer_size是索引块缓冲区的大小。键值缓冲区即为键值缓存。
+
+key_buffer_size的最大允许设定值为4GB。有效最大值可以更小，取决于可用物理RAM和操作系统或硬件平台强加的每个进程的RAM限制。
+
+增加该值，达到你可以提供的更好的索引处理(所有读和多个写操作)。通常为主要运行MySQL的机器内存的25%。但是，如果你将该值设得过大(例如，大于总内存的50%)，系统将转换为页并变得极慢。MySQL依赖操作系统来执行数据读取时的文件系统缓存，因此你必须为文件系统缓存留一些空间。
+
+同时写多行时要想速度更快，应使用LOCK TABLES
+
+可以通过执行SHOW STATUS语句并检查Key_read_requests、Key_reads、Key_write_requests和Key_writes状态变量来检查键值缓冲区的性能
+
+Key_reads/Key_read_requests比例一般应小于0.01。如果你使用更新和删除，Key_writes/Key_write_requests比例通常接近1，但如果你更新时会同时影响到多行或如果你正使用DELAY_KEY_WRITE表选项，可能小得多。
+
+用key_buffer_size结合Key_blocks_unused状态变量和缓冲区块大小，可以确定使用的键值缓冲区的比例。从key_cache_block_size服务器变量可以获得缓冲区块大小。使用的缓冲区的比例为：
+
+1 - ((Key_blocks_unused * key_cache_block_size) / key_buffer_size)
+该值为约数，因为键值缓冲区的部分空间被分配用作内部管理结构。
+
+可以创建多个MyISAM键值缓存。4GB限制可以适合每个缓存，而不是一个组
+
+50.read_rnd_buffer_size
+
+当排序后按排序后的顺序读取行时，则通过该缓冲区读取行，避免搜索硬盘。将该变量设置为较大的值可以大大改进ORDER BY的性能。但是，这是为每个客户端分配的缓冲区，因此你不应将全局变量设置为较大的值。相反，只为需要运行大查询的客户端更改会话变量。
+
+51.sort_buffer_size
+
+每个排序线程分配的缓冲区的大小。增加该值可以加快ORDER BY或GROUP BY操作
+
+52.thread_cache_size
+
+服务器应缓存多少线程以便重新使用。当客户端断开连接时，如果线程少于thread_cache_size，则客户端的线程被放入缓存。当请求线程时如果允许可以从缓存中重新利用线程，并且只有当缓存空了时才会创建新线程。如果新连接很多，可以增加该变量以提高性能。(一般情况，如果线程执行得很好，性能提高不明显)。检查Connections和Threads_created状态变量的差，你可以看见线程缓存的效率。
+
+
+53.
+
+Innodb_buffer_pool_pages_data
+
+包含数据的页数(脏或干净)。
+
+Innodb_buffer_pool_pages_dirty
+
+当前的脏页数。
+
+Innodb_buffer_pool_pages_flushed
+
+要求清空的缓冲池页数。
+
+Innodb_buffer_pool_pages_free
+
+空页数。
+
+Innodb_buffer_pool_pages_latched
+
+在InnoDB缓冲池中锁定的页数。这是当前正读或写或由于其它原因不能清空或删除的页数。
+
+Innodb_buffer_pool_pages_misc
+
+忙的页数，因为它们已经被分配优先用作管理，例如行锁定或适用的哈希索引。该值还可以计算为Innodb_buffer_pool_pages_total - Innodb_buffer_pool_pages_free - Innodb_buffer_pool_pages_data。
+
+Innodb_buffer_pool_pages_total
+
+缓冲池总大小（页数）。
+
+Innodb_buffer_pool_read_ahead_rnd
+
+InnoDB初始化的“随机”read-aheads数。当查询以随机顺序扫描表的一大部分时发生。
+
+Innodb_buffer_pool_read_ahead_seq
+
+InnoDB初始化的顺序read-aheads数。当InnoDB执行顺序全表扫描时发生。
+
+Innodb_buffer_pool_read_requests
+
+InnoDB已经完成的逻辑读请求数。
+
+Innodb_buffer_pool_reads
+
+不能满足InnoDB必须单页读取的缓冲池中的逻辑读数量。
+
+一般情况，通过后台向InnoDB缓冲池写。但是，如果需要读或创建页，并且没有干净的页可用，则它还需要先等待页面清空。该计数器对等待实例进行记数。如果已经适当设置缓冲池大小，该值应小。
+
+Innodb_buffer_pool_write_requests
+
+向InnoDB缓冲池的写数量。
+
+Innodb_row_lock_current_waits
+
+当前等待的待锁定的行数。
+
+Innodb_row_lock_time
+
+行锁定花费的总时间，单位毫秒。
+
+Innodb_row_lock_time_avg
+
+行锁定的平均时间，单位毫秒。
+
+Innodb_row_lock_time_max
+
+行锁定的最长时间，单位毫秒。
+
+Innodb_row_lock_waits
+
+一行锁定必须等待的时间数。
+
+Key_blocks_unused
+
+键缓存内未使用的块数量。你可以使用该值来确定使用了多少键缓存；
+
+Key_read_requests
+
+从缓存读键的数据块的请求数。
+
+Key_reads
+
+从硬盘读取键的数据块的次数。如果Key_reads较大，则Key_buffer_size值可能太小。可以用Key_reads/Key_read_requests计算缓存损失率。
+
+Key_write_requests
+
+将键的数据块写入缓存的请求数。
+
+Key_writes
+
+向硬盘写入将键的数据块的物理写操作的次数。
+
+QCACHE_free_blocks
+
+查询缓存内自由内存块的数量。
+
+QCACHE_free_memory
+
+用于查询缓存的自由内存的数量。
+
+QCACHE_hits
+
+查询缓存被访问的次数。
+
+QCACHE_inserts
+
+加入到缓存的查询数量。
+
+QCACHE_lowmem_prunes
+
+由于内存较少从缓存删除的查询数量。
+
+QCACHE_not_cached
+
+非缓存查询数(不可缓存，或由于query_cache_type设定值未缓存)。
+
+Qcache_queries_in_cache
+
+登记到缓存内的查询的数量。
+
+Qcache_total_blocks
+
+查询缓存内的总块数。
+
+Questions
+
+已经发送给服务器的查询的个数。
+
+Select_full_join
+
+没有使用索引的联接的数量。如果该值不为0,你应仔细检查表的索引
+
+Select_range_check
+
+在每一行数据后对键值进行检查的不带键值的联接的数量。如果不为0，你应仔细检查表的索引。
+
+Slow_queries
+
+查询时间超过long_query_time秒的查询的个数
+
+Table_locks_waited
+
+不能立即获得的表的锁的次数。如果该值较高，并且有性能问题，你应首先优化查询，然后拆分表或使用复制。
+
+Threads_created
+
+创建用来处理连接的线程数。如果Threads_created较大，你可能要增加thread_cache_size值。缓存访问率的计算方法Threads_created/Connections
+
+Threads_running
+
+激活的（非睡眠状态）线程数。
+
+Uptime
+
+服务器已经运行的时间（以秒为单位）
+
+
+54.服务器关闭
+1.    启动关闭进程。mysqladmin可以用于所有支持MySQL的平台上。其它操作系统相关的关闭开始方法还可能有：在Unix中，当接收到SIGTERM信号后，服务器关闭
+
+2.    服务器根据需要创建关闭线程。根据开始关闭的方式，服务器可以创建线程来处理关闭进程。如果客户端需要关闭，则创建关闭线程。如果收到SIGTERM信号后关闭，信号线程可以自己关闭，或者创建单独的线程来完成。如果服务器尝试创建关闭线程而不能创建(例如，如果内存被耗尽)，它在错误日志中给出诊断消息：
+
+Error: Can't create thread to kill server
+
+3.    服务器停止接收新连接。
+在关闭过程中要想防止启动新活动，服务器停止接收新的客户端连接。它将关闭它帧听的网络连接：TCP/IP端口、Unix套接字文件、Windows命名管道和在Windows中的共享内存。
+
+4.    服务器终止当前的活动。
+
+对于每个与客户端连接相关的线程，与客户端的连接被中断，线程被标记为“杀掉的”。当线程注意到此类标记后则线程终止。空闲连接的线程很快终止。当前正处理查询的线程定期检查它们的状态，终止的时间较长。关于线程终止的详细信息，参见13.5.5.3节，“KILL语法”，特别是关于对MyISAM表的杀掉的REPAIR TABLE或OPTIMIZE TABLE操作。
+
+对于有打开事务的线程，事务被回滚。请注意如果某个线程正在更新非事务表，多行UPDATE或INSERT等操作会使表部分更新，因为操作在完成前会终止。
+
+如果服务器是主复制服务器，与当前连接的从服务器相关的线程的处理方式同其它客户端线程。即每个线程被标记为杀掉的，在下次检查他的状态后会退出。
+
+如果服务器是从复制服务器，在客户端线程标记为杀掉的之前，激活的I/O和SQL线程被停止。SQL线程允许先结束它当前的语句(以避免造成复制问题)然后停止。如果此时SQL线程正位于事务中部，事务则回滚。
+
+5.    存储引擎被停掉或关闭。
+
+在该阶段，表缓存被清空，所有打开的表被关闭。
+
+每个存储引擎执行它管理的表需要的任何动作。例如，MyISAM清空任何挂起的表索引写操作。InnoDB将它的缓冲池清空到硬盘上（除非innodb_fast_shutdown为2），将当前的LSN写入表内，并终止自己的内部线程。
+
+6.    服务器退出。
+
+55.mysql安全权限
+
+试试mysql -u root。如果你能够成功连接服务器而没有要任何密码，则说明有问题。
+通过SHOW GRANTS语句检查查看谁已经访问了什么。
+
+更改所有root用户的MySQL账户的密码，应：
+
+shell> mysql -u root
+mysql> UPDATE mysql.user SET Password=PASSWORD('newpwd')
+    -> WHERE User='root';
+mysql> FLUSH PRIVILEGES;
+
+例如，要检查Host和User值分别为pc84.example.com和bob的账户所授予的权限，应通过语句：
+mysql> SHOW GRANTS FOR 'bob'@'pc84.example.com';
+
+在user表Host值的指定方法：
+
+Host值可以是主机名或IP号，或'localhost'指出本地主机。
+你可以在Host列值使用通配符字符“%”和“_”。
+Host值'%'匹配任何主机名，空Host值等价于'%'。它们的含义与LIKE操作符的模式匹配操作相同。例如，'%'的Host值与所有主机名匹配，而'%.mysql.com'匹配mysql.com域的所有主机。
+
+对于指定为IP号的Host值，你可以指定一个网络掩码，说明使用多少位地址位来评比网络号。例如：
+
+mysql> GRANT ALL PRIVILEGES ON db.* TO david@'192.58.197.0/255.255.255.0';
+
+要想找出服务器用来鉴定你的账户，使用CURRENT_USER()函数。它返回user_name@host_name格式的值，说明User和Host 值匹配user表记录。假定jeffrey连接并发出下面的查询：
+
+mysql> SELECT CURRENT_USER();
++----------------+
+| CURRENT_USER() |
++----------------+
+| @localhost     |
++----------------+
+这儿显示的结果说明user表行有空的User列值。换句话说，服务器将jeffrey视为匿名用户。
+
+56.添加帐户
+
+以root连接到服务器上后，可以添加新账户。下面的语句使用GRANT来设置四个新账户：
+
+mysql> GRANT ALL PRIVILEGES ON *.* TO 'monty'@'localhost' IDENTIFIED BY 'some_pass' WITH GRANT OPTION;
+mysql> GRANT ALL PRIVILEGES ON *.* TO 'monty'@'%' IDENTIFIED BY 'some_pass' WITH GRANT OPTION;
+mysql> GRANT RELOAD,PROCESS ON *.* TO 'admin'@'localhost';
+mysql> GRANT USAGE ON *.* TO 'dummy'@'localhost';
+
+其中两个账户有相同的用户名monty和密码some_pass。
+两个账户均为超级用户账户，具有完全的权限可以做任何事情。
+一个账户 ('monty'@'localhost')只用于从本机连接时。
+另一个账户('monty'@'%')可用于从其它主机连接。
+
+请注意monty的两个账户必须能从任何主机以monty连接。没有localhost账户，当monty从本机连接时，mysql_install_db创建的localhost的匿名用户账户将占先。结果是，monty将被视为匿名用户。原因是匿名用户账户的Host列值比'monty'@'%'账户更具体，这样在user表排序顺序中排在前面。
+
+一个账户有用户名admin，没有密码。该账户只用于从本机连接。授予了RELOAD和PROCESS管理权限。这些权限允许admin用户执行mysqladmin reload、mysqladmin refresh和mysqladmin flush-xxx命令，以及mysqladmin processlist。未授予访问数据库的权限。你可以通过GRANT语句添加此类权限。
+
+一个账户有用户名dummy，没有密码。该账户只用于从本机连接。未授予权限。通过GRANT语句中的USAGE权限，你3可以创建账户而不授予任何权限。它可以将所有全局权限设为'N'。假定你将在以后将具体权限授予该账户。
+
+除了GRANT，你可以直接用INSERT语句创建相同的账户，然后使用FLUSH PRIVILEGES告诉服务器重载授权表：
+
+shell> mysql --user=root mysql
+mysql> INSERT INTO user VALUES('localhost','monty',PASSWORD('some_pass'), 'Y','Y','Y','Y','Y','Y','Y','Y','Y','Y','Y','Y','Y','Y');
+mysql> INSERT INTO userVALUES('%','monty',PASSWORD('some_pass'),'Y','Y','Y','Y','Y','Y','Y','Y','Y','Y','Y','Y','Y','Y');
+mysql> INSERT INTO user SET Host='localhost',User='admin',Reload_priv='Y', Process_priv='Y';
+mysql> INSERT INTO user (Host,User,Password) VALUES('localhost','dummy','');
+mysql> FLUSH PRIVILEGES;
+
+当你用INSERT创建账户时使用FLUSH PRIVILEGES的原因是告诉服务器重读授权表。否则，只有重启服务器后更改方会被注意到。使用 GRANT，则不需要使用FLUSH PRIVILEGES。
+
+用INSERT使用PASSWORD()函数是为了加密密码。GRANT语句为你加密密码，因此不需要PASSWORD()。
+
+下面的例子创建3个账户，允许它们访问专用数据库。每个账户的用户名为custom，密码为obscure。
+
+要想用GRANT创建账户，使用下面的语句：
+
+shell> MySQL --user=root MySQL
+shell> mysql --user=root mysql
+mysql> GRANT SELECT,INSERT,UPDATE,DELETE,CREATE,DROP ON bankaccount.* TO 'custom'@'localhost' IDENTIFIED BY 'obscure';
+mysql> GRANT SELECT,INSERT,UPDATE,DELETE,CREATE,DROP ON expenses.* TO 'custom'@'whitehouse.gov' IDENTIFIED BY 'obscure';
+mysql> GRANT SELECT,INSERT,UPDATE,DELETE,CREATE,DROP ON customer.* TO 'custom'@'server.domain' IDENTIFIED BY 'obscure';
+这3个账户可以用于：
+第1个账户可以访问bankaccount数据库，但只能从本机访问。
+第2个账户可以访问expenses数据库，但只能从主机whitehouse.gov访问。
+第3个账户可以访问customer数据库，但只能从主机server.domain访问。
+
+要想不用GRANT设置custom账户，使用INSERT语句直接修改 授权表：
+
+shell> mysql --user=root mysql
+mysql> INSERT INTO user (Host,User,Password) VALUES('localhost','custom',PASSWORD('obscure'));
+mysql> INSERT INTO user (Host,User,Password) VALUES('whitehouse.gov','custom',PASSWORD('obscure'));
+mysql> INSERT INTO user (Host,User,Password) VALUES('server.domain','custom',PASSWORD('obscure'));
+mysql> INSERT INTO db (Host,Db,User,Select_priv,Insert_priv, Update_priv,Delete_priv,Create_priv,Drop_priv)
+    ->     VALUES('localhost','bankaccount','custom', 'Y','Y','Y','Y','Y','Y');
+mysql> INSERT INTO db (Host,Db,User,Select_priv,Insert_priv, Update_priv,Delete_priv,Create_priv,Drop_priv)
+    ->     VALUES('whitehouse.gov','expenses','custom','Y','Y','Y','Y','Y','Y');
+mysql> INSERT INTO db (Host,Db,User,Select_priv,Insert_priv, Update_priv,Delete_priv,Create_priv,Drop_priv)
+    ->     VALUES('server.domain','customer','custom','Y','Y','Y','Y','Y','Y');
+mysql> FLUSH PRIVILEGES;
+ 
+前3个INSERT语句在user表中加入条目，允许用户custom从各种主机用给定的密码进行连接，但不授予全局权限(所有权限设置为 默认值'N')。后面3个INSERT语句在user表中加入条目，为custom授予bankaccount、expenses和customer数据库权限，但只能从合适的主机访问。通常若直接修改 授权表，则应告诉服务器用FLUSH PRIVILEGES重载授权表，使权限更改生效。
+
+如果你想要让某个用户从给定域的所有机器访问(例如，mydomain.com)，你可以在账户名的主机部分使用含‘%’通配符的GRANT语句：
+
+mysql> GRANT ... ON *.* TO 'myname'@'%.mydomain.com' IDENTIFIED BY 'mypass';
+要想通过直接修改授权表来实现：
+
+mysql> INSERT INTO user (Host,User,Password,...) VALUES('%.mydomain.com','myname',PASSWORD('mypass'),...);
+mysql> FLUSH PRIVILEGES;
+
+57.密码
+
+可以用mysqladmin命令在命令行指定密码：
+shell> mysqladmin -u user_name -h host_name password "newpwd"
+该命令重设密码的账户为user表内匹配User列的user_name和Host列你发起连接的客户端的记录。
+
+为账户赋予密码的另一种方法是执行SET PASSWORD语句：
+
+mysql> SET PASSWORD FOR 'jeffrey'@'%' = PASSWORD('biscuit');
+只有root等可以更新mysql数据库的用户可以更改其它用户的密码。如果你没有以匿名用户连接，省略FOR子句便可以更改自己的密码：
+
+mysql> SET PASSWORD = PASSWORD('biscuit');
+你还可以在全局级别使用GRANT USAGE语句(在*.*)来指定某个账户的密码而不影响账户当前的权限：
+
+mysql> GRANT USAGE ON *.* TO 'jeffrey'@'%' IDENTIFIED BY 'biscuit';
+一般情况下最好使用上述方法来指定密码，你还可以直接修改user表：
+
+要想在创建新账户时建立密码，在Password列提供一个值：
+
+shell> mysql -u root mysql
+mysql> INSERT INTO user (Host,User,Password) VALUES('%','jeffrey',PASSWORD('biscuit'));
+mysql> FLUSH PRIVILEGES;
+                
+要想更改已有账户的密码，使用UPDATE来设置Password列值：
+
+shell> mysql -u root mysql
+mysql> UPDATE user SET Password = PASSWORD('bagel') WHERE Host = '%' AND User = 'francis';
+mysql> FLUSH PRIVILEGES;
+当你使用SET PASSWORD、INSERT或UPDATE指定账户的密码时，必须用PASSWORD()函数对它进行加密。
+
+
+58.备份及导入
+
+1.完全备份数据库：
+
+2.shell> mysqldump --tab=/path/to/some/dir --opt db_name
+或：
+shell> mysqlhotcopy db_name /path/to/some/dir
+
+只要服务器不再进行更新，还可以只复制所有表文件(*.frm、*.MYD和*.MYI文件)。mysqlhotcopy脚本使用该方法。(但请注意如果数据库包含InnoDB表，这些方法不工作。InnoDB不将表的内容保存到数据库目录中，mysqlhotcopy只适合MyISAM表）。
+
+3.还可以对具体文件进行选择备份：
+
+要想复制表，使用SELECT * INTO OUTFILE 'file_name' FROM tbl_name。
+
+要想重载表，使用LOAD DATA INFILE 'file_name' REPLACE ...并恢复。要避免复制记录，表必须有PRIMARY KEY或一个UNIQUE索引。当新记录复制唯一键值的旧记录时，REPLACE关键字可以将旧记录替换为新记录。
+
+
+4.假定我们在星期日下午1点进行了备份，此时负荷较低。下面的命令可以完全备份所有数据库中的所有InnoDB表：
+
+shell> mysqldump --single-transaction --all-databases > backup_sunday_1_PM.sql
+这是在线非块备份，不会干扰对表的读写。我们以前假定我们的表为InnoDB表，因此--single-transaction使用一致性地读，并且保证mysqldump所看见的数据不会更改。(其它客户端对InnoDB表进行的更改不会被mysqldump进程看见）。如果我们还有其它类型的表，我们必须假定在备份过程中它们不会更改。例如，对于mysql数据库中的MyISAM表，我们必须假定在备份过程中没有对MySQL账户进行管理更改。
+
+5.需要进行完全备份，但有时不方便。会产生大的备份文件并需要花时间来生成。从某个角度，完全备份并不理想，因为每个成功的完全备份包括所有数据，甚至自从上一次完全备份以来没有更改的部分。完成了初使完全备份后，进行增量备份会更有效。这样备份文件要小得多，备份时间也较短。不利之处是，恢复时不能只重载完全备份来恢复数据。还必须要用增量备份来恢复增量更改。
+
+要想进行增量备份，我们需要保存增量更改。应使用--log-bin选项启动MySQL服务器，以便更新数据时将这些更改保存到文件中。该选项启用二进制日志，因此服务器写将每个更新数据的SQL语句写入MySQL二进制日志
+
+恢复时MySQL二进制日志很重要，因为它们是增量备份。如果进行完全备份时确保清空了日志，则后面创建的二进制日志文件包含了备份后的所有数据更改。让我们稍稍修改前面的mysqldump命令，让它在完全备份时能够清空 MySQL二进制日志，以便转储文件包含包含新的当前的二进制日志：
+
+shell> mysqldump --single-transaction --flush-logs --master-data=2 --all-databases > backup_sunday_1_PM.sql
+
+MySQL二进制日志占据硬盘空间。要想释放空间，应随时清空。操作方法是删掉不再使用的二进制日志，例如进行完全备份时：
+
+shell> mysqldump --single-transaction --flush-logs --master-data=2 --all-databases --delete-master-logs > backup_sunday_1_PM.sql
+注释：如果你的服务器为复制主服务器，用mysqldump --delete-master-logs删掉MySQL二进制日志很危险，因为从服务器可能还没有完全处理该二进制日志的内容。
+
+
+在许多情况下，你会发现使用SQL语句实现MyISAM表的维护比执行myisamchk操作要容易地多：
+
+要想检查或维护MyISAM表，使用CHECK TABLE或REPAIR TABLE。
+
+要想优化MyISAM表，使用OPTIMIZE TABLE。
+
+要想分析MyISAM表，使用ANALYZE TABLE。
+
+如果你想要检查所有MyISAM表并修复任何破坏的表，可以使用下面的命令：
+
+shell> myisamchk --silent --force --fast --update-state \
+          -O key_buffer=64M -O sort_buffer=64M \
+          -O read_buffer=1M -O write_buffer=1M \
+          /path/to/datadir/*/*.MYI
+该命令假定你有大于64MB的自由内存。
+
+当你运行myisamchk时，必须确保其它程序不使用表。否则，当你运行myisamchk时，会显示下面的错误消息：
+
+warning: clients are using or haven't closed the table properly
+这说明你正尝试检查正被另一个还没有关闭文件或已经终止而没有正确地关闭文件的程序(例如mysqld服务器)更新的表。
+
+如果mysqld正在运行，你必须通过FLUSH TABLES强制清空仍然在内存中的任何表修改。当你运行myisamchk时，必须确保其它程序不使用表。避免该问题的最容易的方法是使用CHECK TABLE而不用myisamchk来检查表。
+
+
+59.MySQL有几个不同的日志文件，可以帮助你找出mysqld内部发生的事情：
+
+日志文件	记入文件中的信息类型
+
+错误日志	记录启动、运行或停止mysqld时出现的问题。
+
+查询日志	记录建立的客户端连接和执行的语句。 默认名是host_name.log。所有连接和语句被记录到日志文件。当你怀疑在客户端发生了错误并想确切地知道该客户端发送给mysqld的语句时，该日志可能非常有用。
+
+更新日志	记录更改数据的语句。不赞成使用该日志。
+
+二进制日志	记录所有更改数据的语句。还用于复制。
+
+慢日志	记录所有执行时间超过long_query_time秒的所有查询或不使用索引的查询。
+
+默认情况下，所有日志创建于mysqld数据目录中。通过刷新日志，你可以强制 mysqld来关闭和重新打开日志文件（或者在某些情况下切换到一个新的日志）。当你执行一个FLUSH LOGS语句或执行mysqladmin flush-logs或mysqladmin refresh时，出现日志刷新。参见13.5.5.2节，“FLUSH语法”。
+
+如果你正使用MySQL复制功能，从复制服务器将维护更多日志文件，被称为接替日志
+
+60.查询缓存
+查询缓存存储SELECT查询的文本以及发送给客户端的相应结果。如果随后收到一个相同的查询，服务器从查询缓存中重新得到查询结果，而不再需要解析和执行查询。
+
+如果你有一个不经常改变的表并且服务器收到该表的大量相同查询，查询缓存在这样的应用环境中十分有用。对于许多Web服务器来说存在这种典型情况，它根据数据库内容生成大量的动态页面。
+
+注释：查询缓存不返回旧的数据。当表更改后，查询缓存值的相关条目被清空。
+
+注释：如果你有许多mysqld服务器更新相同的MyISAM表，在这种情况下查询缓存不起作用。
+
+注释：查询缓存不适用于服务器方编写的语句。如果正在使用服务器方编写的语句，要考虑到这些语句将不会应用查询缓存
+
+服务器启动时要禁用查询缓存，设置query_cache_size系统变量为0。禁用查询缓存代码后，没有明显的速度提高。编译MySQL时，通过在configure中使用--without-query-cache选项，可以从服务器中彻底去除查询缓存能力。
+
+
+查询解析之前进行比较，因此下面的两个查询被查询缓存认为是不相同的：
+
+SELECT * FROM tbl_name
+Select * from tbl_name
+查询必须是完全相同的(逐字节相同)才能够被认为是相同的。另外，同样的查询字符串由于其它原因可能认为是不同的。使用不同的数据库、不同的协议版本或者不同 默认字符集的查询被认为是不同的查询并且分别进行缓存。
+
+从查询缓存中提取一个查询之前，MySQL检查用户对所有相关数据库和表的SELECT权限。如果没有权限，不使用缓存结果。
+
+如果从查询缓存中返回一个查询结果，服务器把Qcache_hits状态变量的值加一，而不是Com_select变量。
+
+如果一个表被更改了，那么使用那个表的所有缓冲查询将不再有效，并且从缓冲区中移出。这包括那些映射到改变了的表的使用MERGE表的查询。一个表可以被许多类型的语句更改，例如INSERT、UPDATE、DELETE、TRUNCATE、ALTER TABLE、DROP TABLE或DROP DATABASE。
+
+COMMIT执行完后，被更改的事务InnoDB表不再有效。
+
+使用InnoDB表时，查询缓存也在事务中工作，使用该表的版本号来检测其内容是否仍旧是当前的。
+
+
+SQL_CACHE	如果query_cache_type系统变量的值是ON或DEMAND，查询结果被缓存。
+
+SQL_NO_CACHE	查询结果不被缓存。
+
+示例：
+
+SELECT SQL_CACHE id, name FROM customer;
+SELECT SQL_NO_CACHE id, name FROM customer;
+
+通过have_query_cache服务器系统变量指示查询缓存是否可用：
+
+mysql> SHOW VARIABLES LIKE 'have_query_cache';
++------------------+-------+
+| Variable_name    | Value |
++------------------+-------+
+| have_query_cache | YES   |
++------------------+-------+
+即使禁用查询缓存，当使用标准 MySQL二进制时，这个值总是YES。
+
+当设置query_cache_size变量为非零值时，应记住查询缓存至少大约需要40KB来分配其数据结构。(具体大小取决于系统结构）。如果你把该值设置的太小，将会得到一个警告，如本例所示：
+
+mysql> SET GLOBAL query_cache_size = 40000;
+Query OK, 0 rows affected, 1 warning (0.00 sec)
+
+mysql> SHOW WARNINGS\G
+
+*************************** 1. row ***************************
+
+  Level: Warning
+
+   Code: 1282
+
+Message: Query cache failed to set size 39936; new query cache size is 0
+
+mysql> SET GLOBAL query_cache_size = 41984;
+
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> SHOW VARIABLES LIKE 'query_cache_size';
+
++------------------+-------+
+| Variable_name    | Value |
++------------------+-------+
+| query_cache_size | 41984 |
++------------------+-------+
+
+如果查询缓存大小设置为大于0，query_cache_type变量影响其工作方式。这个变量可以设置为下面的值：
+
+0或OFF将阻止缓存或查询缓存结果。
+
+1或ON将允许缓存，以SELECT SQL_NO_CACHE开始的查询语句除外。
+
+2或DEMAND，仅对以SELECT SQL_CACHE开始的那些查询语句启用缓存。
+
+设置query_cache_type变量的GLOBAL值将决定更改后所有连接客户端的缓存行为。具体客户端可以通过设置query_cache_type变量的会话值控制它们本身连接的缓存行为。例如，一个客户可以禁用自己的查询缓存，方法如下：
+
+mysql> SET SESSION query_cache_type = OFF;
+
+要控制可以被缓存的具体查询结果的最大值，应设置query_cache_limit变量。 默认值是1MB。
+
+当一个查询结果（返回给客户端的数据）从查询缓冲中提取期间，它在查询缓存中排序。因此，数据通常不在大的数据块中处理。查询缓存根据数据排序要求分配数据块，因此，当一个数据块用完后分配一个新的数据块。因为内存分配操作是昂贵的(费时的)，所以通过query_cache_min_res_unit系统变量给查询缓存分配最小值。当查询执行时，最新的结果数据块根据实际数据大小来确定，因此可以释放不使用的内存。根据你的服务器执行查询的类型，你会发现调整query_cache_min_res_unit变量的值是有用的：
+
+query_cache_min_res_unit默认值是4KB。这应该适合大部分情况。
+
+如果你有大量返回小结果数据的查询，默认数据块大小可能会导致内存碎片，显示为大量空闲内存块。由于缺少内存，内存碎片会强制查询缓存从缓存内存中修整（删除）查询。这时，你应该减少query_cache_min_res_unit变量的值。空闲块和由于修整而移出的查询的数量通过Qcache_free_blocks和Qcache_lowmem_prunes变量的值给出。
+
+如果大量查询返回大结果（检查 Qcache_total_blocks和Qcache_queries_in_cache状态变量），你可以通过增加query_cache_min_res_unit变量的值来提高性能。但是，注意不要使它变得太大
+
+可以使用下面的语句检查MySQL服务器是否提供查询缓存功能：
+
+mysql> SHOW VARIABLES LIKE 'have_query_cache';
+
++------------------+-------+
+| Variable_name    | Value |
++------------------+-------+
+| have_query_cache | YES   |
++------------------+-------+
+
+可以使用FLUSH QUERY CACHE语句来清理查询缓存碎片以提高内存使用性能。该语句不从缓存中移出任何查询。
+
+RESET QUERY CACHE语句从查询缓存中移出所有查询。FLUSH TABLES语句也执行同样的工作。
+
+为了监视查询缓存性能，使用SHOW STATUS查看缓存状态变量：
+
+mysql> SHOW STATUS LIKE 'Qcache%';
++-------------------------+--------+
+|变量名                   |值 |
++-------------------------+--------+
+| Qcache_free_blocks      | 36     |
+| Qcache_free_memory      | 138488 |
+| Qcache_hits             | 79570  |
+| Qcache_inserts          | 27087  |
+| Qcache_lowmem_prunes    | 3114   |
+| Qcache_not_cached       | 22989  |
+| Qcache_queries_in_cache | 415    |
+| Qcache_total_blocks     | 912    |
++-------------------------+--------+
+
+SELECT查询的总数量等价于：
+
+Com_select
++ Qcache_hits
++ queries with errors found by parser
+Com_select的值等价于：
+
+Qcache_inserts
++ Qcache_not_cached
++ queries with errors found during columns/rights check
+查询缓存使用长度可变块，因此Qcache_total_blocks和Qcache_free_blocks可以显示查询缓存内存碎片。执行FLUSH QUERY CACHE后，只保留一个空闲块。
+
+每个缓存查询至少需要两个块（一个块用于查询文本，一个或多个块用于查询结果）。并且，每一个查询使用的每个表需要一个块。但是，如果两个或多个查询使用相同的表，仅需要分配一个块。
+
+Qcache_lowmem_prunes状态变量提供的信息能够帮助你你调整查询缓存的大小。它计算为了缓存新的查询而从查询缓冲区中移出到自由内存中的查询的数目。查询缓冲区使用最近最少使用(LRU)策略来确定哪些查询从缓冲区中移出。
+
+61.MySQL支持单向、异步复制，复制过程中一个服务器充当主服务器，而一个或多个其它服务器充当从服务器。(这与同步复制可以进行对比，同步复制是MySQL簇的一个特征—参见第17章：MySQL簇）。主服务器将更新写入二进制日志文件，并维护文件的一个索引以跟踪日志循环。这些日志可以记录发送到从服务器的更新。当一个从服务器连接主服务器时，它通知主服务器从服务器在日志中读取的最后一次成功更新的位置。从服务器接收从那时起发生的任何更新，然后封锁并等待主服务器通知新的更新。
+
+如果你想要设置链式复制服务器，从服务器本身也可以充当主服务器。
+
+请注意当你进行复制时，所有对复制中的表的更新必须在主服务器上进行。否则，你必须要小心，以避免用户对主服务器上的表进行的更新与对从服务器上的表所进行的更新之间的冲突。
+
+单向复制有利于健壮性、速度和系统管理：
+
+主服务器/从服务器设置增加了健壮性。主服务器出现问题时，你可以切换到从服务器作为备份。
+
+通过在主服务器和从服务器之间切分处理客户查询的负荷，可以得到更好的客户响应时间。SELECT查询可以发送到从服务器以降低主服务器的查询处理负荷。但修改数据的语句仍然应发送到主服务器，以便主服务器和从服务器保持同步。如果非更新查询为主，该负载均衡策略很有效，但一般是更新查询。
+
+使用复制的另一个好处是可以使用一个从服务器执行备份，而不会干扰主服务器
+
+62.复制细节
+
+MySQL使用3个线程来执行复制功能(其中1个在主服务器上，另两个在从服务器上。当发出START SLAVE时，从服务器创建一个I/O线程，以连接主服务器并让它发送记录在其二进制日志中的语句。主服务器创建一个线程将二进制日志中的内容发送到从服务器。该线程可以识别为主服务器上SHOW PROCESSLIST的输出中的Binlog Dump线程。从服务器I/O线程读取主服务器Binlog Dump线程发送的内容并将该数据拷贝到从服务器数据目录中的本地文件中，即中继日志。第3个线程是SQL线程，是从服务器创建用于读取中继日志并执行日志中包含的更新。
+
+在前面的描述中，每个从服务器有3个线程。有多个从服务器的主服务器创建为每个当前连接的从服务器创建一个线程；每个从服务器有自己的I/O和SQL线程。
+
+这样读取和执行语句被分成两个独立的任务。如果语句执行较慢则语句读取任务没有慢下来。例如，如果从服务器有一段时间没有运行了，当从服务器启动时，其I/O线程可以很快地从主服务器索取所有二进制日志内容，即使SQL线程远远滞后。如果从服务器在SQL线程执行完所有索取的语句前停止，I/O 线程至少已经索取了所有内容，以便语句的安全拷贝保存到本地从服务器的中继日志中，供从服务器下次启动时执行。这样允许清空主服务器上的二进制日志，因为不再需要等候从服务器来索取其内容。
+
+SHOW PROCESSLIST语句可以提供在主服务器上和从服务器上发生的关于复制的信息。
+
+下面的例子说明了这3个线程在SHOW PROCESSLIST中的显示。
+
+在主服务器上，SHOW PROCESSLIST的输出看上去应为：
+
+mysql> SHOW PROCESSLIST\G
+*************************** 1. row ***************************
+     Id: 2
+   User: root
+   Host: localhost:32931
+     db: NULL
+Command: Binlog Dump
+   Time: 94
+  State: Has sent all binlog to slave; waiting for binlog to
+         be updated
+   Info: NULL
+这儿，线程2是一个连接从服务器的复制线程。该信息表示所有主要更新已经被发送到从服务器，主服务器正等待更多的更新出现。
+
+在从服务器上，SHOW PROCESSLIST的输出看上去应为：
+
+mysql> SHOW PROCESSLIST\G
+*************************** 1. row ***************************
+     Id: 10
+   User: system user
+   Host:
+     db: NULL
+Command: Connect
+   Time: 11
+  State: Waiting for master to send event
+   Info: NULL
+*************************** 2. row ***************************
+     Id: 11
+   User: system user
+   Host:
+     db: NULL
+Command: Connect
+   Time: 11
+  State: Has read all relay log; waiting for the slave I/O
+         thread to update it
+   Info: NULL
+该信息表示线程10是同主服务器通信的I/O线程，线程11是处理保存在中继日志中的更新的SQL线程。SHOW PROCESSLIST运行时，两个线程均空闲，等待其它更新。
+
+请注意Time列的值可以显示从服务器比主服务器滞后多长时间
+
+63.复制主线程状态
+
+下面列出了主服务器的Binlog Dump线程的State列的最常见的状态。如果你没有在主服务器上看见任何Binlog Dump线程，这说明复制没有在运行—即，目前没有连接任何从服务器。
+Sending binlog event to slave
+
+二进制日志由各种事件组成，一个事件通常为一个更新加一些其它信息。线程已经从二进制日志读取了一个事件并且正将它发送到从服务器。
+
+Finished reading one binlog; switching to next binlog
+
+线程已经读完二进制日志文件并且正打开下一个要发送到从服务器的日志文件。
+
+Has sent all binlog to slave; waiting for binlog to be updated
+
+线程已经从二进制日志读取所有主要的更新并已经发送到了从服务器。线程现在正空闲，等待由主服务器上新的更新导致的出现在二进制日志中的新事件。
+
+Waiting to finalize termination
+
+线程停止时发生的一个很简单的状态。
+
+64.复制从I/O线程状态
+
+下面列出了从服务器的I/O线程的State列的最常见的状态。该状态也出现在Slave_IO_State列，由SHOW SLAVE STATUS显示。这说明你可以只通过该语句仔细浏览所发生的事情。
+Connecting to master
+
+线程正试图连接主服务器。
+
+Checking master version
+
+建立同主服务器之间的连接后立即临时出现的状态。
+
+Registering slave on master
+
+建立同主服务器之间的连接后立即临时出现的状态。
+
+Requesting binlog dump
+
+建立同主服务器之间的连接后立即临时出现的状态。线程向主服务器发送一条请求，索取从请求的二进制日志文件名和位置开始的二进制日志的内容。
+
+Waiting to reconnect after a failed binlog dump request
+
+如果二进制日志转储请求失败(由于没有连接)，线程进入睡眠状态，然后定期尝试重新连接。可以使用--master-connect-retry选项指定重试之间的间隔。
+
+Reconnecting after a failed binlog dump request
+
+线程正尝试重新连接主服务器。
+
+Waiting for master to send event
+
+线程已经连接上主服务器，正等待二进制日志事件到达。如果主服务器正空闲，会持续较长的时间。如果等待持续slave_read_timeout秒，则发生超时。此时，线程认为连接被中断并企图重新连接。
+
+Queueing master event to the relay log
+
+线程已经读取一个事件，正将它复制到中继日志供SQL线程来处理。
+
+Waiting to reconnect after a failed master event read
+
+读取时(由于没有连接)出现错误。线程企图重新连接前将睡眠master-connect-retry秒。
+
+Reconnecting after a failed master event read
+
+线程正尝试重新连接主服务器。当连接重新建立后，状态变为Waiting for master to send event。
+
+Waiting for the slave SQL thread to free enough relay log space
+
+正使用一个非零relay_log_space_limit值，中继日志已经增长到其组合大小超过该值。I/O线程正等待直到SQL线程处理中继日志内容并删除部分中继日志文件来释放足够的空间。
+
+Waiting for slave mutex on exit
+
+线程停止时发生的一个很简单的状态。
+
+65.复制从SQL线程状态
+
+下面列出了从服务器的SQL线程的State列的最常见的状态。
+Reading event from the relay log
+
+线程已经从中继日志读取一个事件，可以对事件进行处理了。
+
+Has read all relay log; waiting for the slave I/O thread to update it
+
+线程已经处理了中继日志文件中的所有事件，现在正等待I/O线程将新事件写入中继日志。
+
+Waiting for slave mutex on exit
+
+线程停止时发生的一个很简单的状态。
+
+I/O线程的State列也可以显示语句的文本。这说明线程已经从中继日志读取了一个事件，从中提取了语句，并且正在执行语句。
+
+66.复制传递和状态文件
+
+默认情况，中继日志使用host_name-relay-bin.nnnnnn形式的文件名，其中host_name是从服务器主机名，nnnnnn是序列号。用连续序列号来创建连续中继日志文件，从000001开始。从服务器跟踪索引文件中目前正使用的中继日志。 默认中继日志索引文件名为host_name-relay-bin.index。默认情况，在从服务器的数据目录中创建这些文件。可以用--relay-log和--relay-log-index服务器选项覆盖 默认文件名。参见6.8节，“复制启动选项”。
+
+中继日志与二进制日志的格式相同，并且可以用mysqlbinlog读取。SQL线程执行完中继日志中的所有事件并且不再需要之后，立即自动删除它。没有直接的删除中继日志的机制，因为SQL线程可以负责完成。然而，FLUSH LOGS可以循环中继日志，当SQL线程删除日志时会有影响。
+
+在下面的条件下创建新的中继日志：
+
+每次I/O线程启动时创建一个新的中继日志。
+
+当日志被刷新时；例如，用FLUSH LOGS或mysqladmin flush-logs。
+
+当当前的中继日志文件变得太大时。“太大”含义的确定方法：
+
+o	max_relay_log_size，如果max_relay_log_size > 0
+
+o	max_binlog_size，如果max_relay_log_size = 0
+
+从属复制服务器在数据目录中另外创建两个小文件。这些状态文件默认名为主master.info和relay-log.info。它们包含SHOW SLAVE STATUS语句的输出所显示的信息(关于该语句的描述参见13.6.2节，“用于控制从服务器的SQL语句”)。状态文件保存在硬盘上，从服务器关闭时不会丢失。下次从服务器启动时，读取这些文件以确定它已经从主服务器读取了多少二进制日志，以及处理自己的中继日志的程度。
+
+由I/O线程更新master.info文件。文件中的行和SHOW SLAVE STATUS显示的列的对应关系为：
+
+行	描述
+1	文件中的行号
+2	Master_Log_File
+3 	Read_Master_Log_Pos
+4	Master_Host
+5	Master_User
+6	密码(不由SHOW SLAVE STATUS显示)
+7	Master_Port
+8	Connect_Retry
+9	Master_SSL_Allowed
+10	Master_SSL_CA_File
+11	Master_SSL_CA_Path
+12	Master_SSL_Cert
+13	Master_SSL_Cipher
+14	Master_SSL_Key
+
+由SQL线程更新relay-log.info文件。文件中的行和SHOW SLAVE STATUS显示的列的对应关系为：
+
+行	描述
+1	Relay_Log_File
+2	Relay_Log_Pos
+3	Relay_Master_Log_File
+4	Exec_Master_Log_Pos
+
+当备份从服务器的数据时，你还应备份这两个小文件以及中继日志文件。它们用来在恢复从服务器的数据后继续进行复制。如果丢失了中继日志但仍然有relay-log.info文件，你可以通过检查该文件来确定SQL线程已经执行的主服务器中二进制日志的程度。然后可以用Master_Log_File和Master_LOG_POS选项执行CHANGE MASTER TO来告诉从服务器重新从该点读取二进制日志。当然，要求二进制日志仍然在主服务器上。
+
+如果从服务器正复制LOAD DATA INFILE语句，你应也备份该目录内从服务器用于该目的的任何SQL_LOAD-*文件。从服务器需要这些文件继续复制任何中断的LOAD DATA INFILE操作。用--slave-load-tmpdir选项来指定目录的位置。如果未指定， 默认值为tmpdir变量的值。
+
+67.复制步骤
+
+a.在主服务器上为服务器设置一个连接账户。该账户必须授予REPLICATION SLAVE权限。如果账户仅用于复制(推荐这样做)，则不需要再授予任何其它权限。(关于设置用户 账户和权限的信息，参见5.8节，“MySQL用户账户管理”）。
+
+假定你的域为mydomain.com,想要创建用户名为repl的一个账户，从服务器可以使用该账户从你的域内的任何主机使用密码slavepass来访问主服务器。要创建该 账户，可使用GRANT语句：
+
+mysql> GRANT REPLICATION SLAVE ON *.* TO 'repl'@'%.mydomain.com' IDENTIFIED BY 'slavepass';
+
+如果你计划从从属服务器主机使用LOAD TABLE FROM MASTER或LOAD DATA FROM MASTER语句，你需要授予该账户其它权限：
+
+授予账户SUPER和RELOAD全局权限。
+
+为所有想要装载的表授予SELECT权限。任何该 账户不能SELECT的主服务器上的表被LOAD DATA FROM MASTER忽略掉。
+
+b.执行FLUSH TABLES WITH READ LOCK语句清空所有表和块写入语句：
+
+c.mysql> FLUSH TABLES WITH READ LOCK；
+对于InnoDB表，请注意：FLUSH TABLES WITH READ LOCK还锁定COMMIT操作。当获得全局读锁定后，可以开始InnoDB表的文件系统快照。快照不能保证内部(在InnoDB存储引擎内部)一致性(因为InnoDB缓存没有刷新)，但并不需要关心该问题，因为InnoDB可以在启动时解决该问题并给出一致的结果。这说明InnoDB在启动快照时可以进行崩溃恢复，而不会破坏。然而，当保证一致的InnoDB表快照时，还没有途径来停止MySQL服务器。
+
+让客户程序保持运行，发出FLUSH TABLES语句让读锁定保持有效。(如果退出客户程序，锁被释放）。然后对主服务器上的数据进行快照。
+
+d.创建快照最简单的途径是使用归档程序对主服务器上的数据目录中的数据库进行二进制备份。例如，在Unix中使用tar，或者在Windows中使用PowerArchiver、WinRAR、WinZip或者类似的软件。要使用tar来创建包括所有数据库的归档文件，进入主服务器的数据目录，然后执行命令：
+
+shell> tar -cvf /tmp/mysql-snapshot.tar .
+如果你想让归档只包括this_db数据库，应使用命令：
+
+shell> tar -cvf /tmp/mysql-snapshot.tar ./this_db
+然后将归档文件复制到从服务器主机的/tmp目录。在该机器上，进入从服务器的数据目录，并使用下述命令解压缩归档文件：
+
+shell> tar -xvf /tmp/mysql-snapshot.tar
+如果从服务器的用户账户与主服务器的不同，你可能不想复制mysql数据库。在这种情况下，应从归档中排除该数据库。你也不需要在归档中包括任何日志文件或者master.info或relay-log.info文件。
+
+当FLUSH TABLES WITH READ LOCK所置读锁定有效时，读取主服务器上当前的二进制日志名和偏移量值：
+
+mysql > SHOW MASTER STATUS;
++---------------+----------+--------------+------------------+
+| File          | Position | Binlog_Do_DB | Binlog_Ignore_DB |
++---------------+----------+--------------+------------------+
+| mysql-bin.003 | 73       | test         | manual,mysql     |
++---------------+----------+--------------+------------------+
+File列显示日志名，而Position显示偏移量。在该例子中，二进制日志值为mysql-bin.003，偏移量为73。记录该值。以后设置从服务器时需要使用这些值。它们表示复制坐标，从服务器应从该点开始从主服务器上进行新的更新。
+
+取得快照并记录日志名和偏移量后，可以在主服务器上重新启用写活动：
+
+mysql> UNLOCK TABLES；
+如果你正使用InnoDB表，理想情况应使用InnoDB Hot Backup工具，使用该工具可以获得一致的快照而不需要在主服务器上进行锁定，并且可以对应从服务器上使用的快照来记录日志名和偏移量。
+
+不使用Hot Backup工具，最快捷的途径是使用InnoDB表的二进制快照来关闭主服务器并复制InnoDB数据文件、日志文件和表定义文件(.frm文件)。要记录当前的日志文件名和偏移量，关闭服务器之前应发出下面的语句：
+
+mysql> FLUSH TABLES WITH READ LOCK;
+mysql> SHOW MASTER STATUS;
+然后记录前面所示的SHOW MASTER STATUS的输出中显示的日志名和偏移量。记录日志名和偏移量后，不解锁表关闭服务器以确保  服务器关闭时的快照与当前的日志文件和偏移量相对应：
+
+shell> mysqladmin -u root shutdown
+适合MyISAM和InnoDB表的另一个方法是对主服务器上的SQL进行转储而不是对前面讨论的二进制复制进行转储。为了实现，可以在主服务器上使用mysqldump --master-data，以后将SQL转储文件装入从服务器。但是，这样比二进制复制要慢一些。
+
+如果主服务器运行时没有启用--logs-bin，SHOW MASTER STATUS或mysqldump --master-data显示的日志名和位置值为空。在这种情况下，当以后指定从服务器的日志文件和位置时需要使用的值为空字符串('')和4.
+
+e.如果对主服务器的数据进行二进制备份，启动从服务器之前将它复制到从服务器的数据目录中。确保对这些文件和目录的权限正确。服务器 MySQL运行的用户必须能够读写文件，如同在主服务器上一样。
+
+如果使用mysqldum备份，先启动从服务器,如果前面已经复制了，用--skip-slave-start选项启动从服务器，以便它不立即尝试连接主服务器。你也可能想要用--logs-warnings选项启动从服务器(默认设置启用)，以便在错误日志中显示更多的问题相关的信息(例如，网络或连接问题)。放弃的连接将记入错误日志，除非其值大于1。
+
+如果使用mysqldump备份主服务器的数据，将转储文件装载到从服务器：
+
+shell> mysql -u root -p < dump_file.sql
+
+在从服务器上执行下面的语句，用你的系统的实际值替换选项值：
+mysql> CHANGE MASTER TO MASTER_HOST='master_host_name',MASTER_USER='replication_user_name',MASTER_PASSWORD='replication_password',MASTER_LOG_FILE='recorded_log_file_name',MASTER_LOG_POS=recorded_log_position;
+
+f.启动从服务器线程：
+mysql> START SLAVE；
+执行这些程序后，从服务器应连接主服务器，并补充自从快照以来发生的任何更新。
+
+从服务器复制时，会在其数据目录中发现文件dmaster.info和relay-log.info。从服务器使用这两个文件跟踪已经处理了多少主服务器的二进制日志。不要移除或编辑这些文件，除非你确切知你正在做什么并完全理解其意义。即使这样，最好是使用CHANGE MASTER TO语句。
+
+注释：master.info的内容会覆盖命令行或in my.cnf中指定的部分选项。
+
+有了一个快照，你可以用它根据刚刚描述的从服务器部分来设置其它从服务器。你不需要主服务器的另一个快照；每个从服务器可以使用相同的快照。
+
+注释：为了保证事务InnoDB复制设置的最大可能的耐受性和一致性，应在主服务器的my.cnf文件中使用innodb_flush_log_at_trx_commit=1和sync-binlog=1。

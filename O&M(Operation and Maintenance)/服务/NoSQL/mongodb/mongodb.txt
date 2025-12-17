@@ -1,0 +1,275 @@
+设置环境变量
+export LC_ALL=C
+不设置这个会有很奇怪的错误,从mysql中导入的数据有乱码
+
+mongodb到mysql的数据同步
+考虑到最初的redis不能支持类似mysql的数据存储模式
+改用mongodb
+
+万幸的是mysql->mongodb的数据同步也有响应的项目
+https://code.google.com/p/tungsten-replicator/
+
+1.mongodb安装
+mongodb-linux-x86_64-2.4.9.tgz
+$tar zxvf mongodb-linux-x86_64-2.4.9.tgz
+$cd mongodb
+$mkdir conf data logs
+$cd logs
+$touch mongodb.log
+$cd ../conf
+$vim mongodb.conf
+
+
+添加如下内容：
+# port
+port=27017
+
+# log
+logpath=logs/mongodb.log
+logappend=true
+
+# data
+dbpath=data/  
+
+#auth
+#auth=true
+
+fork=true
+
+启动服务
+bin/mongod -f /home/blue/apps/mongodb/conf/mongodb.conf &
+关闭服务
+bin/mongod -f /home/blue/apps/mongodb/conf/mongodb.conf --shutdown
+
+2.mysql的安装不罗嗦
+mysql使用的是mariadb-5.5.30-linux-x86_64.tar.gz
+因为mongodb使用utf8来通讯，因此需要把数据的默认字符集调整为utf8
+通过终端方式建的表，如果不制定字符集，建出来的表不是utf8，因此要么用工具，要么制定字符集，很重要
+
+修改my.cnf文件
+[client]
+default-character-set = system_character_set
+[mysqld]
+
+# character
+init_connect = ‘SET collation_connection = utf8_unicode_ci’
+init_connect = ‘SET NAMES utf8’
+character-set-server = utf8
+collation-server = utf8_unicode_ci
+skip-character-set-client-handshake
+
+max_allowed_packet = 52M     #至少大于46M
+
+binlog_format=row   #binlog格式
+
+同时必须支持innodb引擎
+
+3.tungsten-replicator的安装设置
+http://datacharmer.blogspot.com/2013/05/getting-started-with-replication-from.html
+这里有个安装测试的内容
+
+tungsten-replicator-2.2.0-292.tar.gz
+$tar zxvf tungsten-replicator-2.2.0-292.tar.gz
+
+同时设置好java环境
+这里注意，java的版本必须一样
+安装ruby
+
+在安装之前，必须保证master和slave之间的ssh及自己和自己之间必须能够不需要密码直接登录
+
+mysql端作为主数据库，mongodb作为从数据库
+
+mysql端
+ip:172.16.20.111
+执行如下脚本内容：
+
+#!/bin/bash
+
+cd /home/blue/apps/tungsten &&  \
+./tools/tungsten-installer --master-slave -a \
+                           --service-name=mongodb \
+    			   --master-host=172.16.20.111 \
+                           --cluster-hosts=172.16.20.111 \
+			   --datasource-type=mysql \
+    			   --datasource-user=root \
+    			   --datasource-password=8mnOJGZemn \
+                           --datasource-port=3306 \
+			   --datasource-log-directory=/home/blue/apps/mysql/logs \
+			   --datasource-mysql-conf=/home/blue/apps/mysql/my.cnf \
+                           --home-directory=/home/blue/apps/mysql_tungsten \
+			   --mysql-use-bytes-for-string=false \
+                           --mysql-enable-enumtostring=true \
+                           --mysql-enable-settostring=true \
+			   --svc-extractor-filters=colnames,pkey \
+                           --svc-parallelization-type=none \
+			   --net-ssh-option=port=9922  \
+                           --start-and-report		   
+			   #--datasource-type=mysql \
+			   #--java-file-encoding=UTF8 \
+			   #--mysql-use-bytes-for-string=false \
+  			   #--mysql-enable-enumtostring=true \
+  			   #--mysql-enable-settostring=true \
+
+mongodb端
+ip:172.16.20.116
+执行如下脚本内容：
+
+#!/bin/bash
+
+cd /home/blue/apps/tungsten/ &&  \
+./tools/tungsten-installer --master-slave -a \
+                           --service-name=mongodb \
+    			   --master-host=172.16.20.111 \
+                           --cluster-hosts=172.16.20.116 \
+			   --datasource-type=mongodb \
+			   --home-directory=/home/blue/apps/mongodb_tungsten \
+			   --svc-parallelization-type=none \
+                           --start-and-report \
+			   --skip-validation-check=InstallerMasterSlaveCheck
+			   --net-ssh-option=port=9922
+                           #--datasource-port=27017 \
+			   
+
+
+完成上述步骤就可以完成数据自动同步的过程
+
+
+4.测试功能
+在mysql端
+
+mysql [localhost](test) > create table myfirst (id int not null primary key, name char(30), d date);
+Query OK, 0 rows affected (0.00 sec)
+
+mysql [localhost](test) > insert into myfirst values (1, 'Harry Potter', '1997-06-30');
+Query OK, 1 row affected (0.00 sec)
+
+
+mongodb端
+
+> show dbs
+local 0.078125GB
+test 0.203125GB
+tungsten_mongodb 0.203125GB
+> use test
+switched to db test
+> show collections
+myfirst
+system.indexes
+> db.myfirst.find()
+{ "_id" : ObjectId("51a2867d3004fd7959a5f5aa"), "id" : "1", "name" : "Harry Potter", "d" : "1997-06-30" }
+
+
+mysql [localhost](test) > insert into myfirst values (2, 'Harry Potter 2', '1999-06-02');
+Query OK, 1 row affected (0.00 sec)
+
+mysql [localhost](test) > update myfirst set name = 'Harry Potter 1' where id =1;
+Query OK, 1 row affected (0.01 sec)
+Rows matched: 1  Changed: 1  Warnings: 0
+Which will result in:
+
+> db.myfirst.find()
+{ "_id" : ObjectId("51a2867d3004fd7959a5f5aa"), "id" : "1", "name" : "Harry Potter 1", "d" : "1997-06-30" }
+{ "_id" : ObjectId("51a287633004fd7959a5f5ab"), "id" : "2", "name" : "Harry Potter 2", "d" : "1999-06-02" }
+And delete statements:
+
+mysql [localhost](test) > delete from myfirst  where id =2;
+Query OK, 1 row affected (0.00 sec)
+
+#####
+> db.myfirst.find()
+{ "_id" : ObjectId("51a2867d3004fd7959a5f5aa"), "id" : "1", "name" : "Harry Potter 1", "d" : "1997-06-30" }
+This is all fine. But what happe
+
+
+5.上述的安装过程在mysql端没有什么问题，但是在mongodb端总是会出现问题，因此实际上有另外2个脚本在mysql和mongodb端安装服务
+在mongodb端的运行，先运行了下述的脚本，然后运行的上边的脚本成功
+
+mysql端
+
+#!/bin/bash
+
+cd /home/blue/apps/tun/ &&  \
+./tools/tpm install tomongodb \
+			--info \
+    			--master=172.16.20.111 \
+			   --datasource-mysql-conf=/home/blue/apps/mysql/my.cnf \
+			   --enable-heterogenous-master=true \
+    			   --replication-user=root \
+    			   --replication-password=8mnOJGZemn \
+                           --datasource-port=3306 \
+                           --install-directory=/home/blue/apps/mysql_tungsten \
+			   --skip-validation-check MySQLDumpCheck
+
+mongodb端
+#!/bin/bash
+
+cd /home/blue/apps/tungsten/ &&  \
+./tools/tpm install mongodb \
+--info \
+--datasource-type=mongodb \
+--master=172.16.20.111 \
+--members=172.16.20.116 \
+--enable-heterogenous-slave=true \
+--topology=master-slave \
+--install-directory=/home/blue/apps/mongodb_tungsten
+
+
+6.服务用的命令和状态显示
+
+
+/home/blue/apps/mysql_tungsten/tungsten/cluster-home/bin/startall   启动服务
+/home/blue/apps/mysql_tungsten/tungsten/tungsten-replicator/bin/trepctl services 检测服务器状态等
+
+
+
+7.数据导入
+从mysql数据导入到mongodb中是一个比较头疼的问题
+用上述的工具，可以绕道解决上述问题，运行的机制是当mysql有一条数据更新，或者插入就会在mongodb中生成一条数据，应用这个技术
+可以用一个空的mysql插入数据，同时会在mongodb里生成数据。
+
+
+8.当tungsten-replicator在从上运行，如果出现错误，就会导致offline，从而数据同步终止，为了屏蔽这个错误，绕开出错的表（有些表因为各种原因
+导入到mongodb中无法导入，比如名字空间，数据类型不匹配等等），从而在mysql端不同步出错的表。
+
+9.排错
+查看错误信息
+trepctl status
+
+如果有错误会有关于seqno的错误
+pendingError           : Stage task failed: stage=q-to-dbms seqno=1108 fragno=0
+
+查看关于这个队列的信息
+thl list -seqno 8250
+
+
+10.php模块
+https://github.com/mongodb/mongo-php-driver
+
+$cd mongo-php-driver-master
+$/home/blue/apps/php/bin/phpize
+$./configure --with-php-config=/home/blue/apps/php/bin/php-config
+$make && make install
+
+
+注意：
+数据同步的时候，比如
+mysql端有test数据库，在mongodb端也需要一个，同时更新mysql数据表的内容，mongodb也更新
+
+
+
+mysql导出数据，mongodb导入数据
+mysql导出csv格式数据
+select * from moistoreinfo limit 0,100 into outfile '/home/blue/moistoreinfo.csv'  fields terminated by ',' lines terminated by '\r\n';
+
+在导出的数据中有text类型的数据，其中有很多数据是通过编辑器上传到数据库中，导致很多特殊字符，在数据导入到mongodb的时候，无法分割数据，因此决定把text类型的数据单独放在一个表里，做联合查询
+
+select StoreInfoId,StoreName,ProvinceId,CityId,StreetId,CountyId,CommunityId,BusinessLicense,BusinessTime,ContactMan,Email, mobileNo,Tel,Fax,Address,Busline,Map,StoreIdentity,Storeidentitywap,agreement,CreationDate,DisableDate,IsDisable,               Point,goldpoint,isRecommend,hits,FailReason,checkFlag,webphoto,score,YihaotongId,IsSupportCard,AverageConsumeMin,   AverageConsumeMax,MemberId,discussNum,PayPassword,AgentMemberId,is_agent,wordpoint,storepagetypeid,AverageConsume,            discount,Keywords, KeywordsDescription,IsRealShop,ShopFeature,IsIntegrity,shoptypeoneId,shoptypetwoId,storereputationId,        storeOpinion,isbook,agentid,moistoreinfo,Storecerphoto,Storecertification,Storecertime,storecercmark,storecercleartime,          operatorid,rzstore,rzhuman,rzx,zyd,operation,level,dian_storeinfoid,remberid,ischeck,cause,storedomain,paystarttime,          payendtime,template,lng,lat from moistoreinfo_test into outfile '/home/blue/moistoreinfo.csv'  fields terminated by ',' lines terminated by '\r\n';
+
+mongodb导入csv格式数据
+mongoimport -vvvvv -d 3ghsdb -c moistoreIntro -f 'StoreInfoId,StoreName,ProvinceId,CityId,StreetId,CountyId,CommunityId,BusinessLicense,BusinessTime,ContactMan,Email,mobileNo,Tel,Fax,Address,Busline,Map,StoreIdentity,Storeidentitywap,agreement,CreationDate,DisableDate,IsDisable,Point,goldpoint,isRecommend,hits,FailReason,checkFlag,webphoto,score,YihaotongId,IsSupportCard,AverageConsumeMin,AverageConsumeMax,MemberId,discussNum,PayPassword,AgentMemberId,is_agent,wordpoint,storepagetypeid,AverageConsume,discount,Keywords, KeywordsDescription,IsRealShop,ShopFeature,IsIntegrity,shoptypeoneId,shoptypetwoId,storereputationId,storeOpinion,isbook,agentid,moistoreinfo,Storecerphoto,Storecertification,Storecertime,storecercmark,storecercleartime,operatorid,rzstore,rzhuman,rzx,zyd,operation,level,dian_storeinfoid,remberid,ischeck,cause,storedomain,paystarttime,payendtime,template,lng,lat' --type csv --file moistoreinfo.csv --jsonArray  --drop
+
+-f后的字段和原始的导出时候一定要一样，就是说导入到mongodb以后和原始的表字段一一对应，否则会出现在字段的地方显示fieldsX(x为数字)代表字段名
+
+
+
+

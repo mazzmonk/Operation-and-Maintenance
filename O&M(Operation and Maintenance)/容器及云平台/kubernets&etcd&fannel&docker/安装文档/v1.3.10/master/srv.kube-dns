@@ -1,0 +1,21 @@
+#!/bin/bash
+# author:jack
+# date:20171024
+# startup kube-dns service
+# execute with ROOT user
+# FILENAME:srv.kube-dns
+###########################
+
+if [ -e GLOBAL-ENV ];then
+  source GLOBAL-ENV
+else
+  echo 'File GLOBAL-ENV does not exist.'
+  echo -1
+fi
+
+KUBERNETES=$HOME_PATH/apps/kubernetes
+
+$KUBERNETES/server/bin/kube-dns \
+--dns-port=53 \
+--domain=$CLUSTER_DOMAIN \
+--kube-master-url="http://$KUBE_MASTER_IP:8080"  >> $KUBERNETES/server/logs/kube-dns.log  2>&1 &

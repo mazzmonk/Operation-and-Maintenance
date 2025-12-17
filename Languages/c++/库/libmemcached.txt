@@ -1,0 +1,33 @@
+libmemcached是一个c/c++连接memcached的客户端库
+
+1.安装
+安装使用libmemcached-1.0.18.tar.gz这个版本，这个版本使用的时候，需要用到c++11的支持
+
+./configure --prefix=/usr --enable-libmemcachedprotocol
+make
+make install
+
+2.eclipse中关于c++11的设置
+Project -> Properties -> C/C++ Build -> Settings -> Tool Settings ->gcc c++ Complier -> Miscellaneous右侧
+Other flags 中添加 -std=c++11
+
+
+3.上述编译好的程序不能直接运行，因此采用在服务器上编译的方式，直接编译，由于gcc版本过低，导致无法编译通过，因此重新编译gcc4.8.2版本
+
+然后编译源程序
+在源程序里用于定义的
+
+(s == EINTR)无法识别，因此改为
+(s == -1)
+
+然后通过如下方式编译成功
+
+g++  -lrt  -lmemcached main.cpp
+
+源程序使用的libmemcached-1.0.18版本开发，服务器不支持c++11的标准，因此安装libmemcache-1.0.16的版本
+
+
+这里有个错误提示，因为在linux编译的时候需要加上-lrt，否则无法编译通过
+main.cpp:(.text+0x36a): undefined reference to `clock_gettime'
+main.cpp:(.text+0x403): undefined reference to `clock_nanosleep'
+main.cpp:(.text+0x46a): undefined reference to `clock_gettime'

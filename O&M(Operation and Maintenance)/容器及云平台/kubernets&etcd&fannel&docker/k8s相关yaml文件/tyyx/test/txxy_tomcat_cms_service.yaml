@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: txxy-ofns-cms
+  labels:
+    name: txxy-ofns-cms
+spec:
+  ports:
+  - port: 8080
+    targetPort: 8080
+    nodePort: 31002
+  selector:
+    name: txxy-ofns-cms
+  type: NodePort

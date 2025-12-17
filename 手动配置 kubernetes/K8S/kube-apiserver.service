@@ -1,0 +1,36 @@
+[Unit]
+Description=Kubernetes API Server
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/kube-apiserver \
+	--advertise-address="192.168.1.101" \
+	--allow-privileged=true \
+	--authorization-mode=Node,RBAC \
+	--bind-address=0.0.0.0 \
+	--client-ca-file=/home/k8s-admin/apps/certificates/kubernetes/ca.pem \
+	--enable-admission-plugins=NodeRestriction,NamespaceLifecycle,LimitRanger,ServiceAccount,TaintNodesByCondition,Priority,DefaultTolerationSeconds,DefaultStorageClass,PersistentVolumeClaimResize,MutatingAdmissionWebhook,ValidatingAdmissionWebhook,ResourceQuota \
+	--enable-bootstrap-token-auth=true \
+	--etcd-cafile=/home/k8s-admin/apps/certificates/etcd/ca.pem \
+	--etcd-certfile=/home/k8s-admin/apps/certificates/etcd/client.pem \
+	--etcd-keyfile=/home/k8s-admin/apps/certificates/etcd/client-key.pem \
+	--etcd-servers="https://192.168.1.101:2379,https://192.168.1.102:2379,https://192.168.1.103:2379" \
+	--kubelet-client-certificate=/home/k8s-admin/apps/certificates/kubernetes/kube-apiserver.pem  \
+	--kubelet-client-key=/home/k8s-admin/apps/certificates/kubernetes/kube-apiserver-key.pem \
+	--secure-port=6443 \
+	--service-account-issuer=https://kubernetes.default.svc.cluster.local \
+	--service-account-key-file=/home/k8s-admin/apps/certificates/kubernetes/ca.pem \
+	--service-account-signing-key-file=/home/k8s-admin/apps/certificates/kubernetes/ca-key.pem \
+	--service-cluster-ip-range=10.0.0.1/16 \
+	--service-node-port-range=30000-59999 \
+	--tls-cert-file=/home/k8s-admin/apps/certificates/kubernetes/kube-apiserver.pem \
+	--tls-private-key-file=/home/k8s-admin/apps/certificates/kubernetes/kube-apiserver-key.pem \
+	--v=6 
+
+Restart=on-failure
+RestartSec=5
+User=k8s-admin
+Group=k8s-admin
+
+[Install]
+WantedBy=multi-user.target

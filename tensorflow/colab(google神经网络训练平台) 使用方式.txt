@@ -1,0 +1,12 @@
+https://colab.research.google.com/
+
+平台会提供一个用于运行代码的环境,python 等等,这里主要用于神经网络,利用其 CPU,GPU 资源.
+
+这里是采用将 google 云盘挂载到 colab 上的方式,这样可以将数据,代码传到 google 云盘上,然后直接执行
+
+google 云盘上的目录结构是 Colab Notebooks/ 此目录下存放的代码及数据,这里用的项目用的文件及数据如下
+Custom-SiameseNetworkWithTripletLoss  # 这个文件可以直接是 python 文件,或者是在 colab 上新建,然后存储在 google 云盘上
+my-left   # 数据文件,图片目录
+my-right  # 数据文件,图片目录
+
+则代码中使用的目录为 /content/drive/MyDrive/Colab Notebooks/

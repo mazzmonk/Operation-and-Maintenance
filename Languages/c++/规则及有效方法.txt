@@ -1,0 +1,187 @@
+IInheritance(继承)机制会引发"pointers(或references)拥有两个不同的类型"的议题,两个不同的类型分别是静态类型(static type)和动态类型(dynamic type).pointer或references的"静态类型"是指其声明时的类型,"动态类型"则有它们实际所指的对象来决定.
+GameObject *pgo = new SpaceShip    //pgo是的静态类型是GameObject*,动态类型是SpaceShip*
+Asteroid *pa = new Asteroid;			//pa的静态类型是Asteroid*,动态类型也是Asteroid*
+pgo = pa;			//pgo的静态类型仍然(永远)是GameObject*,其动态类型如今是Asteroid*
+GameObject& rgo = *pa;		//rgo的静态类型是GameObject,动态类型是Asteroid
+
+这里有一个命名方式.pgo是一个pointer-to-GameObject;pa是一个pointer-to-Asteroid;rgo是一个reference-to-GameObject.用以来给pointer和reference命名.
+还有ctor代表"contructor",dtor代表"destructor"
+
+1.pointer和reference
+pointer使用"*"和"->"操作符,references则使用".",必须认知,没有所谓的null reference.一个referece必须总代表某个对象.因此reference必须有初值.
+如果有一个变量,其目的是用来指向(代表)另一个对象,但是也有可能它不指向(代表)任何对象,此时应该使用pointer,因为可以将pointer设置为null.同时也说明pointers可以被重新赋值,指向另一个对象,reference却总是指向(代表)它最初获得的那个对象
+例如当你实现某些操作符(操作符重载)的时候,也需要使用reference.
+结论:当需要指向某个东西,而且绝对不会改变指向其他东西,或者实现一个操作符无法用pointers达成,选择reference.其他时候,选择pointers.
+
+2.c++转型操作符
+double result = static_cast<double>(firstNumber)/secondNumber;
+static_cast基本拥有与C旧式转型相同的意义以及相同的限制.
+
+class Widget { ... };
+class SpecialWidget : public Widget { ... };
+void update(SpecialWidget *psw);
+SpecialWidget sw;
+const SpacialWidget& csw = sw;                 //csw是一个const对象
+update(const_cast<SpecialWidget*>(&csw));      //去除 &csw的常量性被去除
+显然,const_cast用于将某个对象的常量属性去除掉
+
+dynamic_cast用来在继承体系中"安全的向下转型或跨系转型动作".也就是说可以利用dynamic_cast,将"指向base class object的pointers或reference转型为"指向derived(sibling base)class objects的pointers或reference",并得到转型是否成功.如果失败,会得到null指针或exception(当转型对象是reference)表现出来.
+
+Widget *pw;
+update(dynamic_cast<SpeciaWidget*>(pw));   //pw这里指向了一个SpeciaWidget指针
+
+void updateviaRef(SpeciaWidget& rsw);
+updateViaRef(dynamic_cast<SpeciaWidget&>(*pw));   //pw指向了一个SpeciaWidget引用
+
+dynamic_cast只能用在具有继承体系中
+
+reinterpret_cast,不具有移植性,几乎总是与编译平台息息相关.
+
+3.不要以多态方式处理数组
+继承的重要性质之一就是:可以通过"指向base class objects"的pointers和reference,来操作derived class objects.
+c++也允许通过base class的pointers和reference来操作"derived class objects所形成的数组".但是它几乎不会如你所预期的运行.
+
+class BST { ... };
+class BalancedBST : public BST { ... };
+
+现在考虑有个函数,用来打印BSTs数组中的每一个BST的内容:
+
+void printBSTArray(ostream& s, const BST arrary[], int numElements) {
+	for (int i = 0; i < numElements; ++i) 
+		s << array[i];
+}
+
+BST BSTArray[10];
+...
+printBSTArray(cout, BSTArray, 10);   //运行良好
+
+BalancedBST bBSTArray[10];
+... 
+printBSTArray(cout, bBSTArray, 10);       //这里运行有问题
+
+C++语言规范中说,通过base class指针删除一个由derived class objects构成的数组,其结果未定义.这里知道所谓"未定义"的意思就是:执行以后会产生苦恼.简单地的说,多态和指针算术不能混用.数组对象几乎总是涉及指针的算术运算,所以数组和多态不要混用.
+
+4.小心类型转换
+简易法是最新使用的C++特性:关键词explicit,就是为了解决隐式类型转换带来的问题.只要将constructors声明为explicit,编译器便不能因隐式类型转换的需要而调用它们.不过显式类型转换是允许的:
+
+template<class T>
+class Array {
+public:
+	...
+	explicit Array(int size);
+	...
+};
+
+Array<int> a(10);   //正确
+Array<int> b(10);   //正确
+
+if (a == b[i]) ...     //错误!无法将int隐式转换为Array<int>
+
+if (a == Array<int>(b[i])) ... //没问题,将int转换为Array<int>是一种显示行为,逻辑奇怪
+
+if (a == static_cast< Array<int> >(b[i])) ... //没问题,行为奇怪
+
+if (a == (Array<int>)b[i] ...  //C旧式转型没问题,逻辑奇怪
+
+
+5.前置与后置++/--
+
+class UPInt {
+public:
+	UPInt& operator++();							//前置(prefix)++
+	const UPInt operator++(int);      //后置(postfix)++
+
+	UPInt& operator--();              //前置(prefix)--
+	const UPInt operator--(int);      //后置(postfix)--
+
+	UPInt& operator+=(int);
+	..
+};
+
+UPInt i;
+
+++i;			//调用i.operator++()
+i++;      //调用i.operator++(0)
+          
+--i;      //调用i.operator--()
+i--;      //调用i.operator--(0)
+
+重要的是,那些操作符的前置式和后置式返回不同的类型,前置返回一个reference,后置返回一个const对象.
+
+前置式:累加然后取出
+UPInt& UPInt::operator++() {
+	*this += 1;
+	return *this;
+}
+
+后置式:取出然后累加
+const UPInt UPInt::operator++(int) {
+	UPInt oldValue = *this;
+	++(*this);
+	return oldValue;
+}
+这里并未动用其参数.其参数的唯一目的只是为了区别前置和后置式而已.
+
+因为后置函数必须产生一个临时对象,作为返回值只用,上述实现码也的确产生一个明显的临时对象,需要构造也需要析构.
+前置式没有这样的临时对象,单以效率因素,前置式效率更高些.
+
+
+6.new和delete操作
+new operator和operator new区别
+string *ps = new string("Memory Management");
+这里的new是所谓的new operator.这个操作符是由语言内建的,就像sizeof那样,不能被改变意义,总是做相同的事情.
+它的动作分为两方面.第一,它分配足够的内存,用来放置某类型的对象.上例而言,它分配足够放置一个string对象的内存.第二,它调用一个constructor,为刚才分配的内存中的那个对象设定初值.
+
+void * operator new(size_t size);
+返回值类型是void*.此函数返回一个指针,指向一块原始的,未设初始的内存,函数中的size_t参数表示需要分配多少内存.
+
+void *rawMemory = operator new(sizeof(string));
+
+这里的operator new将返回指针,指向一块足够容纳一个string对象内存.
+和malloc一样,operator new的唯一任务就是分配内存.取回oeprator new返回的内存并将之转换为一个对象
+
+函数operator delete对于内建的delete operator,就好像operator new对于new operator一样.
+void *buffer = operator new(50*sizeof(char));		//分配足够的内存,放置50个chars,没有调用任何构造函数
+...
+operator delete(buffer);     //释放内存,没有调用任何析构函数
+
+
+string *ps = new string[10];
+这里的new operator行为和上述的情况略有不同.内存不再用operator new分配,而是用operator new[]的函数负责分配(通常被称为"array new")
+数组版new operator必须针对数组中的每个对象调用一个constructor:
+
+string *ps = new string[10];		//调用operator new[]以分配足够容纳10个string对象的内存,然后针对每个元素调用string default construct.
+
+delete [] ps;   //当delete operator被用于数组,它会针对数组中的每个元素调用其destructor,然后再调用operator delete []释放内存
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

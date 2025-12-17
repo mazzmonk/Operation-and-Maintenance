@@ -1,0 +1,2122 @@
+索引:
+----------------------------------------------------------------------------------------------------------------
+第九部分(9/16)
+# 访问集群中的应用程序
+
+## 部署和访问 Kubernetes 仪表板(Dashboard)
+Dashboard 是基于网页的 Kubernetes 用户界面.你可以使用 Dashboard 将容器应用部署到 Kubernetes 集群中,也可以对容器应用排错,还能管理集群资源.你可以使用 Dashboard 获取运行在集群中的应用的概览信息,也可以创建或者修改 Kubernetes 资源 (如 Deployment、Job、DaemonSet 等等).例如,你可以对 Deployment 实现弹性伸缩、发起滚动升级、重启 Pod 或者使用向导创建新的应用.
+
+Dashboard 同时展示了 Kubernetes 集群中的资源状态信息和所有报错信息.
+
+* 部署 Dashboard UI - 重要,使用了最新的唯一的 helm 方式来安装
+说明: 
+Kubernetes Dashboard 目前仅支持基于 Helm 的安装,因为它速度更快,并且可以让我们更好地控制 Dashboard 运行所需的所有依赖项.
+
+默认情况下不会部署 Dashboard,可以通过以下命令部署: 
+
+# 添加 kubernetes-dashboard 仓库
+$ helm repo add kubernetes-dashboard https://kubernetes.github.io/dashboard/
+# 使用 kubernetes-dashboard Chart 部署名为 `kubernetes-dashboard` 的 Helm Release
+$ helm upgrade --install kubernetes-dashboard kubernetes-dashboard/kubernetes-dashboard --create-namespace --namespace kubernetes-dashboard
+
+根据 https://artifacthub.io/packages/helm/k8s-dashboard/kubernetes-dashboard 右侧关于镜像版本的描述,使用的 kubernetes-dashboard 大概为 7.10.0 版本,优先下载如下的镜像文件:
+
+docker.io/kubernetesui/dashboard-api:1.10.1
+docker.io/kubernetesui/dashboard-auth:1.2.2
+docker.io/library/kong:3.6
+docker.io/kubernetesui/dashboard-metrics-scraper:1.2.1
+docker.io/kubernetesui/dashboard-web:1.6.0
+
+* 访问 Dashboard 用户界面 - 重要,通过 token 的方式访问 UI
+为了保护你的集群数据,默认情况下,Dashboard 会使用最少的 RBAC 配置进行部署.当前,Dashboard 仅支持使用 Bearer 令牌登录.要为此样本演示创建令牌,你可以按照 创建示例用户 上的指南进行操作.
+
+创建示例用户的操作是必须的,如下参考:
+https://github.com/kubernetes/dashboard/blob/master/docs/user/access-control/creating-sample-user.md
+
+警告: 
+在教程中创建的样本用户将具有管理特权,并且仅用于教育目的.
+
+** 命令行代理
+你可以使用 kubectl 命令行工具来启用 Dashboard 访问,命令如下: 
+$ kubectl proxy
+
+kubectl 会使得 Dashboard 可以通过 
+http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/ 
+访问.
+
+UI 只能通过执行这条命令的机器进行访问.更多选项参见 kubectl proxy --help.
+
+说明: 
+Kubeconfig 身份验证方法不支持外部身份提供程序或基于 x509 证书的身份验证.
+
+说明:
+通过上述的方式不怎么好用,根据安装完以后的提示,使用如下的命令:
+$ kubectl -n kubernetes-dashboard port-forward svc/kubernetes-dashboard-kong-proxy 8443:443 --address 0.0.0.0
+
+在浏览器上 https://192.168.1.11:8443 即可通过 token 方式访问,token 则是通过上述的创建用户的过程中生成,通过如下
+$ kubectl get secret admin-user -n kubernetes-dashboard -o jsonpath={".data.token"} | base64 -d
+得到.
+
+* 欢迎界面
+当访问空集群的 Dashboard 时,你会看到欢迎界面.页面包含一个指向此文档的链接,以及一个用于部署第一个应用程序的按钮.此外,你可以看到在默认情况下有哪些默认系统应用运行在 kube-system 名字空间 中,比如 Dashboard 自己.
+
+Kubernetes Dashboard 欢迎页面
+
+* 部署容器化应用
+通过一个简单的部署向导,你可以使用 Dashboard 将容器化应用作为一个 Deployment 和可选的 Service 进行创建和部署.你可以手工指定应用的详细配置,或者上传一个包含应用配置的 YAML 或 JSON 清单文件.
+
+点击任何页面右上角的 CREATE 按钮以开始.
+
+** 指定应用的详细配置
+部署向导需要你提供以下信息: 
+. 应用名称(必填): 应用的名称.内容为 应用名称 的 标签 会被添加到任何将被部署的 Deployment 和 Service.
+在选定的 Kubernetes 名字空间 中,应用名称必须唯一.必须由小写字母开头,以数字或者小写字母结尾,并且只含有小写字母、数字和中划线(-).小于等于24个字符.开头和结尾的空格会被忽略.
+. 容器镜像(必填): 公共镜像仓库上的 Docker 容器镜像 或者私有镜像仓库 (通常是 Google Container Registry 或者 Docker Hub)的 URL.容器镜像参数说明必须以冒号结尾.
+. Pod 的数量(必填): 你希望应用程序部署的 Pod 的数量.值必须为正整数.
+系统会创建一个 Deployment 以保证集群中运行期望的 Pod 数量.
+. 服务(可选): 对于部分应用(比如前端),你可能想对外暴露一个 Service,这个 Service 可能用的是集群之外的公网 IP 地址(外部 Service).
+
+说明: 
+对于外部服务,你可能需要开放一个或多个端口才行.
+
+其它只能对集群内部可见的 Service 称为内部 Service.
+
+不管哪种 Service 类型,如果你选择创建一个 Service,而且容器在一个端口上开启了监听(入向的),那么你需要定义两个端口.创建的 Service 会把(入向的)端口映射到容器可见的目标端口.该 Service 会把流量路由到你部署的 Pod.支持 TCP 协议和 UDP 协议.这个 Service 的内部 DNS 解析名就是之前你定义的应用名称的值.
+
+如果需要,你可以打开 Advanced Options 部分,这里你可以定义更多设置: 
+. 描述: 这里你输入的文本会作为一个 注解 添加到 Deployment,并显示在应用的详细信息中.
+. 标签: 应用默认使用的 标签是应用名称和版本.你可以为 Deployment、Service(如果有)定义额外的标签,比如 release(版本)、 environment(环境)、tier(层级)、partition(分区) 和 release track(版本跟踪).
+例子: 
+release=1.0
+tier=frontend
+environment=pod
+track=stable
+. 名字空间: Kubernetes 支持多个虚拟集群依附于同一个物理集群.这些虚拟集群被称为名字空间,可以让你将资源划分为逻辑命名的组.
+Dashboard 通过下拉菜单提供所有可用的名字空间,并允许你创建新的名字空间.名字空间的名称最长可以包含 63 个字母或数字和中横线(-),但是不能包含大写字母.
+名字空间的名称不能只包含数字.如果名字被设置成一个数字,比如 10,pod 就
+在名字空间创建成功的情况下,默认会使用新创建的名字空间.如果创建失败,那么第一个名字空间会被选中.
+. 镜像拉取 Secret: 如果要使用私有的 Docker 容器镜像,需要拉取 Secret 凭证.
+Dashboard 通过下拉菜单提供所有可用的 Secret,并允许你创建新的 Secret.Secret 名称必须遵循 DNS 域名语法,比如 new.image-pull.secret.Secret 的内容必须是 base64 编码的,并且在一个 .dockercfg 文件中声明.Secret 名称最大可以包含 253 个字符.
+在镜像拉取 Secret 创建成功的情况下,默认会使用新创建的 Secret.如果创建失败,则不会使用任何 Secret.
+. CPU 需求(核数) 和 内存需求(MiB): 你可以为容器定义最小的 资源限制.默认情况下,Pod 没有 CPU 和内存限制.
+. 运行命令和运行命令参数: 默认情况下,你的容器会运行 Docker 镜像的默认入口命令.你可以使用 command 选项覆盖默认值.
+. 以特权模式运行: 这个设置决定了在 特权容器 中运行的进程是否像主机中使用 root 运行的进程一样.特权容器可以使用诸如操纵网络堆栈和访问设备的功能.
+. 环境变量: Kubernetes 通过 环境变量 暴露 Service.你可以构建环境变量,或者将环境变量的值作为参数传递给你的命令.它们可以被应用用于查找 Service.值可以通过 $(VAR_NAME) 语法关联其他变量.
+
+** 上传 YAML 或者 JSON 文件
+Kubernetes 支持声明式配置.所有的配置都存储在清单文件 (YAML 或者 JSON 配置文件)中.这些清单使用 Kubernetes API 定义的资源模式.
+
+作为一种替代在部署向导中指定应用详情的方式,你可以在一个或多个清单文件中定义应用,并且使用 Dashboard 上传文件.
+
+* 使用 Dashboard
+以下各节描述了 Kubernetes Dashboard UI 视图；包括它们提供的内容,以及怎么使用它们.
+
+** 导航
+当在集群中定义 Kubernetes 对象时,Dashboard 会在初始视图中显示它们.默认情况下只会显示默认名字空间中的对象,可以通过更改导航栏菜单中的名字空间筛选器进行改变.
+
+Dashboard 展示大部分 Kubernetes 对象,并将它们分组放在几个菜单类别中.
+
+** 管理概述
+集群和名字空间管理的视图,Dashboard 会列出节点、名字空间和持久卷,并且有它们的详细视图.节点列表视图包含从所有节点聚合的 CPU 和内存使用的度量值.详细信息视图显示了一个节点的度量值,它的规格、状态、分配的资源、事件和这个节点上运行的 Pod.
+
+** 负载
+显示选中的名字空间中所有运行的应用.视图按照负载类型(例如: Deployment、ReplicaSet、StatefulSet)罗列应用,并且每种负载都可以单独查看.列表总结了关于负载的可执行信息,比如一个 ReplicaSet 的就绪状态的 Pod 数量,或者目前一个 Pod 的内存用量.
+
+工作负载的详情视图展示了对象的状态、详细信息和相互关系.例如,ReplicaSet 所控制的 Pod,或者 Deployment 所关联的新 ReplicaSet 和 HorizontalPodAutoscalers.
+
+** 服务
+展示允许暴露给外网服务和允许集群内部发现的 Kubernetes 资源.因此,Service 和 Ingress 视图展示他们关联的 Pod、给集群连接使用的内部端点和给外部用户使用的外部端点.
+
+** 存储
+存储视图展示持久卷申领(PVC)资源,这些资源被应用程序用来存储数据.
+
+** ConfigMap 和 Secret
+展示的所有 Kubernetes 资源是在集群中运行的应用程序的实时配置.通过这个视图可以编辑和管理配置对象,并显示那些默认隐藏的 Secret.
+
+** 日志查看器
+Pod 列表和详细信息页面可以链接到 Dashboard 内置的日志查看器.查看器可以深入查看属于同一个 Pod 的不同容器的日志.
+
+## 访问集群 - 重要,提供了访问集群方式的汇总
+本章节阐述多种与集群交互的方法.
+. 使用 kubectl 完成集群的第一次访问
+. 直接访问 REST API
+  . 使用 kubectl proxy
+  . 不使用 kubectl proxy
+. 以编程方式访问 API
+  . Go 客户端
+  . Python 客户端
+  . 其它语言
+  . 从 Pod 中访问 API
+. 访问集群上运行的服务
+. 请求重定向
+. 多种代理
+
+* 使用 kubectl 完成集群的第一次访问
+当你第一次访问 Kubernetes API 的时候,我们建议你使用 Kubernetes CLI 工具 kubectl.
+
+访问集群时,你需要知道集群的地址并且拥有访问的凭证.通常,这些在你通过启动安装安装集群时都是自动安装好的,或者其他人安装时也应该提供了凭证和集群地址.
+
+通过以下命令检查 kubectl 是否知道集群地址及凭证: 
+$ kubectl config view
+
+关于 kubectl config view 的使用范例查看'第一部分(1/16)' 中的如下 
+## 名字空间演练 - 重要,可以在多个命名空间切换,特别是关于 context (kubectl context view) 的应用
+章节内容
+
+* 直接访问 REST API 
+Kubectl 处理 apiserver 的定位和身份验证.如果要使用 curl 或 wget 等 http 客户端或浏览器直接访问 REST API,可以通过多种方式查找和验证: 
+. 以代理模式运行 kubectl.
+  . 推荐此方式.
+  . 使用已存储的 apiserver 地址.
+  . 使用自签名的证书来验证 apiserver 的身份.杜绝 MITM 攻击.
+  . 对 apiserver 进行身份验证.
+  . 未来可能会实现智能化的客户端负载均衡和故障恢复.
+. 直接向 http 客户端提供位置和凭证.
+  . 可选的方案.
+  . 适用于代理可能引起混淆的某些客户端类型.
+  . 需要引入根证书到你的浏览器以防止 MITM 攻击.
+
+** 使用 kubectl proxy - 当在可以使用 kubectl 的机器上执行时候,因为有证书的原因,此方法可用
+以下命令以反向代理的模式运行 kubectl.它处理 apiserver 的定位和验证.像这样运行: 
+$ kubectl proxy --port=8080
+
+然后,你可以使用 curl、wget 或浏览器访问 API,如果是 IPv6 则用 [::1] 替换 localhost,如下所示: 
+$ curl http://localhost:8080/api/
+
+输出类似于: 
+{
+  "kind": "APIVersions",
+  "versions": [
+    "v1"
+  ],
+  "serverAddressByClientCIDRs": [
+    {
+      "clientCIDR": "0.0.0.0/0",
+      "serverAddress": "10.0.1.149:443"
+    }
+  ]
+}
+
+** 不使用 kubectl proxy - 当没有可以与 api 通讯的证书,使用此种方法
+使用 kubectl apply 和 kubectl describe secret ... 及 grep 和剪切操作来为 default 服务帐户创建令牌,如下所示: 
+
+首先,创建 Secret,请求默认 ServiceAccount 的令牌: 
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: default-token
+  annotations:
+    kubernetes.io/service-account.name: default
+type: kubernetes.io/service-account-token
+EOF
+
+接下来,等待令牌控制器使用令牌填充 Secret: 
+
+while ! kubectl describe secret default-token | grep -E '^token' >/dev/null; do
+  echo "waiting for token..." >&2
+  sleep 1
+done
+
+捕获并使用生成的令牌: 
+APISERVER=$(kubectl config view --minify | grep server | cut -f 2- -d ":" | tr -d " ")
+TOKEN=$(kubectl describe secret default-token | grep -E '^token' | cut -f2 -d':' | tr -d " ")
+curl $APISERVER/api --header "Authorization: Bearer $TOKEN" --insecure
+
+输出类似于: 
+{
+  "kind": "APIVersions",
+  "versions": [
+    "v1"
+  ],
+  "serverAddressByClientCIDRs": [
+    {
+      "clientCIDR": "0.0.0.0/0",
+      "serverAddress": "10.0.1.149:443"
+    }
+  ]
+}
+
+jsonpath 方法实现: - 注意下面的具体显示内容中的 clusters: 表示是一个数组,此数组中有 1 个元素 cluster,以此类推,注意元素 cluster 前面的 '-' 符号,表明这是一个数组的元素,它的上一级为数组名称,数组元素的取值方式为 .数组名称[0],.数组名称[1],.数组名称[2] 以此类推
+.数组名称[*] 表示整个数组的元素,而数组的每一个元素都必须是 '-' 开头
+这里有个特殊的情况就是如下的clusters 数组,其实只有 1 个元素,因此,.clusters[0] 和 .clusters[*] 的内容相同.需要特别注意,更详细的描述见后面的 json 与 yaml 输出对比
+
+
+$ APISERVER=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
+$ TOKEN=$(kubectl get secret default-token -o jsonpath='{.data.token}' | base64 --decode)
+$ curl $APISERVER/api --header "Authorization: Bearer $TOKEN" --insecure
+
+说明: 
+$ kubectl config view 显示内容
+---------------------------------
+kubectl config view 
+apiVersion: v1
+clusters:
+- cluster:
+    certificate-authority-data: DATA+OMITTED
+    server: https://192.168.1.11:6443
+  name: kubernetes
+contexts:
+- context:
+    cluster: kubernetes
+    user: kubernetes-admin
+  name: kubernetes-admin@kubernetes
+current-context: kubernetes-admin@kubernetes
+kind: Config
+preferences: {}
+users:
+- name: kubernetes-admin
+  user:
+    client-certificate-data: DATA+OMITTED
+    client-key-data: DATA+OMITTED
+--------------------------------------------
+
+
+输出类似于: 
+{
+  "kind": "APIVersions",
+  "versions": [
+    "v1"
+  ],
+  "serverAddressByClientCIDRs": [
+    {
+      "clientCIDR": "0.0.0.0/0",
+      "serverAddress": "10.0.1.149:443"
+    }
+  ]
+}
+
+上面的例子使用了 --insecure 参数,这使得它很容易受到 MITM 攻击.当 kubectl 访问集群时,它使用存储的根证书和客户端证书来访问服务器(它们安装在 ~/.kube 目录中).由于集群证书通常是自签名的,因此可能需要特殊配置才能让你的 http 客户端使用根证书.
+
+在一些集群中,apiserver 不需要身份验证；它可能只服务于 localhost,或者被防火墙保护,这个没有一定的标准.配置对 API 的访问 描述了集群管理员如何进行配置.此类方法可能与未来的高可用性支持相冲突.
+
+* 以编程方式访问 API
+Kubernetes 官方提供对 Go 和 Python 的客户端库支持.
+
+** Go 客户端
+. 想要获得这个库,请运行命令: go get k8s.io/client-go@kubernetes-<kubernetes-version-number>,有关详细安装说明,请参阅 INSTALL.md.请参阅 https://github.com/kubernetes/client-go 以查看支持的版本.
+. 基于这个 client-go 客户端库编写应用程序.请注意,client-go 定义了自己的 API 对象,因此如果需要,请从 client-go 而不是从主存储库 导入 API 定义,例如,import "k8s.io/client-go/kubernetes" 才是对的.
+
+Go 客户端可以像 kubectl CLI 一样使用相同的 kubeconfig 文件 来定位和验证 apiserver.可参阅 示例.
+
+** Python 客户端
+如果想要使用 Python 客户端,请运行命令: pip install kubernetes.参阅 Python Client Library page 以获得更详细的安装参数.
+Python 客户端可以像 kubectl CLI 一样使用相同的 kubeconfig 文件 来定位和验证 apiserver,可参阅 示例.
+
+** 其它语言
+目前有多个客户端库 为其它语言提供访问 API 的方法.参阅其它库的相关文档以获取他们是如何验证的.
+
+** 从 Pod 中访问 API
+当你从 Pod 中访问 API 时,定位和验证 API 服务器会有些许不同.
+
+请参阅 '第七部分(7/16)' 的 '## 从 Pod 中访问 Kubernetes API'
+
+* 访问集群上运行的服务
+请查阅后续章节 '## 访问集群上运行的服务'
+
+* 请求重定向 
+重定向功能已弃用并被删除.请改用代理(见下文).
+
+* 多种代理
+使用 Kubernetes 时可能会遇到几种不同的代理: 
+1. kubectl 代理: 
+  . 在用户的桌面或 Pod 中运行
+  . 代理从本地主机地址到 Kubernetes apiserver
+  . 客户端到代理将使用 HTTP
+  . 代理到 apiserver 使用 HTTPS
+  . 定位 apiserver
+  . 添加身份验证头部
+2. apiserver 代理: 
+  . 内置于 apiserver 中
+  . 将集群外部的用户连接到集群 IP,否则这些 IP 可能无法访问
+  . 运行在 apiserver 进程中
+  . 客户端代理使用 HTTPS(也可配置为 http)
+  . 代理将根据可用的信息决定使用 HTTP 或者 HTTPS 代理到目标
+  . 可用于访问节点、Pod 或服务
+  . 在访问服务时进行负载平衡
+3. kube proxy: 
+  . 运行在每个节点上
+  . 代理 UDP 和 TCP
+  . 不能代理 HTTP
+  . 提供负载均衡
+  . 只能用来访问服务
+4. 位于 apiserver 之前的 Proxy/Load-balancer: 
+  . 存在和实现因集群而异(例如 nginx)
+  . 位于所有客户和一个或多个 apiserver 之间
+  . 如果有多个 apiserver,则充当负载均衡器
+5. 外部服务上的云负载均衡器: 
+  . 由一些云提供商提供(例如 AWS ELB,Google Cloud Load Balancer)
+  . 当 Kubernetes 服务类型为 LoadBalancer 时自动创建
+  . 只使用 UDP/TCP
+  . 具体实现因云提供商而异.
+
+除了前两种类型之外,Kubernetes 用户通常不需要担心任何其他问题.集群管理员通常会确保后者的正确配置.
+
+## 配置对多集群的访问 - 重要,在多个集群之间的切换及当使用类似 PAAS 平台时候管理多个集群时候非常有用,同时也是对'第一部分(1/16)' 中'的'## 名字空间演练'部分的更全面详细的描述
+本章节展示如何使用配置文件来配置对多个集群的访问. 在将集群、用户和上下文定义在一个或多个配置文件中之后,用户可以使用 kubectl config use-context 命令快速地在集群之间进行切换.
+
+说明: 
+用于配置集群访问的文件有时被称为 kubeconfig 文件. 这是一种引用配置文件的通用方式,并不意味着存在一个名为 kubeconfig 的文件.
+
+警告: 
+只使用来源可靠的 kubeconfig 文件.使用特制的 kubeconfig 文件可能会导致恶意代码执行或文件暴露. 如果必须使用不受信任的 kubeconfig 文件,请首先像检查 shell 脚本一样仔细检查它.
+
+* 定义集群、用户和上下文 - 重要,优先配置一个有配置选项的文件,使用 kubectl config --kubeconfig xxx 命令向文件中填充内容,最后得到一个可用的 kubeconfig 文件
+假设用户有两个集群,一个用于开发工作(development),一个用于测试工作(test). 在 development 集群中,前端开发者在名为 frontend 的名字空间下工作,存储开发者在名为 storage 的名字空间下工作.在 test 集群中,开发人员可能在默认名字空间下工作,也可能视情况创建附加的名字空间. 访问开发集群需要通过证书进行认证. 访问测试集群需要通过用户名和密码进行认证.
+
+创建名为 config-exercise 的目录.在 config-exercise 目录中,创建名为 config-demo 的文件,其内容为: 
+
+apiVersion: v1
+kind: Config
+preferences: {}
+
+clusters:
+- cluster:
+  name: development
+- cluster:
+  name: test
+
+users:
+- name: developer
+- name: experimenter
+
+contexts:
+- context:
+  name: dev-frontend
+- context:
+  name: dev-storage
+- context:
+  name: exp-test
+
+配置文件描述了集群、用户名和上下文.config-demo 文件中含有描述两个集群、 两个用户和三个上下文的框架.
+
+进入 config-exercise 目录.输入以下命令,将集群详细信息添加到配置文件中: 
+$ kubectl config --kubeconfig=config-demo set-cluster development --server=https://1.2.3.4 --certificate-authority=fake-ca-file
+$ kubectl config --kubeconfig=config-demo set-cluster test --server=https://5.6.7.8 --insecure-skip-tls-verify
+
+将用户详细信息添加到配置文件中: 
+
+注意: 
+将密码保存到 Kubernetes 客户端配置中有风险. 一个较好的替代方式是使用凭据插件并单独保存这些凭据. 参阅 client-go 凭据插件
+
+$ kubectl config --kubeconfig=config-demo set-credentials developer --client-certificate=fake-cert-file --client-key=fake-key-seefile
+$ kubectl config --kubeconfig=config-demo set-credentials experimenter --username=exp --password=some-password
+
+说明: 
+要删除用户,可以运行 kubectl --kubeconfig=config-demo config unset users.<name>
+要删除集群,可以运行 kubectl --kubeconfig=config-demo config unset clusters.<name>
+要删除上下文,可以运行 kubectl --kubeconfig=config-demo config unset contexts.<name>
+
+将上下文详细信息添加到配置文件中: 
+$ kubectl config --kubeconfig=config-demo set-context dev-frontend --cluster=development --namespace=frontend --user=developer
+$ kubectl config --kubeconfig=config-demo set-context dev-storage --cluster=development --namespace=storage --user=developer
+$ kubectl config --kubeconfig=config-demo set-context exp-test --cluster=test --namespace=default --user=experimenter
+
+打开 config-demo 文件查看添加的详细信息.也可以使用 config view 命令进行查看: 
+$ kubectl config --kubeconfig=config-demo view
+
+说明: 当没有添加上述的信息时候,显示如下的内容,全部为'空'
+apiVersion: v1
+clusters: null
+contexts: null
+current-context: ""
+kind: Config
+preferences: {}
+users: null
+
+当填充了信息以后,输出展示了两个集群、两个用户和三个上下文: - 就是将上述命令中的内容填充到文件中
+
+apiVersion: v1
+clusters:
+- cluster:
+    certificate-authority: fake-ca-file
+    server: https://1.2.3.4
+  name: development
+- cluster:
+    insecure-skip-tls-verify: true
+    server: https://5.6.7.8
+  name: test
+contexts:
+- context:
+    cluster: development
+    namespace: frontend
+    user: developer
+  name: dev-frontend
+- context:
+    cluster: development
+    namespace: storage
+    user: developer
+  name: dev-storage
+- context:
+    cluster: test
+    namespace: default
+    user: experimenter
+  name: exp-test
+current-context: ""
+kind: Config
+preferences: {}
+users:
+- name: developer
+  user:
+    client-certificate: fake-cert-file
+    client-key: fake-key-file
+- name: experimenter
+  user:
+    # 文档说明(本注释不属于命令输出).
+    # 将密码保存到 Kubernetes 客户端配置有风险.
+    # 一个较好的替代方式是使用凭据插件并单独保存这些凭据.
+    # 参阅 https://kubernetes.io/zh-cn/docs/reference/access-authn-authz/authentication/#client-go-credential-plugins
+    password: some-password
+    username: exp
+
+其中的 fake-ca-file、fake-cert-file 和 fake-key-file 是证书文件路径名的占位符. 你需要更改这些值,使之对应你的环境中证书文件的实际路径名.
+
+有时你可能希望在这里使用 BASE64 编码的数据而不是一个个独立的证书文件. 如果是这样,你需要在键名上添加 -data 后缀.例如,certificate-authority-data、client-certificate-data 和 client-key-data.
+
+每个上下文包含三部分(集群、用户和名字空间),例如,dev-frontend 上下文表明: 使用 developer 用户的凭证来访问 development 集群的 frontend 名字空间.
+
+设置当前上下文: 
+$ kubectl config --kubeconfig=config-demo use-context dev-frontend
+
+现在当输入 kubectl 命令时,相应动作会应用于 dev-frontend 上下文中所列的集群和名字空间,同时,命令会使用 dev-frontend 上下文中所列用户的凭证.
+使用 --minify 参数,来查看与当前上下文相关联的配置信息.
+$ kubectl config --kubeconfig=config-demo view --minify
+
+输出结果展示了 dev-frontend 上下文相关的配置信息: 
+
+apiVersion: v1
+clusters:
+- cluster:
+    certificate-authority: fake-ca-file
+    server: https://1.2.3.4
+  name: development
+contexts:
+- context:
+    cluster: development
+    namespace: frontend
+    user: developer
+  name: dev-frontend
+current-context: dev-frontend
+kind: Config
+preferences: {}
+users:
+- name: developer
+  user:
+    client-certificate: fake-cert-file
+    client-key: fake-key-file
+
+现在假设用户希望在测试集群中工作一段时间.
+
+将当前上下文更改为 exp-test: 
+$ kubectl config --kubeconfig=config-demo use-context exp-test
+
+现在你发出的所有 kubectl 命令都将应用于 test 集群的默认名字空间. 同时,命令会使用 exp-test 上下文中所列用户的凭证.
+
+查看更新后的当前上下文 exp-test 相关的配置: 
+$ kubectl config --kubeconfig=config-demo view --minify
+最后,假设用户希望在 development 集群中的 storage 名字空间下工作一段时间.
+
+将当前上下文更改为 dev-storage: 
+$ kubectl config --kubeconfig=config-demo use-context dev-storage
+
+查看更新后的当前上下文 dev-storage 相关的配置: 
+$ kubectl config --kubeconfig=config-demo view --minify
+
+说明: 当在 kubectl config --kubeconfig=config-demo 这个命令中使用关键字 use-context xxx 意味者切换到 XXX 这个上下文,而这个上下文在 config-demo 文件中表示的contexts 这个数组的有某一个 context 这个元素的 name 值
+
+^^^^^^^^^^^^^^^^^^^^
+# 重要,插入一个关于在 yaml 文件中的数组的取值方式
+比如: 这是一个 kubeconfig 文件,用于 kubectl config 
+-------------------------------
+apiVersion: v1
+clusters:
+- cluster:
+    certificate-authority: fake-ca-file
+    server: https://1.2.3.4
+  name: development
+- cluster:
+    insecure-skip-tls-verify: true
+    server: https://5.6.7.8
+  name: test
+contexts:                   # contexts 数组
+- context:                  # .contexts[0].context
+    cluster: development
+    namespace: frontend
+    user: developer
+  name: dev-frontend        # .contexts[0].name
+- context:                  # contexts 数组的第二个元素(.contexts[1])的开始,包含 2 个字段 context,name
+    cluster: development
+    namespace: storage
+    user: developer
+  name: dev-storage
+- context:
+    cluster: test
+    namespace: default
+    user: experimenter
+  name: exp-test          # .contexts[2].name
+current-context: dev-storage
+kind: Config
+preferences: {}
+users:
+- name: developer
+  user:
+    client-certificate: fake-cert-file
+    client-key: fake-key-seefile
+- name: experimenter
+  user:
+    password: some-password
+    username: exp
+----------------------------------------
+
+这是一个 kubeconfig 文件,需要提取其中的某一项的时候,如下示例:
+$ kubectl config --kubeconfig=config-demo view  -o jsonpath='{.contexts[1].name}'
+dev-storage
+
+$ kubectl config --kubeconfig=config-demo view  -o jsonpath='{.contexts[2].name}'
+exp-test
+
+$ kubectl config --kubeconfig=config-demo view  -o jsonpath='{.contexts[1].context.namespace}'
+storage
+
+vvvvvvvvvvvvvvvvvvvv
+
+* 创建第二个配置文件
+在 config-exercise 目录中,创建名为 config-demo-2 的文件,其中包含以下内容: 
+
+apiVersion: v1
+kind: Config
+preferences: {}
+
+contexts:
+- context:
+    cluster: development
+    namespace: ramp
+    user: developer
+  name: dev-ramp-up
+
+上述配置文件定义了一个新的上下文,名为 dev-ramp-up.
+
+* 设置 KUBECONFIG 环境变量 
+查看是否有名为 KUBECONFIG 的环境变量. 如有,保存 KUBECONFIG 环境变量当前的值,以便稍后恢复. 例如: 
+
+Linux
+export KUBECONFIG_SAVED="$KUBECONFIG"	
+
+Windows PowerShell 
+$Env:KUBECONFIG_SAVED=$ENV:KUBECONFIG
+
+KUBECONFIG 环境变量是配置文件路径的列表,该列表在 Linux 和 Mac 中以冒号分隔,在 Windows 中以分号分隔. 如果有 KUBECONFIG 环境变量,请熟悉列表中的配置文件.
+
+临时添加两条路径到 KUBECONFIG 环境变量中.例如: 
+Linux 
+export KUBECONFIG="${KUBECONFIG}:config-demo:config-demo-2"
+
+Windows PowerShell
+$Env:KUBECONFIG=("config-demo;config-demo-2")
+
+在 config-exercise 目录中输入以下命令: 
+$ kubectl config view
+
+输出展示了 KUBECONFIG 环境变量中所列举的所有文件合并后的信息. 特别地,注意合并信息中包含来自 config-demo-2 文件的 dev-ramp-up 上下文和来自 config-demo 文件的三个上下文
+
+contexts:
+- context:
+    cluster: development
+    namespace: frontend
+    user: developer
+  name: dev-frontend
+- context:
+    cluster: development
+    namespace: ramp
+    user: developer
+  name: dev-ramp-up
+- context:
+    cluster: development
+    namespace: storage
+    user: developer
+  name: dev-storage
+- context:
+    cluster: test
+    namespace: default
+    user: experimenter
+  name: exp-test
+
+
+* 探索 $HOME/.kube 目录 
+如果用户已经拥有一个集群,可以使用 kubectl 与集群进行交互,那么很可能在 $HOME/.kube 目录下有一个名为 config 的文件.
+
+进入 $HOME/.kube 目录,看看那里有什么文件.通常会有一个名为 config 的文件,目录中可能还有其他配置文件.请简单地熟悉这些文件的内容.
+$ cat .kube/config
+
+显示内容
+-----------------------------------------------
+apiVersion: v1
+clusters:
+- cluster:
+    certificate-authority-data: ........ (编码)
+    server: https://192.168.1.11:6443
+  name: kubernetes
+contexts:
+- context:
+    cluster: kubernetes
+    user: kubernetes-admin
+  name: kubernetes-admin@kubernetes
+current-context: kubernetes-admin@kubernetes
+kind: Config
+preferences: {}
+users:
+- name: kubernetes-admin
+  user:
+    client-certificate-data: ........ (编码)
+    client-key-data: ........ (编码)
+--------------------------------------------------
+
+* 将 $HOME/.kube/config 追加到 KUBECONFIG 环境变量中 - 重要,当设置好集群以后,连接集群实际上用的 KUBECONFIG 文件就是这个,通过 kubectl config view 看到也是这个文件
+如果有 $HOME/.kube/config 文件,并且还未列在 KUBECONFIG 环境变量中,那么现在将它追加到 KUBECONFIG 环境变量中.例如: 
+
+Linux
+export KUBECONFIG="${KUBECONFIG}:${HOME}/.kube/config"
+
+Windows Powershell
+$Env:KUBECONFIG="$Env:KUBECONFIG;$HOME\.kube\config"
+
+在配置练习目录中输入以下命令,查看当前 KUBECONFIG 环境变量中列举的所有文件合并后的配置信息: 
+$ kubectl config view
+
+* 清理
+将 KUBECONFIG 环境变量还原为原始值.例如: 
+
+Linux
+export KUBECONFIG="$KUBECONFIG_SAVED"
+
+Windows PowerShell
+$Env:KUBECONFIG=$ENV:KUBECONFIG_SAVED
+
+* 检查 kubeconfig 所表示的主体 - 重要,当管理多个集群的时候,如何判断当前的用户名是那个很重要,及 kubectl [alpha] auth whoami 命令
+你在通过集群的身份验证后将获得哪些属性(用户名、组),这一点并不总是很明显. 如果你同时管理多个集群,这可能会更具挑战性.
+
+对于你所选择的 Kubernetes 客户端上下文,有一个 kubectl 子命令可以检查用户名等主体属性:  kubectl [alpha] auth whoami.
+
+参考:
+https://kubernetes.io/zh-cn/docs/reference/access-authn-authz/authentication/#self-subject-review
+的 '为客户端提供的对身份认证信息的 API 访问 ' 内容
+特性状态:  Kubernetes v1.28 [stable]
+
+## 使用端口转发来访问集群中的应用
+本章节展示如何使用 kubectl port-forward 连接到在 Kubernetes 集群中运行的 MongoDB 服务. 这种类型的连接对数据库调试很有用.
+
+* 准备开始
+安装 MongoDB Shell.
+
+* 创建 MongoDB Deployment 和服务
+1. 创建一个运行 MongoDB 的 Deployment: 
+$ kubectl apply -f https://k8s.io/examples/application/mongodb/mongo-deployment.yaml
+
+成功执行的命令的输出可以证明创建了 Deployment: 
+deployment.apps/mongo created
+
+查看 Pod 状态,检查其是否准备就绪: 
+$ kubectl get pods
+
+输出显示创建的 Pod: 
+NAME                     READY   STATUS    RESTARTS   AGE
+mongo-75f59d57f4-4nd6q   1/1     Running   0          2m4s
+
+查看 Deployment 状态: 
+$ kubectl get deployment
+
+输出显示创建的 Deployment: 
+NAME    READY   UP-TO-DATE   AVAILABLE   AGE
+mongo   1/1     1            1           2m21s
+
+该 Deployment 自动管理一个 ReplicaSet.查看该 ReplicaSet 的状态: 
+$ kubectl get replicaset
+
+输出显示 ReplicaSet 已被创建: 
+NAME               DESIRED   CURRENT   READY   AGE
+mongo-75f59d57f4   1         1         1       3m12s
+
+2. 创建一个在网络上公开的 MongoDB 服务: 
+$ kubectl apply -f https://k8s.io/examples/application/mongodb/mongo-service.yaml
+
+成功执行的命令的输出可以证明 Service 已经被创建: 
+service/mongo created
+
+检查所创建的 Service: 
+$ kubectl get service mongo
+
+输出显示已被创建的 Service: 
+NAME    TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)     AGE
+mongo   ClusterIP   10.96.41.183   <none>        27017/TCP   11s
+
+3. 验证 MongoDB 服务是否运行在 Pod 中并且在监听 27017 端口: 
+
+# 将 mongo-75f59d57f4-4nd6q 改为 Pod 的名称
+$ kubectl get pod mongo-75f59d57f4-4nd6q --template='{{(index (index .spec.containers 0).ports 0).containerPort}}{{"\n"}}'
+
+输出应该显示对应 Pod 中 MongoDB 的端口: 
+27017
+
+27017 是 MongoDB 的官方 TCP 端口.
+
+* 转发一个本地端口到 Pod 端口
+1. kubectl port-forward 允许使用资源名称 (例如 Pod 名称)来选择匹配的 Pod 来进行端口转发.
+
+# 将 mongo-75f59d57f4-4nd6q 改为 Pod 的名称
+$ kubectl port-forward mongo-75f59d57f4-4nd6q 28015:27017
+
+这相当于
+$ kubectl port-forward pods/mongo-75f59d57f4-4nd6q 28015:27017
+
+或者
+$ kubectl port-forward deployment/mongo 28015:27017
+
+或者
+$ kubectl port-forward replicaset/mongo-75f59d57f4 28015:27017
+
+或者
+$ kubectl port-forward service/mongo 28015:27017
+
+以上所有命令都有效.输出类似于: 
+Forwarding from 127.0.0.1:28015 -> 27017
+Forwarding from [::1]:28015 -> 27017
+
+说明: 
+kubectl port-forward 不会返回.你需要打开另一个终端来继续这个练习.
+
+2. 启动 MongoDB 命令行接口: 
+mongosh --port 28015
+
+3. 在 MongoDB 命令行提示符下,输入 ping 命令: 
+db.runCommand( { ping: 1 } )
+
+成功的 ping 请求应该返回: 
+{ ok: 1 }
+
+** (可选操作)让 kubectl 来选择本地端口
+如果你不需要指定特定的本地端口,你可以让 kubectl 来选择和分配本地端口,这样你就不需要管理本地端口冲突.该命令使用稍微不同的语法: 
+$ kubectl port-forward deployment/mongo :27017
+
+kubectl 工具会找到一个未被使用的本地端口号(避免使用低段位的端口号,因为他们可能会被其他应用程序使用).输出类似于: 
+Forwarding from 127.0.0.1:63753 -> 27017
+Forwarding from [::1]:63753 -> 27017
+
+* 讨论
+与本地 28015 端口建立的连接将被转发到运行 MongoDB 服务器的 Pod 的 27017 端口. 通过此连接,你可以使用本地工作站来调试在 Pod 中运行的数据库.
+
+说明: 
+kubectl port-forward 仅实现了 TCP 端口 支持. 在 issue 47862 中跟踪了对 UDP 协议的支持.
+
+## 使用服务来访问集群中的应用
+本章节展示如何创建一个 Kubernetes 服务对象,能让外部客户端访问在集群中运行的应用. 该服务为一个应用的两个运行实例提供负载均衡.
+
+* 教程目标
+
+. 运行 Hello World 应用的两个实例.
+. 创建一个服务对象来暴露 NodePort.
+. 使用服务对象来访问正在运行的应用.
+
+* 为运行在两个 Pod 中的应用创建一个服务
+
+这是应用程序部署的配置文件: 
+hello-application.yaml
+-----------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-world
+spec:
+  selector:
+    matchLabels:
+      run: load-balancer-example
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        run: load-balancer-example
+    spec:
+      containers:
+        - name: hello-world
+          image: us-docker.pkg.dev/google-samples/containers/gke/hello-app:2.0
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+-------------------------------------------
+1. 在你的集群中运行一个 Hello World 应用. 使用上面的文件创建应用程序 Deployment: 
+$ kubectl apply -f hello-application.yaml
+
+上面的命令创建一个 Deployment 对象 和一个关联的 ReplicaSet 对象. 这个 ReplicaSet 有两个 Pod,每个 Pod 都运行着 Hello World 应用.
+
+2. 展示 Deployment 的信息: 
+$ ubectl get deployments hello-world
+$ kubectl describe deployments hello-world
+
+3. 展示你的 ReplicaSet 对象信息: 
+$ kubectl get replicasets
+$ kubectl describe replicasets
+
+4. 创建一个服务对象来暴露 Deployment: 
+$ kubectl expose deployment hello-world --type=NodePort --name=example-service
+
+5. 展示 Service 信息: 
+$ kubectl describe services example-service
+
+输出类似于: 
+Name:                     example-service
+Namespace:                default
+Labels:                   <none>
+Annotations:              <none>
+Selector:                 run=load-balancer-example
+Type:                     NodePort
+IP Family Policy:         SingleStack
+IP Families:              IPv4
+IP:                       10.107.62.84
+IPs:                      10.107.62.84
+Port:                     <unset>  8080/TCP
+TargetPort:               8080/TCP
+NodePort:                 <unset>  32581/TCP
+Endpoints:                10.244.235.148:8080,10.244.235.149:8080
+Session Affinity:         None
+External Traffic Policy:  Cluster
+Events:                   <none>
+
+注意 Service 中的 NodePort 值.例如在上面的输出中,NodePort 值是 32581.
+
+6. 列出运行 Hello World 应用的 Pod: 
+$ kubectl get pods --selector="run=load-balancer-example" --output=wide
+
+输出类似于: 
+NAME                           READY   STATUS    ...  IP           NODE
+hello-world-cdd4458f4-47lkc   1/1     Running   0          4m14s   10.244.235.148   k8s03   <none>           <none>
+hello-world-cdd4458f4-rfkhr   1/1     Running   0          4m13s   10.244.235.149   k8s03   <none>           <none>
+
+7. 获取运行 Hello World 的 pod 的其中一个节点的公共 IP 地址.如何获得此地址取决于你设置集群的方式. 例如,如果你使用的是 Minikube,则可以通过运行 kubectl cluster-info 来查看节点地址. 如果你使用的是 Google Compute Engine 实例,则可以使用 gcloud compute instances list 命令查看节点的公共地址.
+
+8. 在你选择的节点上,创建一个防火墙规则以开放节点端口上的 TCP 流量. 例如,如果你的服务的 NodePort 值为 32581,请创建一个防火墙规则以允许 32581 端口上的 TCP 流量. 不同的云提供商提供了不同方法来配置防火墙规则.
+
+这里使用 iptable 的命令创建一条策略,略过.
+
+9. 使用节点地址和 node port 来访问 Hello World 应用: 
+curl http://<public-node-ip>:<node-port>
+
+这里的 <public-node-ip> 是你节点的公共 IP 地址,<node-port> 是你服务的 NodePort 值. 对于请求成功的响应是一个 hello 消息: 
+Hello,world!
+Version: 2.0.0
+Hostname: hello-world-cdd4458f4-47lkc
+
+* 使用服务配置文件
+作为 kubectl expose 的替代方法,你可以使用服务配置文件来创建服务.
+
+即如何使用 service 文件来配置 Node Port 端口,详细如下:
+https://kubernetes.io/zh-cn/docs/concepts/services-networking/service/
+
+* 清理现场
+想要删除服务,输入以下命令: 
+$ kubectl delete services example-service
+
+想要删除运行 Hello World 应用的 Deployment、ReplicaSet 和 Pod,输入以下命令: 
+$ kubectl delete deployment hello-world
+
+## 使用 Service 把前端连接到后端
+本任务会描述如何创建前端(Frontend)微服务和后端(Backend)微服务.后端微服务是一个 hello 欢迎程序. 前端通过 nginx 和一个 Kubernetes 服务 暴露后端所提供的服务.
+
+教程目标
+. 使用部署对象(Deployment object)创建并运行一个 hello 后端微服务
+. 使用一个 Service 对象将请求流量发送到后端微服务的多个副本
+. 同样使用一个 Deployment 对象创建并运行一个 nginx 前端微服务
+. 配置前端微服务将请求流量发送到后端微服务
+. 使用 type=LoadBalancer 的 Service 对象将前端微服务暴露到集群外部
+
+* 使用部署对象(Deployment)创建后端 
+后端是一个简单的 hello 欢迎微服务应用.这是后端应用的 Deployment 配置文件: 
+
+backend-deployment.yaml
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+spec:
+  selector:
+    matchLabels:
+      app: hello
+      tier: backend
+      track: stable
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: hello
+        tier: backend
+        track: stable
+    spec:
+      containers:
+        - name: hello
+          image: "gcr.io/google-samples/hello-go-gke:1.0"
+          ports:
+            - name: http
+              containerPort: 80
+...
+
+创建后端 Deployment: 
+$ kubectl apply -f backend-deployment.yaml
+
+查看后端的 Deployment 信息: 
+$ kubectl describe deployment backend
+
+输出类似于: 
+Name:                   backend
+Namespace:              default
+CreationTimestamp:      Fri,08 Nov 2024 09:51:44 +0000
+Labels:                 <none>
+Annotations:            deployment.kubernetes.io/revision: 1
+Selector:               app=hello,tier=backend,track=stable
+Replicas:               3 desired | 3 updated | 3 total | 3 available | 0 unavailable
+StrategyType:           RollingUpdate
+MinReadySeconds:        0
+RollingUpdateStrategy:  25% max unavailable,25% max surge
+Pod Template:
+  Labels:  app=hello
+           tier=backend
+           track=stable
+  Containers:
+   hello:
+    Image:         gcr.io/google-samples/hello-go-gke:1.0
+    Port:          80/TCP
+    Host Port:     0/TCP
+    Environment:   <none>
+    Mounts:        <none>
+  Volumes:         <none>
+  Node-Selectors:  <none>
+  Tolerations:     <none>
+Conditions:
+  Type           Status  Reason
+  ----           ------  ------
+  Available      True    MinimumReplicasAvailable
+  Progressing    True    NewReplicaSetAvailable
+OldReplicaSets:  <none>
+NewReplicaSet:   backend-789cb4b86b (3/3 replicas created)
+Events:
+  Type    Reason             Age   From                   Message
+  ----    ------             ----  ----                   -------
+  Normal  ScalingReplicaSet  23s   deployment-controller  Scaled up replica set backend-789cb4b86b to 3
+
+* 创建 hello Service 对象
+将请求从前端发送到后端的关键是后端 Service.Service 创建一个固定 IP 和 DNS 解析名入口,使得后端微服务总是可达.Service 使用 选择算符 来寻找目标 Pod.
+
+首先,浏览 Service 的配置文件: 
+backend-service.yaml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello
+spec:
+  selector:
+    app: hello
+    tier: backend
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: http
+...
+
+配置文件中,你可以看到名为 hello 的 Service 将流量路由到包含 app: hello 和 tier: backend 标签的 Pod.
+
+创建后端 Service: 
+$ kubectl apply -f https://k8s.io/examples/service/access/backend-service.yaml
+
+此时,你已经有了一个运行着 hello 应用的三个副本的 backend Deployment,你也有了 一个 Service 用于路由网络流量.不过,这个服务在集群外部无法访问也无法解析.
+
+* 创建前端
+现在你已经有了运行中的后端应用,你可以创建一个可在集群外部访问的前端,并通过代理 前端的请求连接到后端.
+
+前端使用被赋予后端 Service 的 DNS 名称将请求发送到后端工作 Pods.这一 DNS 名称为 hello,也就是 examples/service/access/backend-service.yaml 配置 文件中 name 字段的取值.
+
+前端 Deployment 中的 Pods 运行一个 nginx 镜像,这个已经配置好的镜像会将请求转发 给后端的 hello Service.下面是 nginx 的配置文件: 
+
+frontend-nginx.conf
+----------------------------------------
+# Backend 是 nginx 的内部标识符,用于命名以下特定的 upstream
+upstream Backend {
+    # hello 是 Kubernetes 中的后端服务所使用的内部 DNS 名称
+    server hello;
+}
+server {
+listen 80;
+
+
+location / {
+    # 以下语句将流量通过代理方式转发到名为 Backend 的上游
+    proxy_pass http://Backend;
+}
+}
+
+与后端类似,前端用包含一个 Deployment 和一个 Service.后端与前端服务之间的一个 重要区别是前端 Service 的配置文件包含了 type: LoadBalancer,也就是说,Service 会使用你的云服务商的默认负载均衡设备,从而实现从集群外访问的目的.
+
+frontend-service.yaml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+spec:
+  selector:
+    app: hello
+    tier: frontend
+  ports:
+  - protocol: "TCP"
+    port: 80
+    targetPort: 80
+  type: LoadBalancer
+...
+
+frontend-deployment.yaml
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+spec:
+  selector:
+    matchLabels:
+      app: hello
+      tier: frontend
+      track: stable
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: hello
+        tier: frontend
+        track: stable
+    spec:
+      containers:
+        - name: nginx
+          image: "gcr.io/google-samples/hello-frontend:1.0"
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/usr/sbin/nginx","-s","quit"]
+...
+
+创建前端 Deployment 和 Service: 
+$ kubectl apply -f https://k8s.io/examples/service/access/frontend-deployment.yaml
+$ kubectl apply -f https://k8s.io/examples/service/access/frontend-service.yaml
+
+通过输出确认两个资源都已经被创建: 
+deployment.apps/frontend created
+service/frontend created
+
+说明: 
+这个 nginx 配置文件是被打包在 容器镜像 里的. 更好的方法是使用 ConfigMap,这样的话你可以更轻易地更改配置.
+
+* 与前端 Service 交互
+一旦你创建了 LoadBalancer 类型的 Service,你可以使用这条命令查看外部 IP: 
+$ kubectl get service frontend --watch
+
+外部 IP 字段的生成可能需要一些时间.如果是这种情况,外部 IP 会显示为 <pending>.
+NAME       TYPE           CLUSTER-IP      EXTERNAL-IP   PORT(S)  AGE
+frontend   LoadBalancer   10.51.252.116   <pending>     80/TCP   10s
+
+当外部 IP 地址被分配可用时,配置会更新,在 EXTERNAL-IP 头部下显示新的 IP: 
+NAME       TYPE           CLUSTER-IP      EXTERNAL-IP        PORT(S)  AGE
+frontend   LoadBalancer   10.51.252.116   XXX.XXX.XXX.XXX    80/TCP   1m
+
+这一新的 IP 地址就可以用来从集群外与 frontend 服务交互了.
+
+* 通过前端发送流量
+前端和后端已经完成连接了.你可以使用 curl 命令通过你的前端 Service 的外部 IP 访问服务端点.
+$ curl http://${EXTERNAL_IP} # 将 EXTERNAL_IP 替换为你之前看到的外部 IP
+
+输出显示后端生成的消息: 
+{"message":"Hello"}
+
+* 清理现场
+要删除服务,输入下面的命令: 
+$ kubectl delete services frontend backend
+
+要删除在前端和后端应用中运行的 Deployment、ReplicaSet 和 Pod,输入下面的命令: 
+$ kubectl delete deployment frontend backend
+
+## 创建外部负载均衡器
+本章节展示如何创建一个外部负载均衡器.
+
+创建服务时,你可以选择自动创建云网络负载均衡器. 负载均衡器提供外部可访问的 IP 地址,可将流量发送到集群节点上的正确端口上 (假设集群在支持的环境中运行,并配置了正确的云负载均衡器驱动包).
+
+你还可以使用 Ingress 代替 Service.
+
+你的集群必须在已经支持配置外部负载均衡器的云或其他环境中运行.
+
+* 创建服务
+** 基于清单文件创建服务
+要创建外部负载均衡器,请将以下内容添加到你的 Service 清单文件: 
+  type: LoadBalancer
+
+你的清单文件可能会如下所示: 
+------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: example-service
+spec:
+  selector:
+    app: example
+  ports:
+    - port: 8765
+      targetPort: 9376
+  type: LoadBalancer
+--------------------------------
+
+** 使用 kubectl 创建 Service
+你也可以使用 kubectl expose 命令及其 --type=LoadBalancer 参数创建服务: 
+$ kubectl expose deployment example --port=8765 --target-port=9376 \
+        --name=example-service --type=LoadBalancer
+
+此命令通过使用与引用资源(在上面的示例的情况下,名为 example 的 Deployment) 相同的选择器来创建一个新的服务.
+
+* 找到你的 IP 地址
+你可以通过 kubectl 获取服务信息,找到为你的服务创建的 IP 地址: 
+$ kubectl describe services example-service
+
+这将获得类似如下输出: 
+Name:                     example-service
+Namespace:                default
+Labels:                   app=example
+Annotations:              <none>
+Selector:                 app=example
+Type:                     LoadBalancer
+IP Families:              <none>
+IP:                       10.3.22.96
+IPs:                      10.3.22.96
+LoadBalancer Ingress:     192.0.2.89
+Port:                     <unset>  8765/TCP
+TargetPort:               9376/TCP
+NodePort:                 <unset>  30593/TCP
+Endpoints:                172.17.0.3:9376
+Session Affinity:         None
+External Traffic Policy:  Cluster
+Events:                   <none>
+
+负载均衡器的 IP 地址列在 LoadBalancer Ingress 旁边.
+
+说明: 
+如果你在 Minikube 上运行服务,你可以通过以下命令找到分配的 IP 地址和端口: 
+$ minikube service example-service --url
+
+* 保留客户端源 IP - 类似的从客户端发送的数据包的源 IP 地址将被保留,某些情况将导致同一个源 IP 会将所有的请求发送到同一个 node
+默认情况下,目标容器中看到的源 IP 将不是客户端的原始源 IP. 要启用保留客户端 IP,可以在服务的 .spec 中配置以下字段: 
+  . .spec.externalTrafficPolicy - 表示此 Service 是否希望将外部流量路由到节点本地或集群范围的端点. 有两个可用选项: Cluster(默认)和 Local. Cluster 隐藏了客户端源 IP,可能导致第二跳到另一个节点,但具有良好的整体负载分布. Local 保留客户端源 IP 并避免 LoadBalancer 和 NodePort 类型服务的第二跳,但存在潜在的不均衡流量传播风险.
+  . .spec.healthCheckNodePort - 指定服务的 healthcheck nodePort(数字端口号). 如果你未指定 healthCheckNodePort,服务控制器从集群的 NodePort 范围内分配一个端口. 你可以通过设置 API 服务器的命令行选项 --service-node-port-range 来配置上述范围. 在服务 type 设置为 LoadBalancer 并且 externalTrafficPolicy 设置为 Local 时,Service 将会使用用户指定的 healthCheckNodePort 值(如果你指定了它).
+
+可以通过在服务的清单文件中将 externalTrafficPolicy 设置为 Local 来激活此功能.比如: 
+------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: example-service
+spec:
+  selector:
+    app: example
+  ports:
+    - port: 8765
+      targetPort: 9376
+  externalTrafficPolicy: Local
+  type: LoadBalancer
+----------------------------
+
+** 保留源 IP 时的注意事项和限制
+一些云服务供应商的负载均衡服务不允许你为每个目标配置不同的权重.
+
+由于每个目标在向节点发送流量方面的权重相同,因此外部流量不会在不同 Pod 之间平均负载. 外部负载均衡器不知道每个节点上用作目标的 Pod 数量.
+
+在 NumServicePods << NumNodes 或 NumServicePods >> NumNodes 时,即使没有权重,也会看到接近相等的分布.
+
+内部 Pod 到 Pod 的流量应该与 ClusterIP 服务类似,所有 Pod 的概率相同.
+
+* 回收负载均衡器 - 为了防止当在 service 被删除以后,云服务供应商的负载均衡仍然在工作导致,访问应用失败的情况
+特性状态:  Kubernetes v1.17 [stable]
+在通常情况下,应在删除 LoadBalancer 类型 Service 后立即清除云服务供应商中的相关负载均衡器资源. 但是,众所周知,在删除关联的服务后,云资源被孤立的情况很多. 引入了针对服务负载均衡器的终结器保护,以防止这种情况发生. 通过使用终结器,在删除相关的负载均衡器资源之前,也不会删除服务资源.
+
+具体来说,如果服务具有 type LoadBalancer,则服务控制器将附加一个名为 service.kubernetes.io/load-balancer-cleanup 的终结器. 仅在清除负载均衡器资源后才能删除终结器. 即使在诸如服务控制器崩溃之类的极端情况下,这也可以防止负载均衡器资源悬空.
+
+* 外部负载均衡器供应商
+请务必注意,此功能的数据路径由 Kubernetes 集群外部的负载均衡器提供.
+
+当服务 type 设置为 LoadBalancer 时,Kubernetes 向集群中的 Pod 提供的功能等同于 type 设置为 ClusterIP(通常内部 service 之间通讯的方式),并通过使用托管了相关 Kubernetes Pod 的节点作为条目对负载均衡器 (从外部到 Kubernetes)进行编程来扩展它. Kubernetes 控制平面自动创建外部负载均衡器、健康检查(如果需要)和包过滤规则(如果需要). 一旦云服务供应商为负载均衡器分配了 IP 地址,控制平面就会查找该外部 IP 地址并将其填充到 Service 对象中.
+
+
+## 列出集群中所有运行容器的镜像
+本章节展示如何使用 kubectl 来列出集群中所有运行 Pod 的容器的镜像
+
+* 列出所有命名空间下的所有容器镜像 - 重要,提供如何在 json 文件中提取字段的方式(https://kubernetes.io/zh-cn/docs/reference/kubectl/jsonpath/)
+. 使用 kubectl get pods --all-namespaces 获取所有命名空间下的所有 Pod
+. 使用 -o jsonpath={.items[*].spec['initContainers','containers'][*].image} 来格式化输出,以仅包含容器镜像名称. 这将以递归方式从返回的 json 中解析出 image 字段.
+参阅 jsonpath 说明 获取更多关于如何使用 jsonpath 的信息.(https://kubernetes.io/zh-cn/docs/reference/kubectl/jsonpath/)
+. 使用标准化工具来格式化输出: tr,sort,uniq
+  . 使用 tr 以用换行符替换空格
+  . 使用 sort 来对结果进行排序
+  . 使用 uniq 来聚合镜像计数
+
+kubectl get pods --all-namespaces -o jsonpath="{.items[*].spec.containers[*].image}" |\
+tr -s '[[:space:]]' '\n' |\
+sort |\
+uniq -c
+
+jsonpath 解释如下: 
+  . .items[*]: 对于每个返回的值
+  . .spec: 获取 spec
+  . ['initContainers','containers'][*]: 对于每个容器
+  . .image: 获取镜像
+
+说明: 
+按名字获取单个 Pod 时,例如 kubectl get pod nginx,路径的 .items[*] 部分应该省略,因为返回的是一个 Pod 而不是一个项目列表.
+
+^^^^^^^^^^^^^^^^^^^^
+# 对比使用 json 及 yaml 输出的信息 - 重要,对使用 jsonpath 及 yaml 形式显示数据的汇总
+从观察的角度来说 yaml 更容易查看
+
+在 json 中数据都包含在 { } 之间,每一条数据都表示 "key": "value",
+在 yaml 中通过缩进和对齐来表示每一条数据,每一条数据都表示为 key: value
+不论 json 或者 yaml 每条数据都可以嵌套,json嵌套时则需要加上 {},比如 metadata: 这个字段,嵌套了其他内容,包括了 
+annotations: creationTimestamp: generateName: labels: ... uid: 
+
+但是数组是一种特殊的表述方式,如下
+在 json 中表示数组的时候使用 [a,b,c] 形式
+在 yaml 中表示数组开始于 - ,每个数组元素都必须是 - 开头
+
+有 1 种特殊情况,如下的 ownerReferences 其实是只有 1 个元素的数组,注意符号 [{ }],实际是在 [] 中嵌套了一条数据,这条数据由多个 key/value 组成,此时 数组名[0] 和 数组名[*] 都表示整个数组的内容,取元素下的某个 key 时候用具体的  key 名称,举例如下:
+
+$ kubectl get pod frontend-7cf6c85794-dllpj -o jsonpath='{.metadata.ownerReferences[0]}'
+{"apiVersion":"apps/v1","blockOwnerDeletion":true,"controller":true,"kind":"ReplicaSet","name":"frontend-7cf6c85794","uid":"951882a0-359f-4f38-a8a0-3e8e668173b1"}
+
+$ kubectl get pod frontend-7cf6c85794-dllpj -o jsonpath='{.metadata.ownerReferences[*]}'
+{"apiVersion":"apps/v1","blockOwnerDeletion":true,"controller":true,"kind":"ReplicaSet","name":"frontend-7cf6c85794","uid":"951882a0-359f-4f38-a8a0-3e8e668173b1"}
+
+$ kubectl get pod frontend-7cf6c85794-dllpj -o jsonpath='{.metadata.ownerReferences[0].name}'
+frontend-7cf6c85794
+
+$ kubectl get pod frontend-7cf6c85794-dllpj -o jsonpath='{.metadata.ownerReferences[*].name}'
+frontend-7cf6c85794
+
+比如如下的 ownerReferences: 是一个数组,注意 [] 中的 {},并且 {} 后没有逗号,说明此数组只有 1 条数据,此条数据是由多个 key/value 组成,对比后面的 command: 数组,有 3 条数据,第 1,2 条数据都是以逗号结尾.
+json 显示
+------------------------------------
+"ownerReferences": [
+            {
+                "apiVersion": "apps/v1",
+                "blockOwnerDeletion": true,
+                "controller": true,
+                "kind": "ReplicaSet",
+                "name": "frontend-7cf6c85794",
+                "uid": "951882a0-359f-4f38-a8a0-3e8e668173b1"
+            }
+        ],
+-------------------------------------
+
+yaml 显示
+-------------------------------------
+ownerReferences:
+  - apiVersion: apps/v1
+    blockOwnerDeletion: true
+    controller: true
+    kind: ReplicaSet
+    name: frontend-7cf6c85794
+    uid: 951882a0-359f-4f38-a8a0-3e8e668173b1
+-------------------------------------
+
+标准数组的取值方式,看如下的 command: 这个数组,注意如下的命令,command[*] 与 command[0] 及 command[2] 的内容显示
+$kubectl get pod frontend-7cf6c85794-dllpj -o jsonpath='{.spec.containers[*].lifecycle.preStop.exec.command[0]}'
+/usr/sbin/nginx
+
+$kubectl get pod frontend-7cf6c85794-dllpj -o jsonpath='{.spec.containers[*].lifecycle.preStop.exec.command[*]}'
+/usr/sbin/nginx -s quit
+
+$kubectl get pod frontend-7cf6c85794-dllpj -o jsonpath='{.spec.containers[*].lifecycle.preStop.exec.command[2]}'
+quit
+
+json 输出,注意这里 [] 中没有 {}
+----------------------------------------------------------
+                "image": "gcr.io/google-samples/hello-frontend:1.0",
+                "imagePullPolicy": "IfNotPresent",
+                "lifecycle": {
+                    "preStop": {
+                        "exec": {
+                            "command": [
+                                "/usr/sbin/nginx",
+                                "-s",
+                                "quit"
+                            ]
+                        }
+                    }
+                },
+----------------------------------------------------------
+
+yaml 输出,注意这里 command 数组中的 - ,每一个元素前都有 - 
+----------------------------------------------------------
+    image: gcr.io/google-samples/hello-frontend:1.0
+    imagePullPolicy: IfNotPresent
+    lifecycle:
+      preStop:
+        exec:
+          command:
+          - /usr/sbin/nginx
+          - -s
+          - quit
+----------------------------------------------------------
+
+重要: 需要特别的注意单个元素的数组与标准数组的取值方式,在  k8s 的很多地方都存在单元素数组,非常容易混淆,要十分注意 [{}] 和 [] 的区别
+
+完整的 pod json 和 yaml 输出如下
+$ kubectl get pod frontend-7cf6c85794-dllpj -o json
+json 输出
+---------------------------------------------------------------------
+{
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+        "annotations": {
+            "cni.projectcalico.org/containerID": "7da48934f9a7798e35f0ce711bc84bf407c5163f04e859a406c24e9477f16ab3",
+            "cni.projectcalico.org/podIP": "10.244.236.146/32",
+            "cni.projectcalico.org/podIPs": "10.244.236.146/32"
+        },
+        "creationTimestamp": "2024-11-18T08:53:09Z",
+        "generateName": "frontend-7cf6c85794-",
+        "labels": {
+            "app": "hello",
+            "pod-template-hash": "7cf6c85794",
+            "tier": "frontend",
+            "track": "stable"
+        },
+        "name": "frontend-7cf6c85794-dllpj",
+        "namespace": "default",
+        "ownerReferences": [
+            {
+                "apiVersion": "apps/v1",
+                "blockOwnerDeletion": true,
+                "controller": true,
+                "kind": "ReplicaSet",
+                "name": "frontend-7cf6c85794",
+                "uid": "951882a0-359f-4f38-a8a0-3e8e668173b1"
+            }
+        ],
+        "resourceVersion": "32843",
+        "uid": "cc65b4c2-735f-4948-8daa-f57bdce5961a"
+    },
+    "spec": {
+        "containers": [
+            {
+                "image": "gcr.io/google-samples/hello-frontend:1.0",
+                "imagePullPolicy": "IfNotPresent",
+                "lifecycle": {
+                    "preStop": {
+                        "exec": {
+                            "command": [
+                                "/usr/sbin/nginx",
+                                "-s",
+                                "quit"
+                            ]
+                        }
+                    }
+                },
+                "name": "nginx",
+                "resources": {},
+                "terminationMessagePath": "/dev/termination-log",
+                "terminationMessagePolicy": "File",
+                "volumeMounts": [
+                    {
+                        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                        "name": "kube-api-access-9jvr7",
+                        "readOnly": true
+                    }
+                ]
+            }
+        ],
+        "dnsPolicy": "ClusterFirst",
+        "enableServiceLinks": true,
+        "nodeName": "k8s02",
+        "preemptionPolicy": "PreemptLowerPriority",
+        "priority": 0,
+        "restartPolicy": "Always",
+        "schedulerName": "default-scheduler",
+        "securityContext": {},
+        "serviceAccount": "default",
+        "serviceAccountName": "default",
+        "terminationGracePeriodSeconds": 30,
+        "tolerations": [
+            {
+                "effect": "NoExecute",
+                "key": "node.kubernetes.io/not-ready",
+                "operator": "Exists",
+                "tolerationSeconds": 300
+            },
+            {
+                "effect": "NoExecute",
+                "key": "node.kubernetes.io/unreachable",
+                "operator": "Exists",
+                "tolerationSeconds": 300
+            }
+        ],
+        "volumes": [
+            {
+                "name": "kube-api-access-9jvr7",
+                "projected": {
+                    "defaultMode": 420,
+                    "sources": [
+                        {
+                            "serviceAccountToken": {
+                                "expirationSeconds": 3607,
+                                "path": "token"
+                            }
+                        },
+                        {
+                            "configMap": {
+                                "items": [
+                                    {
+                                        "key": "ca.crt",
+                                        "path": "ca.crt"
+                                    }
+                                ],
+                                "name": "kube-root-ca.crt"
+                            }
+                        },
+                        {
+                            "downwardAPI": {
+                                "items": [
+                                    {
+                                        "fieldRef": {
+                                            "apiVersion": "v1",
+                                            "fieldPath": "metadata.namespace"
+                                        },
+                                        "path": "namespace"
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        ]
+    },
+...
+省略了 status: 内容
+---------------------------------------------------------------------
+
+$ kubectl get pod frontend-7cf6c85794-dllpj -o yaml
+yaml 输出
+----------------------------------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  annotations:
+    cni.projectcalico.org/containerID: 7da48934f9a7798e35f0ce711bc84bf407c5163f04e859a406c24e9477f16ab3
+    cni.projectcalico.org/podIP: 10.244.236.146/32
+    cni.projectcalico.org/podIPs: 10.244.236.146/32
+  creationTimestamp: "2024-11-18T08:53:09Z"
+  generateName: frontend-7cf6c85794-
+  labels:
+    app: hello
+    pod-template-hash: 7cf6c85794
+    tier: frontend
+    track: stable
+  name: frontend-7cf6c85794-dllpj
+  namespace: default
+  ownerReferences:
+  - apiVersion: apps/v1
+    blockOwnerDeletion: true
+    controller: true
+    kind: ReplicaSet
+    name: frontend-7cf6c85794
+    uid: 951882a0-359f-4f38-a8a0-3e8e668173b1
+  resourceVersion: "32843"
+  uid: cc65b4c2-735f-4948-8daa-f57bdce5961a
+spec:
+  containers:
+  - image: gcr.io/google-samples/hello-frontend:1.0
+    imagePullPolicy: IfNotPresent
+    lifecycle:
+      preStop:
+        exec:
+          command:
+          - /usr/sbin/nginx
+          - -s
+          - quit
+    name: nginx
+    resources: {}
+    terminationMessagePath: /dev/termination-log
+    terminationMessagePolicy: File
+    volumeMounts:
+    - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+      name: kube-api-access-9jvr7
+      readOnly: true
+  dnsPolicy: ClusterFirst
+  enableServiceLinks: true
+  nodeName: k8s02
+  preemptionPolicy: PreemptLowerPriority
+  priority: 0
+  restartPolicy: Always
+  schedulerName: default-scheduler
+  securityContext: {}
+  serviceAccount: default
+  serviceAccountName: default
+  terminationGracePeriodSeconds: 30
+  tolerations:
+  - effect: NoExecute
+    key: node.kubernetes.io/not-ready
+    operator: Exists
+    tolerationSeconds: 300
+  - effect: NoExecute
+    key: node.kubernetes.io/unreachable
+    operator: Exists
+    tolerationSeconds: 300
+  volumes:
+  - name: kube-api-access-9jvr7
+    projected:
+      defaultMode: 420
+      sources:
+      - serviceAccountToken:
+          expirationSeconds: 3607
+          path: token
+      - configMap:
+          items:
+          - key: ca.crt
+            path: ca.crt
+          name: kube-root-ca.crt
+      - downwardAPI:
+          items:
+          - fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+            path: namespace
+...
+省略了 status: 内容
+----------------------------------------------------
+
+vvvvvvvvvvvvvvvvvvvv
+
+* 按 Pod 列出容器镜像
+可以使用 range 操作进一步控制格式化,以单独操作每个元素.
+$ kubectl get pods --all-namespaces -o jsonpath='{range .items[*]}{"\n"}{.metadata.name}{":\t"}{range .spec.containers[*]}{.image}{","}{end}{end}' |\
+sort
+
+* 列出以标签过滤后的 Pod 的所有容器镜像
+要获取匹配特定标签的 Pod,请使用 -l 参数.以下匹配仅与标签 app=nginx 相符的 Pod.
+$ kubectl get pods --all-namespaces -o jsonpath="{.items[*].spec.containers[*].image}" -l app=nginx
+
+* 列出以命名空间过滤后的 Pod 的所有容器镜像
+要获取匹配特定命名空间的 Pod,请使用 namespace 参数.以下仅匹配 kube-system 命名空间下的 Pod.
+$ kubectl get pods --namespace kube-system -o jsonpath="{.items[*].spec.containers[*].image}"
+
+* 使用 go-template 代替 jsonpath 来获取容器镜像
+作为 jsonpath 的替代,Kubectl 支持使用 go-templates 来格式化输出: 
+$ kubectl get pods --all-namespaces -o go-template --template="{{range .items}}{{range .spec.containers}}{{.image}} {{end}}{{end}}"
+
+
+## 在 Minikube 环境中使用 NGINX Ingress 控制器配置 Ingress - 重要,插入了部署 nginx ingress 的详细步骤,其中当修改了 ingress 应用的 yaml 文件,在重新 apply 的时候,并不会影响原来运行的 ingress controller,就是说,ingress 的应用文件相当与 nginx 配置文件中的加入的转发策略,或者 host 的配置段等等,对于 nginx 本身的服务及关于 SSL等等的配置项不会产生影响,此特性非常有用,强烈建议使用.
+在 Minikube 上启用 nginx ingress controller 的步骤省略
+
+这里没有使用 Minikube 的环境,因此,自行安装的  nginx ingress 控制器
+^^^^^^^^^^^^^^^^^^^^
+# nginx ingress 在 kubernetes 上的安装配置
+参考链接:
+https://docs.nginx.com/nginx-ingress-controller/installation/installing-nic/installation-with-manifests/#configure-rbac
+
+软件版本: nginx-ingress:3.7.2
+
+* 预备工作
+** 获取 NGINX 控制器镜像
+选择以下方法之一获取 NGINX Ingress Controller 镜像: 
+. NGINX Ingress Controllernginx/nginx-ingress : 从DockerHub下载镜像.  - 通用做法,采用
+. NGINX Plus Ingress Controller: 有两个选择,都需要 NGINX Ingress Controller 订阅. - 需要付费
+. 构建自己的 image: 要构建自己的图像,请按照构建 NGINX Ingress Controller主题进行操作.
+
+从 DockerHub 下载的版本为 nginx-ingress:3.7.2
+
+** 应用程序保护 DoS  - 后续有具体的 yaml 文件
+要使用 App Protect DoS,请使用提供的清单在与 NGINX Ingress Controller 相同的命名空间中安装 App Protect DoS 仲裁器.如果在同一个命名空间中安装多个 NGINX Ingress Controller,它们将需要共享同一个仲裁器,因为一个命名空间中只能有一个仲裁器.
+
+* 设置基于角色的访问控制 (RBAC)
+需要管理员访问权限
+要完成这些步骤,需要拥有集群的管理员访问权限.
+1. 创建命名空间和服务帐号: 
+# kubectl apply -f https://github.com/nginxinc/kubernetes-ingress/blob/main/deployments/common/ns-and-sa.yaml
+
+2. 为服务账户创建集群角色和绑定: 
+# kubectl apply -f https://github.com/nginxinc/kubernetes-ingress/blob/main/deployments/rbac/rbac.yaml
+
+如果计划使用 NGINX App Protect 或 NGINX App Protect DoS,则需要额外的角色和绑定.
+1.(仅限 NGINX App Protect)创建App Protect角色和绑定: 
+# kubectl apply -f https://github.com/nginxinc/kubernetes-ingress/blob/main/deployments/rbac/ap-rbac.yaml
+
+2.(仅限 NGINX App Protect DoS)创建App Protect DoS角色和绑定: 
+kubectl apply -f https://github.com/nginxinc/kubernetes-ingress/blob/main/deployments/rbac/apdos-rbac.yaml
+
+* 创建公共资源
+创建大多数 NGINX Ingress Controller 安装所需的资源: 
+1. (可选)为默认 NGINX 服务器的 TLS 证书和密钥创建密钥.仅当使用默认服务器 TLS 密钥命令行参数时才完成此步骤.如果不是,请跳过此步骤.
+默认情况下,当未设置入口规则时,服务器会为所有请求返回 404 Not Found 页面.虽然我们提供了自签名证书和密钥用于测试,但我们建议使用自己的证书.
+# kubectl apply -f https://github.com/nginxinc/kubernetes-ingress/blob/main/examples/shared-examples/default-server-secret/default-server-secret.yaml
+
+2. 创建 ConfigMap 来定制你的 NGINX 设置: 
+# kubectl apply -f https://github.com/nginxinc/kubernetes-ingress/blob/main/deployments/common/nginx-config.yaml
+
+3. 创建IngressClass资源.如果没有资源,NGINX Ingress Controller 将无法启动IngressClass.
+# kubectl apply -f https://github.com/nginxinc/kubernetes-ingress/blob/main/deployments/common/ingress-class.yaml
+
+如果要将此 NGINX Ingress Controller 实例设为集群的默认实例,请取消注释 ingressclass.kubernetes.io/is-default-class.此操作将自动分配 IngressClass 给未指定 的新入口 ingressClassName.
+
+* 创建核心自定义资源
+为了确保的 NGINX Ingress Controller pod 达到该Ready状态,需要为各种组件创建自定义资源定义(CRD).
+或者,可以通过将 -enable-custom-resources 命令行参数设置为 false 来禁用此要求.
+
+有两种方法可以安装自定义资源定义: 
+1. 使用 URL 来应用单个 CRD yaml 文件,这是我们推荐的.
+2. 应用 CRD yaml 文件的本地副本,这需要克隆存储库.
+
+核心自定义 CRD 如下: 
+. VirtualServer 和 VirtualServerRoute
+. 传输服务器
+. 策略
+. 全局配置
+
+从单个 YAML 安装 CRD
+kubectl apply -f https://raw.githubusercontent.com/nginxinc/kubernetes-ingress/v3.7.2/deploy/crds.yaml
+
+** 创建可选的自定义资源
+如果想使用 NGINX App Protect WAF 或 NGINX App Protect DoS,则需要可选的 CRD.
+
+NGINX 应用保护 WAF: 
+. APPolicy
+. APLogConf
+. APUserSig
+
+NGINX 应用保护 DoS: 
+. APDosPolicy
+. APDosLogConf
+. DosProtectedResource
+
+从单个 YAML 安装 CRD
+NGINX 应用程序保护 WAF
+注意: 
+如果使用带有策略包的 App Protect WAF 模块,则可以跳过此步骤.
+# kubectl apply -f https://raw.githubusercontent.com/nginxinc/kubernetes-ingress/v3.7.2/deploy/crds-nap-waf.yaml
+
+NGINX 应用保护 DoS: 
+# kubectl apply -f https://raw.githubusercontent.com/nginxinc/kubernetes-ingress/v3.7.2/deploy/crds-nap-dos.yaml
+
+* 部署 NGINX Ingress 控制器
+部署 NGINX Ingress Controller 有两种方式: 
+. deployment 选择此方法可以灵活地动态更改 NGINX Ingress Controller 副本的数量.
+. DaemonSet  如果希望 NGINX Ingress Controller 在所有节点或节点子集上运行,请选择此方法.
+在开始之前,请更新相关清单文件中 NGINX Ingress Controller 容器的命令行参数以满足的特定要求.
+
+** 使用 deployment  - 当前使用的方式,默认的副本数为 1 
+当将 NGINX Ingress Controller 作为 Deployment 部署时,Kubernetes 会自动设置单个 NGINX Ingress Controller pod.
+. 对于 NGINX,运行: 
+# kubectl apply -f https://github.com/nginxinc/kubernetes-ingress/blob/main/deployments/deployment/nginx-ingress.yaml
+
+注意:由于测试的目的,配置文件的默认内容没有调整,其中的关于 TLS,DDOS 的等等参数没有启用,实际的生产环境需要更细致的调整.
+
+.对于 NGINX Plus,运行:  - 省略
+
+** 使用 DaemonSet  - 未使用
+当将 NGINX Ingress Controller 部署为 DaemonSet 时,Kubernetes 会在集群中的每个节点上创建一个 Ingress Controller pod.
+. 对于 NGINX,运行: 
+# kubectl apply -f deployments/daemon-set/nginx-ingress.yaml
+
+. 对于 NGINX Plus,运行:  - 省略
+
+* 确认 NGINX Ingress Controller 正在运行
+要确认 NGINX Ingress Controller pod 是否可以运行,请运行: 
+# kubectl get pods --namespace=nginx-ingress
+
+* 如何访问 NGINX Ingress Controller
+** 使用 deployment
+对于 deployment,有两种方式可以访问 NGINX Ingress Controller pod.
+
+选项 1: 创建 NodePort 服务
+1. 要创建NodePort类型的服务,请运行: 
+# kubectl apply -f https://github.com/nginxinc/kubernetes-ingress/blob/main/deployments/service/nodeport.yaml
+
+Kubernetes 会自动在集群中的每个节点上分配两个端口.可以将任意节点的 IP 地址与这些端口组合起来,以访问 NGINX Ingress Controller.
+
+选项 2: 创建 LoadBalancer 服务 - 省略,需要有外部负载均衡,因此没有使用
+
+** 使用 DaemonSet
+使用 NGINX Ingress Controller 正在运行的集群中任意节点的 IP 地址连接到端口 80 和 443.
+
+* 卸载 NGINX Ingress Controller
+将上述的资源,deployment,daemonset 等等删除即可.
+
+vvvvvvvvvvvvvvvvvvv
+
+* 部署一个 Hello World 应用
+1. 使用下面的命令创建一个 Deployment: 
+$ kubectl create deployment web --image=us-docker.pkg.dev/google-samples/containers/gke/hello-app:2.0
+
+输出: 
+deployment.apps/web created
+
+验证 Deployment 是否处于 Ready 状态: 
+$ kubectl get deployment web 
+
+输出应类似于: 
+NAME   READY   UP-TO-DATE   AVAILABLE   AGE
+web    1/1     1            1           53s
+
+2. 将 Deployment 暴露出来: 
+$ kubectl expose deployment web --type=NodePort --port=8080
+
+输出类似于: 
+service/web exposed
+
+3. 验证 Service 已经创建,并且可以从节点端口访问: 
+$ kubectl get service web
+
+输出类似于: 
+NAME      TYPE       CLUSTER-IP       EXTERNAL-IP   PORT(S)          AGE
+web       NodePort   10.104.133.249   <none>        8080:31637/TCP   12m
+
+4. 使用节点端口信息访问服务,使用 minikube service 命令.请按照适合你平台的说明进行操作: 
+$ minikube service web --url  # 这里获取的是 POD 的地址
+
+输出类似于: 
+http://172.17.0.15:31637
+
+调用上一步输出中获取的 URL: 
+curl http://172.17.0.15:31637
+
+输出类似于: 
+Hello,world!
+Version: 1.0.0
+Hostname: web-55b8c6998d-8k564
+
+你现在应该可以通过 Minikube 的 IP 地址和节点端口来访问示例应用了.下一步是让自己能够通过 Ingress 资源来访问应用.
+
+* 创建一个 Ingress
+1. 下面是一个定义 Ingress 的配置文件,负责通过 hello-world.example 将请求转发到你的服务.
+
+根据下面的 YAML 创建文件 example-ingress.yaml: 
+
+example-ingress.yaml
+-----------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: example-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: hello-world.example
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  number: 8080
+-----------------------------------------
+
+2. 通过运行下面的命令创建 Ingress 对象: 
+$ kubectl apply -f https://k8s.io/examples/service/networking/example-ingress.yaml
+
+输出类似于: 
+ingress.networking.k8s.io/example-ingress created
+
+3. 验证 IP 地址已被设置: 
+kubectl get ingress
+
+说明: 
+此操作可能需要几分钟时间.-  ?这里的 ADDRESS 没有出现
+
+接下来你将会在 ADDRESS 列中看到 IPv4 地址,例如: 
+NAME              CLASS   HOSTS                 ADDRESS        PORTS   AGE
+example-ingress   nginx   hello-world.example   172.17.0.15    80      38s
+
+4. 验证 Ingress 控制器能够转发请求流量,按照适用于所属平台的说明进行操作: 
+. 确定 nginx ingress controller 的地址
+$ kubectl get svc -n nginx-ingress
+NAME            TYPE       CLUSTER-IP       EXTERNAL-IP   PORT(S)                      AGE
+nginx-ingress   NodePort   10.109.243.204   <none>        80:31777/TCP,443:30296/TCP   81m
+或者
+$ kubectl get pod -n nginx-ingress -o wide
+NAME                           READY   STATUS    RESTARTS   AGE    IP               NODE    NOMINATED NODE   READINESS GATES
+nginx-ingress-96b459f6-69ksq   1/1     Running   0          127m   10.244.236.131   k8s02   <none>           <none>
+
+通过 10.109.243.204 和 10.244.236.131(nginx ingress controller 只有 1 个 pod)都可以访问到 nginx ingress controller 的服务,如果有多个 pod,通过 10.244.236.131 的方式不是建议的方式
+
+. 在本地的/etc/hosts 文件中添加
+
+#10.244.236.131 hello-world.example   # 不建议
+10.109.243.204 hello-world.example    # 建议的方式
+
+访问
+$ curl http://hello-world.example
+
+你应该看到类似输出: 
+Hello,world!
+Version: 1.0.0
+Hostname: web-55b8c6998d-8k564
+
+你也可以从浏览器访问 hello-world.info.
+
+* 创建第二个 Deployment 
+1. 使用下面的命令创建第二个 Deployment: 
+$ kubectl create deployment web2 --image=us-docker.pkg.dev/google-samples/containers/gke/hello-app:2.0
+
+输出类似于: 
+deployment.apps/web2 created
+
+验证 Deployment 是否处于 Ready 状态: 
+$ kubectl get deployment web2 
+
+输出应类似于: 
+NAME   READY   UP-TO-DATE   AVAILABLE   AGE
+web2   1/1     1            1           16s
+
+2. 将第二个 Deployment 暴露出来: 
+$ kubectl expose deployment web2 --port=8080 --type=NodePort
+
+输出类似于: 
+service/web2 exposed
+
+* 编辑现有的 Ingress
+1. 编辑现有的 example-ingress.yaml,在文件最后添加以下行: 
+-----------------------------
+- path: /v2
+  pathType: Prefix
+  backend:
+    service:
+      name: web2
+      port:
+        number: 8080
+--------------------------
+
+2. 应用变更: 
+$ kubectl apply -f example-ingress.yaml
+
+输出类似于: 
+ingress.networking/example-ingress configured
+
+* 测试你的 Ingress
+1. 访问 Hello World 应用的第一个版本: 
+$ curl http://hello-world.example/
+
+输出类似于: 
+Hello,world!
+Version: 1.0.0
+Hostname: web-55b8c6998d-8k564
+
+2. 访问 Hello World 应用的第二个版本: 
+$ curl http://hello-world.example/v2
+
+输出类似于: 
+Hello,world!
+Version: 2.0.0
+Hostname: web2-75cd47646f-t8cjk
+
+说明: 
+如果你执行了更新 /etc/hosts 的可选步骤,你也可以从你的浏览器中访问 hello-world.example 和 hello-world.example/v2.
+
+## 同 Pod 内的容器使用共享卷通信 - 用于数据的共享
+本章节旨在说明如何让一个 Pod 内的两个容器使用一个卷(Volume)进行通信.
+
+* 创建一个包含两个容器的 Pod
+在这个练习中,你会创建一个包含两个容器的 Pod.两个容器共享一个卷用于他们之间的通信.Pod 的配置文件如下: 
+
+two-container-pod.yaml
+-----------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: two-containers
+spec:
+
+  restartPolicy: Never
+
+  volumes:
+  - name: shared-data
+    emptyDir: {}
+
+  containers:
+
+  - name: nginx-container
+    image: nginx
+    volumeMounts:
+    - name: shared-data
+      mountPath: /usr/share/nginx/html
+
+  - name: debian-container
+    image: debian
+    volumeMounts:
+    - name: shared-data
+      mountPath: /pod-data
+    command: ["/bin/sh"]
+    args: ["-c","echo Hello from the debian container > /pod-data/index.html"]
+-------------------------------------------------------
+在配置文件中,你可以看到 Pod 有一个共享卷,名为 shared-data.
+
+配置文件中的第一个容器运行了一个 nginx 服务器.共享卷的挂载路径是 /usr/share/nginx/html.第二个容器是基于 debian 镜像的,有一个 /pod-data 的挂载路径.第二个容器运行了下面的命令然后终止.
+
+echo Hello from the debian container > /pod-data/index.html
+
+注意,第二个容器在 nginx 服务器的根目录下写了 index.html 文件.
+
+创建一个包含两个容器的 Pod: 
+$ kubectl apply -f two-container-pod.yaml
+
+查看 Pod 和容器的信息: 
+$ kubectl get pod two-containers --output=yaml
+
+这是输出的一部分: 
+apiVersion: v1
+kind: Pod
+metadata:
+  ...
+  name: two-containers
+  namespace: default
+  ...
+spec:
+  ...
+  containerStatuses:
+
+  - containerID: docker://c1d8abd1 ...
+    image: debian
+    ...
+    lastState:
+      terminated:
+        ...
+    name: debian-container
+    ...
+
+  - containerID: docker://96c1ff2c5bb ...
+    image: nginx
+    ...
+    name: nginx-container
+    ...
+    state:
+      running:
+    ...
+
+你可以看到 debian 容器已经被终止了,而 nginx 服务器依然在运行.
+
+进入 nginx 容器的 shell: 
+$ kubectl exec -it two-containers -c nginx-container -- /bin/bash
+
+在 shell 中,确认 nginx 还在运行.
+root@two-containers:/# apt-get update
+root@two-containers:/# apt-get install curl procps
+root@two-containers:/# ps aux
+
+输出类似于这样: 
+USER       PID  ...  STAT START   TIME COMMAND
+root         1  ...  Ss   21:12   0:00 nginx: master process nginx -g daemon off;
+
+回忆一下,debian 容器在 nginx 的根目录下创建了 index.html 文件.使用 curl 向 nginx 服务器发送一个 GET 请求: 
+root@two-containers:/# curl localhost
+
+输出表示 nginx 向外提供了 debian 容器所写就的页面: 
+Hello from the debian container
+
+注意: 上述的测试有 1 个潜在的问题,就是会出现如下的状态.
+$ kubectl get pods
+NAME                    READY   STATUS     RESTARTS      AGE
+two-containers          1/2     NotReady   0             6m49s
+
+* 讨论
+Pod 能有多个容器的主要原因是为了支持辅助应用(helper applications),以协助主应用(primary application).辅助应用的典型例子是数据抽取,数据推送和代理.辅助应用和主应用经常需要相互通信.就如这个练习所示,通信通常是通过共享文件系统完成的,或者,也通过回环网络接口 localhost 完成.举个网络接口的例子,web 服务器带有一个协助程序用于拉取 Git 仓库的更新.
+
+在本练习中的卷为 Pod 生命周期中的容器相互通信提供了一种方法.如果 Pod 被删除或者重建了,任何共享卷中的数据都会丢失.
+
+## 为集群配置 DNS
+Kubernetes 提供 DNS 集群插件,大多数支持的环境默认情况下都会启用.在 Kubernetes 1.11 及其以后版本中,推荐使用 CoreDNS, kubeadm 默认会安装 CoreDNS.
+
+具体参考以前的章节:
+https://kubernetes.io/zh-cn/docs/tasks/administer-cluster/dns-custom-nameservers/
+
+## 访问集群上运行的服务
+本章节展示了如何连接 Kubernetes 集群上运行的服务.
+
+* 访问集群上运行的服务
+在 Kubernetes 里,节点、 Pod 和 服务 都有自己的 IP.许多情况下,集群上的节点 IP、Pod IP 和某些服务 IP 是路由不可达的, 所以不能从集群之外访问它们,例如从你自己的台式机.
+
+** 连接方式
+你有多种可选方式从集群外连接节点、Pod 和服务: 
+. 通过公网 IP 访问服务
+  . 使用类型为 NodePort 或 LoadBalancer 的 Service,可以从外部访问它们.请查阅 Service 和 kubectl expose 文档.
+  . 取决于你的集群环境,你可以仅把 Service 暴露在你的企业网络环境中,也可以将其暴露在 因特网上.需要考虑暴露的服务是否安全,它是否有自己的用户认证？
+  . 将 Pod 放置于 Service 背后.如果要访问一个副本集合中特定的 Pod,例如用于调试目的, 请给 Pod 指定一个独特的标签并创建一个新服务选择该标签.
+  . 大部分情况下,都不需要应用开发者通过节点 IP 直接访问节点.
+
+. 通过 Proxy 动词访问服务、节点或者 Pod
+  . 在访问远程服务之前,利用 API 服务器执行身份认证和鉴权.如果你的服务不够安全,无法暴露到因特网中,或者需要访问节点 IP 上的端口, 又或者出于调试目的,可使用这种方式.
+  . 代理可能给某些应用带来麻烦
+  . 此方式仅适用于 HTTP/HTTPS
+  . 进一步的描述在这里,见后
+  . 从集群中的 node 或者 pod 访问.
+
+. 从集群中的一个节点或 Pod 访问
+  . 运行一个 Pod,然后使用 kubectl exec 连接到它的 Shell,从那个 Shell 连接其他的节点、Pod 和 Service.
+  . 某些集群可能允许你 SSH 到集群中的节点.你可能可以从那儿访问集群服务.这是一个非标准的方式,可能在一些集群上能工作,但在另一些上却不能.浏览器和其他工具可能已经安装也可能没有安装.集群 DNS 可能不会正常工作.
+
+** 发现内置服务
+典型情况下,kube-system 名字空间中会启动集群的几个服务.使用 kubectl cluster-info 命令获取这些服务的列表: 
+# kubectl cluster-info
+
+输出类似于: 
+Kubernetes master is running at https://192.0.2.1
+elasticsearch-logging is running at https://192.0.2.1/api/v1/namespaces/kube-system/services/elasticsearch-logging/proxy
+kibana-logging is running at https://192.0.2.1/api/v1/namespaces/kube-system/services/kibana-logging/proxy
+kube-dns is running at https://192.0.2.1/api/v1/namespaces/kube-system/services/kube-dns/proxy
+grafana is running at https://192.0.2.1/api/v1/namespaces/kube-system/services/monitoring-grafana/proxy
+heapster is running at https://192.0.2.1/api/v1/namespaces/kube-system/services/monitoring-heapster/proxy
+
+这一输出显示了用 proxy 动词访问每个服务时可用的 URL.例如,此集群 (使用 Elasticsearch)启用了集群层面的日志.如果提供合适的凭据,可以通过 https://192.0.2.1/api/v1/namespaces/kube-system/services/elasticsearch-logging/proxy/ 访问,或通过一个 kubectl proxy 来访问:  http://localhost:8080/api/v1/namespaces/kube-system/services/elasticsearch-logging/proxy/.
+
+说明: 
+请参阅使用 Kubernetes API 访问集群 了解如何传递凭据或如何使用 kubectl proxy.(参阅 使用 Kubernetes API 访问集群: https://kubernetes.io/zh-cn/docs/tasks/administer-cluster/access-cluster-api/#accessing-the-kubernetes-api)
+
+** 手动构建 API 服务器代理 URLs
+如前所述,你可以使用 kubectl cluster-info 命令取得服务的代理 URL.为了创建包含服务末端、后缀和参数的代理 URLs,你可以在服务的代理 URL 中添加:  http://kubernetes_master_address/api/v1/namespaces/namespace_name/services/service_name[:port_name]/proxy
+
+如果还没有为你的端口指定名称,你可以不用在 URL 中指定 port_name.对于命名和未命名端口,你还可以使用端口号代替 port_name.
+
+默认情况下,API 服务器使用 HTTP 为你的服务提供代理.要使用 HTTPS,请在服务名称前加上 https: :  http://<kubernetes_master_address>/api/v1/namespaces/<namespace_name>/services/<service_name>/proxy URL 的 <service_name> 段支持的格式为: 
+. <service_name> - 使用 http 代理到默认或未命名端口
+. <service_name>:<port_name> - 使用 http 代理到指定的端口名称或端口号
+. https:<service_name>: - 使用 https 代理到默认或未命名端口(注意尾随冒号)
+. https:<service_name>:<port_name> - 使用 https 代理到指定的端口名称或端口号
+
+*** 示例
+. 如要访问 Elasticsearch 服务末端 _search?q=user:kimchy,你可以使用以下地址: 
+http://192.0.2.1/api/v1/namespaces/kube-system/services/elasticsearch-logging/proxy/_search?q=user:kimchy
+
+. 如要访问 Elasticsearch 集群健康信息_cluster/health?pretty=true,你可以使用以下地址: 
+https://192.0.2.1/api/v1/namespaces/kube-system/services/elasticsearch-logging/proxy/_cluster/health?pretty=true
+
+健康信息与下面的例子类似: 
+{
+  "cluster_name" : "kubernetes_logging",
+  "status" : "yellow",
+  "timed_out" : false,
+  "number_of_nodes" : 1,
+  "number_of_data_nodes" : 1,
+  "active_primary_shards" : 5,
+  "active_shards" : 5,
+  "relocating_shards" : 0,
+  "initializing_shards" : 0,
+  "unassigned_shards" : 5
+}
+
+. 如要访问 https Elasticsearch 服务健康信息 _cluster/health?pretty=true,你可以使用以下地址: 
+https://192.0.2.1/api/v1/namespaces/kube-system/services/https:elasticsearch-logging:/proxy/_cluster/health?pretty=true
+
+** 通过 Web 浏览器访问集群中运行的服务
+你或许能够将 API 服务器代理的 URL 放入浏览器的地址栏,然而: 
+. Web 服务器通常不能传递令牌,所以你可能需要使用基本(密码)认证.API 服务器可以配置为接受基本认证,但你的集群可能并没有这样配置.
+. 某些 Web 应用可能无法工作,特别是那些使用客户端 Javascript 构造 URL 的 应用,所构造的 URL 可能并不支持代理路径前缀.
+
+
+

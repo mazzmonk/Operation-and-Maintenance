@@ -1,0 +1,15 @@
+Pistache::Http::Endpoint类型
+填充此类型的实例,依次填充各个成员函数
+httpEndpoint(std::make_shared<Pistache::Http::Endpoint>(addr)
+
+httpEndpoin->init(Pistache::Http::Endpoint::options().threads(size_t))
+
+	/* 绑定需要的操作(Post,Get等等)的url(可以有多个),并做相应的处理的函数,包括相应的请求及对应的响应动作,处理函数类似如下:
+	 *	比如:void doGetMetric(const Pistache::Rest::Request& request, Pistache::Http::ResponseWriter response)
+	*/
+	Pistache::Rest::Routes::Post,
+	Pistache::Rest::Routes::Get	
+	
+httpEndpoint->setHandler()
+httpEndpoint->serve()
+httpEndpoint->shutdown()

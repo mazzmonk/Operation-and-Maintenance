@@ -1,0 +1,457 @@
+yum -y install openssl-*
+cd /usr/lib64 
+ln -s libssl.so.1.0.1e libssl.so.6
+ln -s libcrypto.so.1.0.1e libcrypto.so.6
+
+这2个包用于数据之间的同步状态
+yum -y install lsof rsync
+
+bin/mysqld_safe
+
+
+grant all privileges on *.* to blue@'172.16.20.%' identified by 'bjtxj_*0987';
+grant all privileges on *.* to blue@'localhost' identified by 'bjtxj_*0987';
+grant all privileges on *.* to blue@'%' identified by 'bjtxj_*0987';
+
+grant all privileges on *.* to root@'localhost' identified by 'bjtxj_*0987';
+grant all privileges on *.* to root@'127.0.0.1' identified by 'bjtxj_*0987';
+grant all privileges on *.* to root@'%' identified by 'bjtxj_*0987';
+
+grant all privileges on *.* to blue@'localhost' identified by 'bjtxj_*0987';
+grant all privileges on *.* to blue@'127.0.0.1' identified by 'bjtxj_*0987';
+grant all privileges on *.* to blue@'%' identified by 'bjtxj_*0987';
+
+
+
+
+./bin/mysqladmin -u root password '8mnOJGZemn'
+
+修改my.cnf添加如下
+
+这里有个需要注意的就是，必须把wsrep.cnf文件中的内容写到my.cnf文件中，否则不生效。
+可能和我用的二进制版本有关
+配置如下，大多数是从默认的wsrep.cnf中拷贝出来
+
+binlog_format=ROW
+innodb_autoinc_lock_mode=2
+bind-address=0.0.0.0
+wsrep_provider=/home/blue/apps/mysqlcluster/lib/libgalera_smm.so
+wsrep_cluster_name="MyCluster"
+wsrep_node_address="x.x.x.x"          //本机ip，默认情况下，这个参数的值是第一个网卡的ip
+wsrep_cluster_address="gcomm://"
+wsrep_slave_threads=1
+wsrep_certify_nonPK=1
+wsrep_max_ws_rows=131072
+wsrep_max_ws_size=1073741824
+wsrep_debug=0
+wsrep_convert_LOCK_to_trx=0
+wsrep_retry_autocommit=1
+wsrep_auto_increment_control=1
+wsrep_drupal_282555_workaround=0
+wsrep_causal_reads=0
+wsrep_notify_cmd=
+wsrep_sst_method=rsync
+wsrep_sst_auth=blue:123456
+
+
+这里有个数据同步的问题，就是--wsrep_cluster_address=这个参数
+逻辑似乎是：第一个节点不用设置，但是后边的最好是设置全部节点，这个参数是当mysql停止以后同步用的节点
+就是说，会按照这个地方设置的次序去同步数据。
+上述的描述有误，这里的建议是当已经设置过第一节点以后，有新的节点加入的时候，修改所有的节点的配置文件把所有节点全部设置上，但是把本机的节点写在最后一个，这里的设置是保证服务器同步数据的时候用的列表。
+
+这里有个注意的地方，就是当设置第一个节点的时候必须把上述的地方设置为空，否则有如下错误提示：
+
+150212 14:05:14 [Note] WSREP: view((empty))
+150212 14:05:14 [ERROR] WSREP: failed to open gcomm backend connection: 110: failed to reach primary view: 110 (Connection timed out)
+	 at gcomm/src/pc.cpp:connect():141
+150212 14:05:14 [ERROR] WSREP: gcs/src/gcs_core.c:gcs_core_open():202: Failed to open backend connection: -110 (Connection timed out)
+150212 14:05:14 [ERROR] WSREP: gcs/src/gcs.c:gcs_open():1291: Failed to open channel 'MyCluster' at 'gcomm://172.16.20.92:4567,172.16.20.91:4567,172.16.20.94:4567': -110 (Connection timed out)
+150212 14:05:14 [ERROR] WSREP: gcs connect failed: Connection timed out
+150212 14:05:14 [ERROR] WSREP: wsrep::connect() failed: 7
+150212 14:05:14 [ERROR] Aborting
+
+数据库最初用的
+mariadb-galera-5.5.41-linux-x86_64.tar.gz
+版本，但是由于原数据库中有myisam引擎用的fulltext键，集群要求用innodb引擎，innodb引擎在5.6以前不支持上述特性，
+因此改用了
+mariadb-galera-10.0.16-linux-x86_64.tar.gz
+这个版本，这个版本的innodb用了5.6的版本，因此可以转化过来。
+
+
+环境：数据库A，数据库B
+测试1
+当写入A时候，没有写完，停止B，上线B
+结果：当B上线以后将有段时间无法使用，这段时间，B在同步A的数据，当同步完成以后B将可用。
+
+测试2
+当写入A的时候，没有写完，停止A，上线A
+结果：当停止A的时候，B的数据停留在A下线的最后一刻，当A上线以后，数据和B保持的是一致。
+问题：如果在大并发的情况下，A在下线的时候数据是否会比B数据多，当A上线以后，B是否会过来同步并保持一致。
+
+
+
+数据同步的算法是什么？
+这里的同步是指当有节点掉线重新上线以后从哪里同步数据的算法
+
+
+数据写入算法是什么？
+数据写入使用的是Certification based Replication的方式，基本的思路就是当有个节点接受到写入请求的时候
+当整个事务提交之前，把所有产生改动的行的主键值搜集起来作为一个writeset（写集合），然后把这个写集合拷贝到
+其他节点，接着就是在所有的节点上校验上述的写集合是否能被提交，如果成功，就会执行这个写集合，同时其他节点也
+执行。
+
+
+
+第一节点
+/usr/local/mysql/bin/mysqld_safe --wsrep_cluster_address=gcomm:// >/dev/null &
+
+添加第二个，第三个节点方式如下：
+接入节点G222:
+
+[root@G222 data]# /usr/local/mysql/bin/mysqld_safe --wsrep_cluster_address="gcomm://192.168.1.221:4567,192.168.1.223:4567"    >/dev/null &
+
+接入节点G223:
+
+[root@G223 data]# service mysql start --wsrep_cluster_address="gcomm://192.168.1.221:4567,192.168.1.222:4567"
+修改节点的wsrep_cluster_address修改wsrep_cluster_address有两种方式:1)使用新的wsrep_cluster_address重启节点:
+[root@G221 data]# service mysql restart --wsrep_cluster_address="gcomm://192.168.1.222:4567,192.168.1.223:4567"
+Shutting down MySQL.... SUCCESS! 
+Starting MySQL....... SUCCESS!
+2)直接修改MySQL全局变量
+
+mysql> SHOW VARIABLES LIKE 'wsrep_cluster_address';
++-----------------------+----------------------------+
+| Variable_name         | Value                      |
++-----------------------+----------------------------+
+| wsrep_cluster_address | gcomm://192.168.1.222:4567 |
++-----------------------+----------------------------+
+1 row in set (0.00 sec)
+
+mysql> set global wsrep_cluster_address="gcomm://192.168.1.222:4567,192.168.1.223:4567";
+Query OK, 0 rows affected (2.20 sec)
+
+mysql> SHOW VARIABLES LIKE 'wsrep_cluster_address';
++-----------------------+-------------------------------------------------------+
+| Variable_name         | Value                                                 |
++-----------------------+-------------------------------------------------------+
+| wsrep_cluster_address | gcomm://192.168.1.222:4567,192.168.1.223:4567 |
++-----------------------+-------------------------------------------------------+
+1 row in set (0.00 sec)
+
+
+
+
+添加
+ipvsadm -a -t 172.16.20.211:3306 -r 172.16.20.94 -g
+删除
+ipvsadm -d -t 172.16.20.211:3306 -r DBCluster01:3306
+
+
+
+Lvs&&mariadb集群
+1.软件环境 
+CentOS 6.5 
+Oracle linux 6.5 
+keepalive 
+mariadb-galera-10.0.16-linux-x86_64 
+
+2.结构 
+使用lvs和keepalived做前端负载均衡和健康检查使用 
+mariadb-galera做为mysql集群，保证数据一致及分担负载 
+lvs本身可以单独作为负载均衡器来分发请求，但是，其不检查后端节点的健康状态，因此整合keepalived 
+keepalived中的负载均衡其实是调用了lvs，并在其中加入了健康状态检查，配置虚拟服务的功能，所以把所有 
+的关于lvs的相关配置写在keepalived.conf这个文件中。
+
+3.具体环境 
+VIP:172.16.20.211 
+RIP:172.16.20.91 
+RIP:172.16.20.92 
+RIP:172.16.20.93 
+RIP:172.16.20.94 
+lvs采用轮询，直接路由模式 
+在所有的节点服务器上配置如下内容以保证直接路由模式能正常工作 
+echo 2 > /proc/sys/net/ipv4/conf/all/arp_announce 
+echo 2 > /proc/sys/net/ipv4/conf/em2/arp_announce 
+echo 1 > /proc/sys/net/ipv4/conf/all/arp_ignore 
+echo 1 > /proc/sys/net/ipv4/conf/em2/arp_ignore
+
+ifconfig lo:0 172.16.20.211 netmask 255.255.255.255 broadcast 172.16.20.211
+route add -host 172.16.20.211 dev lo:0
+上述配置保证节点的服务器不响应关于arp的请求，以及只响应自己对自己的172.16.20.211的请求。 
+
+4.keepalived 
+内容如下：
+
+vrrp_instance VI_3 {
+    state BACKUP
+    interface em2
+    virtual_router_id 101
+    priority 1
+    advert_int 1
+    mcast_src_ip 172.16.20.11
+    authentication {
+        auth_type PASS
+        auth_pass 1111
+    }
+    virtual_ipaddress {
+        172.16.20.211/24 dev em2 label em2:0
+    }
+}
+
+virtual_server 172.16.20.211 3306 {
+   delay_loop 3
+   lb_algo rr                #lvs的轮询
+   lb_kind DR              #直接路由模式
+   nat_mask 255.255.255.0
+   persistence_timeout 0       
+   protocol TCP
+
+   real_server 172.16.20.91 3306 {            #真实节点
+       weight 1                                               #权重
+       TCP_CHECK {                                        #健康检查
+           connect_timeout 5
+           nb_get_retry 3
+           delay_before_retry 3
+           connect_port 3306
+       }
+   }
+
+   real_server 172.16.20.92 3306 {
+       weight 1
+       TCP_CHECK {
+           connect_timeout 5
+           nb_get_retry 3
+           delay_before_retry 3
+           connect_port 3306
+       }
+   }
+
+  real_server 172.16.20.93 3306 {
+       weight 1
+       TCP_CHECK {
+           connect_timeout 5
+           nb_get_retry 3
+           delay_before_retry 3
+           connect_port 3306
+       }
+   }
+
+   real_server 172.16.20.94 3306 {
+       weight 1
+       TCP_CHECK {
+           connect_timeout 5
+           nb_get_retry 3
+           delay_before_retry 3
+           connect_port 3306
+       }
+   }
+}
+原有的关于虚ip的内容查看其他文档。 
+启动keepalived，可以看到的内容和使用ipvsadm配置相同的内容。 
+[root@lv00 ~]# ipvsadm -l
+IP Virtual Server version 1.2.1 (size=4096)
+Prot LocalAddress:Port Scheduler Flags
+ -> RemoteAddress:Port           Forward Weight ActiveConn InActConn
+TCP  localhost:mysql rr
+ -> DBCluster01:mysql            Route   1      34         160       
+ -> DBCluster02:mysql            Route   1      32         168       
+ -> DBCluster03:mysql            Route   1      31         170       
+ -> DBCluster04:mysql            Route   1      31         170
+注意：在配置keepalived之前需要把ipvsadm配置的内容全部清空，否则，keepalived的配置无法覆盖 
+原有的ipvsadm的内容。 
+附：ipvsadm配置的命令
+
+ipvsadm -A -t 172.16.20.211:3306 -s rr		      #添加虚拟服务
+ipvsadm -a -t 172.16.20.211:3306 -r 172.16.20.91 -g
+ipvsadm -a -t 172.16.20.211:3306 -r 172.16.20.92 -g
+ipvsadm -a -t 172.16.20.211:3306 -r 172.16.20.93 -g
+ipvsadm -a -t 172.16.20.211:3306 -r 172.16.20.94 -g  #添加一条真实服务器节点
+
+ipvsadm -d -t 172.16.20.211:3306 -r 172.16.20.94 -g  #删除一条真实服务器节点
+
+ipvsadm -C   #删除整个列表内容
+
+
+5.mysql集群 
+最初使用的版本mariadb-galera-5.5.41-linux-x86_64由于innodb引擎不支持fulltext类型， 
+因此换到了mariadb-galera-10.0.16-linux-x86_64这个版本，这个版本其中的innodb引擎升级到了5.6，官方 
+的文档中已经说明可以支持fulltext类型。 
+整个集群使用的多主的方式，数据写入之前做过所有节点的执行校验，因此保证数据一致性。 
+安装之前需要先安装如下包：
+yum -y install openssl-*
+yum -y install lsof rsync
+
+cd /usr/lib64 
+ln -s libssl.so.1.0.1e libssl.so.6
+ln -s libcrypto.so.1.0.1e libcrypto.so.6
+安装过程首先按照普通的二进制安装方式，解压，初始化，启动服务，然后修改用户密码及权限。
+
+grant all privileges on *.* to blue@'172.16.20.%' identified by 'bjtxj_*0987';
+grant all privileges on *.* to blue@'localhost' identified by 'bjtxj_*0987';
+grant all privileges on *.* to blue@'%' identified by 'bjtxj_*0987';
+grant all privileges on *.* to root@'localhost' identified by '8mnOJGZemn';
+grant all privileges on *.* to root@'127.0.0.1' identified by '8mnOJGZemn';
+grant all privileges on *.* to root@'172.16.20.%' identified by '8mnOJGZemn';
+修改my.cnf文件与原先的单机使用的my.cnf文件相同，修改： 
+binlog_format=ROW                                                         #修改
+slow_query_log=/home/blue/apps/mysql/logs/          #去掉
+slow_query_log = 1   #bool值是否开启慢查询日志         #去掉
+long_query_time = 1  #慢查询时间阀值                           #去掉
+server-id = 11                                                                     #去掉
+innodb_thread_concurrency = 48                                    #去掉
+innodb_additional_mem_pool_size = 16M                      #去掉
+重启mysql服务。
+
+再次修改my.cnf文件添加： 
+###### wsrep ######
+innodb_autoinc_lock_mode=2
+bind-address=0.0.0.0
+wsrep_provider=/home/blue/apps/mysqlcluster/lib/libgalera_smm.so
+wsrep_cluster_name="MyCluster"
+wsrep_node_address="172.16.20.91"
+wsrep_cluster_address="gcomm://172.16.20.91,172.16.20.92,172.16.20.93,172.16.20.94"
+wsrep_slave_threads=1
+wsrep_certify_nonPK=1
+wsrep_max_ws_rows=131072
+wsrep_max_ws_size=1073741824
+wsrep_debug=0
+wsrep_convert_LOCK_to_trx=0
+wsrep_retry_autocommit=1
+wsrep_auto_increment_control=1
+wsrep_drupal_282555_workaround=0
+wsrep_causal_reads=0
+wsrep_notify_cmd=
+wsrep_sst_method=rsync
+wsrep_sst_auth=root:8mnOJGZemn
+这里的大多数内容从support-files这里目录的wsrep.cnfh中拷贝过来，修改了几个地方。
+wsrep_sst_method=rsync #同步数据的方式，因此需要安装rsync 
+wsrep_sst_auth=xxxxx:xxxx #同步用的mysql账户和密码 
+wsrep_cluster_address=“gcomm://x.x.x.x,x.x.x.x" 
+/*这里很重要，保证数据库加入集群中所有的节点，但是如果这里配置的是集群的第一个节点，必须必须保持为空， 这里是节点启动的时候的参照物。
+
+重启mysql，此时的进程会有2个端口，3306，4567。后边的节点安装方式同上，需要注意就是这2个地方，按照每台 机器添加。
+
+wsrep_node_address="172.16.20.91"
+wsrep_cluster_address="gcomm://172.16.20.91,172.16.20.92,172.16.20.93,172.16.20.94"
+附：设置加入集群节点可以使用服务启动以后，命令行的模式。这点可以查看官方的文档。
+
+我们的项目最初的时候是主从的模式，为了保证平滑切换，把其中的一个节点做为原来线上主数据库的一个从，当有 数据写入的时候，保证数据能同步到集群中的所有节点。然后把连接数据的ip切换到集群的ip上，对于前端应用没有 任何的影响。
+
+6.my.cnf
+[client]
+port		= 3306
+socket		= /home/blue/apps/mysqlcluster/tmp/mysql.sock
+
+[mysqld]
+port		= 3306
+socket		= /home/blue/apps/mysqlcluster/tmp/mysql.sock
+
+back_log = 50
+
+skip-host-cache
+skip-name-resolve
+
+max_connections = 10240
+max_connect_errors = 10
+wait_timeout = 10
+interactive_timeout = 10
+
+#master slave error
+slave_skip_errors = all
+
+table_open_cache = 128k
+max_allowed_packet = 64M
+binlog_cache_size = 1M
+max_heap_table_size = 64M
+
+read_buffer_size = 2M
+read_rnd_buffer_size = 16M
+sort_buffer_size = 16M
+join_buffer_size = 8M
+
+thread_cache_size = 8
+thread_concurrency = 8
+
+query_cache_size = 128M
+query_cache_limit = 8M
+
+ft_min_word_len = 4
+
+default-storage-engine = INNODB
+
+thread_stack = 240K
+
+transaction_isolation = REPEATABLE-READ
+
+tmp_table_size = 128M
+
+datadir = /home/blue/apps/mysqlcluster/data
+log-bin=/home/blue/apps/mysqlcluster/logs/mysql-bin
+
+binlog_format=ROW
+
+###### wsrep ######
+innodb_autoinc_lock_mode=2
+bind-address=0.0.0.0
+wsrep_provider=/home/blue/apps/mysqlcluster/lib/libgalera_smm.so
+wsrep_cluster_name="MyCluster"
+wsrep_node_address="172.16.20.91"
+wsrep_cluster_address="gcomm://172.16.20.91,172.16.20.92,172.16.20.93,172.16.20.94"
+wsrep_slave_threads=1
+wsrep_certify_nonPK=1
+wsrep_max_ws_rows=131072
+wsrep_max_ws_size=1073741824
+wsrep_debug=0
+wsrep_convert_LOCK_to_trx=0
+wsrep_retry_autocommit=1
+wsrep_auto_increment_control=1
+wsrep_drupal_282555_workaround=0
+wsrep_causal_reads=0
+wsrep_notify_cmd=
+wsrep_sst_method=rsync
+wsrep_sst_auth=root:8mnOJGZemn
+
+########## myisam ##################
+
+key_buffer_size = 65M
+bulk_insert_buffer_size = 64M
+myisam_sort_buffer_size = 128M
+myisam_max_sort_file_size = 10G
+myisam_repair_threads = 1
+myisam_recover
+
+############ innodb ########################
+
+innodb_buffer_pool_size = 38G
+innodb_data_file_path = ibdata1:10M:autoextend
+innodb_write_io_threads = 24
+innodb_read_io_threads = 24
+innodb_flush_log_at_trx_commit = 1
+innodb_log_buffer_size = 32M
+innodb_log_file_size = 256M
+innodb_log_files_in_group = 3
+innodb_max_dirty_pages_pct = 90
+innodb_lock_wait_timeout = 120
+
+innodb_io_capacity = 800
+
+[mysqldump]
+quick
+
+[mysql]
+no-auto-rehash
+
+[myisamchk]
+key_buffer_size = 512M
+sort_buffer_size = 512M
+read_buffer = 8M
+write_buffer = 8M
+
+[mysqlhotcopy]
+interactive-timeout
+
+[mysqld_safe]
+open-files-limit = 20480
+
+
+

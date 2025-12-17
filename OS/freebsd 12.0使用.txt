@@ -1,0 +1,558 @@
+1.root用户不可以使用ssh远程登陆
+
+2.使用pw添加一个组
+
+#pw groupadd teamtwo
+#pw groupshow teamtwo
+
+3.将用户添加到组里
+
+#pw groupmod teamtwo -m jack   #将jack用户添加到teamtwo组里
+#pw groupmod teamtwo -M www    #www用户将替换掉teamtwo组里的所有用户,不论原来teamtwo组里有几个用户
+
+4.普通用户可以执行su命令
+默认情况下普通用户是不能执行su命令的,只有wheel组的用户可以,将普通用户加入到wheel组中即可
+
+#pw groupadd wheel -m jack
+
+5.portsnap设置
+从6.0开始,freebsd升级ports就不再需要cvsup了,而是用portsnap.
+
+portsnap与cvsup的区别在于:
+1.portsnap有数字签名,较安全,cvsup没有.
+2.portsnap是打包压缩下载,所以会比cvsup快一些,当然除了第一次使用.
+
+* 在更新port和pkg的时候,先设置下加速和port地址
+
+ports 加速
+sudo pkg install axel
+
+vi /etc/make.conf
+#加入以下内容
+FETCH_CMD=axel
+FETCH_BEFORE_ARGS= -n 10 -a
+FETCH_AFTER_ARGS=
+DISABLE_SIZE=yes
+MASTER_SITE_OVERRIDE?=\
+http://ports.hshh.org/${DIST_SUBDIR}/\
+http://ports.cn.freebsd.org/${DIST_SUBDIR}/\
+#ftp://ftp.freeBSDchina.org/pub/FreeBSD/ports/distfiles/${DIST_SUBDIR}/
+MASTER_SITE_OVERRIDE?=http://mirrors.ustc.edu.cn/freebsd-ports/distfiles/${DIST_SUBDIR}/
+MASTER_SITE_OVERRIDE?=${MASTER_SITE_BACKUP}
+#MASTER_SITE_OVERRIDE?=http://mirrors.ustc.edu.cn/freebsd-ports/distfiles/${DIST_SUBDIR}/
+
+vi /etc/portsnap.conf
+把
+
+SERVERNAME=portsnap.freebsd.org
+
+修改成：
+
+SERVERNAME=portsnap.hshh.org
+
+等同于命令
+#portsnap fetch -s portsnap.tw.freebsd.org
+
+
+第一次使用:portsnap fetch extract
+以后再用:portsnap fetch update
+还可以放在cron里定时升级:portsnap cron update
+需要注意的是不要portsnap和cvsup混合使用.
+
+第一次使用输入portsnap fetch extract回车即可,因为有几十兆的文件需要下载,需要等待一段时间.
+如果用户没有安装ports,这个命令是无效的,需要通过sysinstall来安装ports修改更新服务器地址的方法:
+
+
+详细：
+要使用Ports Collections安装或卸载软件,首先必须安装Ports Collection(如果操作系统没有安装).
+
+
+
+首先,运行系统更新和升级
+
+#pkg update
+#pkg upgrade -f
+
+下载ports collects的压缩快照.快照将存储在/var/db/portsnap下
+
+#portsnap fetch
+
+fetch完成后,将Ports Collection快照提取到/usr/ports.仅在首次获取快照时才能执行此操作.
+
+#Portsnap extract
+
+如果Ports Collection快照是以前下载的,则只需运行以下命令即可更新它；
+
+#portsnap fetch
+#portsnap update
+
+但是,您可以将其作为单个命令运行；
+
+#portsnap fetch update
+
+使用Ports Collection安装软件
+在编译端口之前,请确保已安装GNU make(gmake)实用程序,然后再编译软件/应用程序.验证是否已安装gmake
+
+#which gmake
+#/usr/local/bin/gmake
+
+安装GNU make实用程序
+如果未安装gmake,请参阅以下有关如何安装的信息.
+
+#pkg install gmake
+
+接下来,导航到要安装的software/port的特定子目录.例如,在本指南中,我们将演示如何安装neofetch命令行工具来获取系统信息.
+#cd /usr/ports/sysutils/neofetch
+
+接下来,如下所示编译端口或软件；
+
+#make install clean
+
+使用Ports Collection卸载软件
+要卸载通过FreeBSD 12上的Ports Collection安装的任何软件或端口,只需导航至port子目录并运行make deinstall即可.例如,删除上面安装的neofetch；
+
+#make deinstall
+
+升级
+#make deinstall reinstall clean
+
+6.用于升级port的管理工具
+
+* 使用Portmaster升级Ports
+Portmaster是另外一个用来升级已安装的ports的工具.Portmaster 被设计成尽可能使用"基本"系统中能找到的工具(它不依赖于其他的 ports)
+和/var/db/pkg/中的信息来检测出需要升级的 ports.你可以在 ports-mgmt/portmaster 找到它：
+
+#cd /usr/ports/ports-mgmt/portmaster
+#make install clean
+
+Portmaster groups ports into four categories:
+Portmaster把ports 分成4类：
+    Root ports (不依赖其他的 ports,也不被依赖)
+    Trunk ports (不依赖其他的 ports,但是被其他的 ports 依赖)
+    Branch ports (依赖于其他的 ports,同时也被依赖)
+    Leaf ports (依赖于其他的 ports,但不被依赖)
+你可以使用 -L 选项列出所有已安装的 ports 和查找存在更新的 ports：
+
+#portmaster -L
+
+可以使用这个简单的命令升级所有已安装的 ports：
+
+# portmaster -a
+
+注意:
+Portmaster默认在删除一个现有的port前会做一个备份包.如果新的版本能够被成功安装,Portmaster将删除备份.使用-b后Portmaster便不会自动删除备份.
+加上-i选项之后Portmaster将进入互动模式,在升级每个 port 以前提示你给予确认.
+
+如果你在升级的过程中发现了错误,你可以使用-f选项升级/重新编译所有的ports：
+
+# portmaster -af
+
+同样你也可以使用Portmaster往系统里安装新的ports,升级所有的依赖关系之后并安装新的port：
+
+# portmaster shells/bash
+
+
+* 使用Portupgrade来更新Ports
+portupgrade工具是设计来简化升级已安装的port的操作的.它通过ports-mgmt/portupgrade port来提供.您可以像其它port那样,使用make install clean命令来安装它：
+
+# cd /usr/ports/ports-mgmt/portupgrade
+# make install clean
+
+使用pkgdb -F命令来扫描已安装的port的列表,并修正其所报告的不一致.在每次升级之前,有规律地执行它是个好主意.
+
+运行portupgrade -a时,portupgrade将开始并升级系统中所安装的所有过时的ports.如果您希望在每个升级操作时得到确认,应指定-i参数.
+
+# portupgrade -ai
+
+如果您只希望升级某个特定的应用程序,而非全部可用的port,应使用portupgradepkgname.如果portupgrade应首先升级指定应用程序的话,则应指定-R参数.
+
+# portupgrade -R firefox
+
+要使用预编译的package而不是ports来进行安装,需要指定-P.如果指定了这个选项,portupgrade会搜索 PKG_PATH中指定的本地目录,如果没有找到,则从远程站点下载.
+如果本地没有找到,而且远程站点也没有成功地下载预编译包,则portupgrade将使用ports.要禁止使用port,可以指定-PP.
+
+# portupgrade -PP gnome2
+
+如果只想下载distfiles(或者,如果指定了-P的话,是packages)而不想构建或安装任何东西,可以使用-F.
+
+
+* Ports和磁盘空间
+
+使用Ports套件会最终用完磁盘空间.在通过ports联编和安装软件之后,您应记得清理临时的work目录,其方法是使用make clean命令.
+您可以使用下面的命令来清理整个Ports套件：
+
+# portsclean -C
+
+随着时间的推移,您可能会在distfiles目录中积累下大量源代码文件.您可以手工删除这些文件,也可以使用下面的命令来删除所有port都不引用的文件：
+
+# portsclean -D
+
+除此之外,也可以用下列命令删去目前安装的port没有使用的源码包文件：
+
+# portsclean -DD
+
+注意:
+这个portsclean工具是portupgrade套件的一部分.
+不要忘记删除那些已经安装,但已不再使用的ports.用于自动完成这种工作的一个好工具是ports-mgmt/pkg_cutleaves port
+
+
+7.环境设置
+
+用户登录时,sh将首先自动执行/etc/profile文件,为每个用户设置最基本的环境,而csh将使用/etc/csh.cshrc,csh.login和csh.logout作为系统级csh资源文件.
+执行了系统级别的登录文件之后,每个用户的shell就在该用户的主目录下寻找该用户个人的资源文件:sh使用.profile文件,csh使用.login和.cshrc文件.
+这些资源文件均使用相应的shell语言,/etc/profile和个人目录下的.profile使用sh风格的控制语言,/etc/cshrc和个人目录下的.login..cshrc使用csh风格的控制语言.
+
+系统管理员可以改动 /etc目录下的系统级资源文件,为用户提供一个最方便的使用环境.
+对于sh风格的用户,可以更改/etc/profile文件,对csh用户,应更改/etc/csh.cshrc文件.
+在这些文件中可以改动shell使用的环境变量,这样来改变shell的行为方式,或者执行一系列自动操作,完成一些用户登录时需要自动执行的任务.
+用户可以根据自己使用的 shell类型,更改.profile或.login文件,达到环境的设置目的
+
+8.修改shell
+
+改变您的Shell的最简单方法是使用 chsh 命令.执行 chsh 将根据您设定的EDITOR 环境变量进入到那个编辑器,假如没有设定,就会进入vi编辑器.请改变“Shell:”这行对应值.
+您可使用chsh 的-s选项, 这样就能设置您的shell却又不用编辑器.假如您想把shell改为bash 可用下面的技巧.
+
+% chsh -s /usr/local/bin/bash
+
+这样操作以后,/etc/passwd文件中的shell会改变,但是这里直接修改文件,似乎不好使
+
+注意:
+您使用的shells必须 在/etc/shells 文件里列出.假如您从 ports里装一个shell, 那就不用做这步了.假如您手工装一个shell,那就要手工添加进去.
+举个例了子,假如您手工把 bash装到 /usr/local/bin里,您还要进行这一步:
+
+# echo "/usr/local/bin/bash" >> /etc/shells
+
+注意:
+root用户的默认shell是csh,普通用户则是/bin/sh
+修改普通用户的时候,先切换到csh
+$csh
+$chsh -s /usr/local/bin/bash
+
+虽然是shell环境，但是.profile代替.bashrc
+
+9.网络部分
+
+单网卡多ip地址
+添加
+ifconfig em0 172.20.10.13 netmask 255.255.255.240 alias
+
+去掉
+ifconfig em0 172.20.10.13 netmask 255.255.255.240 -alias
+
+通过配置文件设置
+编辑/etc/rc.conf
+添加
+ifconfig_em0="inet 192.168.1.20 netmask 255.255.255.0"
+ifconfig_em0_alias0="inet 192.168.1.21 netmask 255.255.255.255"
+ifconfig_em0_alias1="inet 192.168.0.20 netmask 255.255.255.0"
+
+解释：
+如果别名IP地址和网卡原IP地址在同一个子网上,就需要设置掩码为255.255.255.255
+如果位于不同的子网,就直接使用相应子网的正常网络掩码
+
+sh /etc/rc   	#重启网络,ifconfig/route设置的内容没有失效
+/etc/netstart   #重启网络,如果使用了ifconfig命令设置了ip地址或者是route设置过路由,全部失效
+
+添加默认网关
+route add -net 0.0.0.0/0 192.168.1.1 
+或者
+route add default 192.168.1.1
+
+添加路由
+route add -net 172.16.10.0/24 172.16.1.1
+
+修改
+route change -net 172.16.10.0/24 172.16.1.2
+
+查看
+route show 172.16.10.0
+
+删除 
+route delete -net 172.16.0.0/24 172.16.1.2
+
+删除所有的route
+route flush
+
+
+10.二进制兼容模式
+FreeBSD提供了与Linux®32-bit二进制兼容,允许用户在FreeBSD系统上安装和运行大多数的32-bit Linux®二进制程序而无需做任何修改.然而,
+仍然有一些Linux®操作系统特有的功能在FreeBSD上并不被支持.例如,要是Linux®程序过度地使用了诸如启用虚拟 8086 模式 i386™ 特有的调用,
+则无法在FreeBSD 上运行.另外,目前还不支持 64-bit的Linux® 二进制程序.
+
+默认情况,Linux库没有安装,二进制兼容模式也没有被开启,Linux的库可以手动安装,也可以通过Ports模式安装
+英文链接:
+https://www.freebsd.org/doc/en_US.ISO8859-1/books/handbook/linuxemu-lbc-install.html
+
+中文链接:
+https://www.freebsd.org/doc/zh_CN/books/handbook/linuxemu-lbc-install.html
+
+
+* 如果使用pkg模式安装则
+在安装库之前,需要加载Linux kernel模块
+
+# kldload linux 
+
+对于64bit
+
+# kldload linux64
+
+查看模块是否被加载
+# kldstat
+
+安装
+#pkg install emulators/linux_base_c7
+
+
+* 如果使用port模式安装则
+#cd /usr/ports/emulators/linux_base_c7
+#make install disclean
+#kldload linux/linux64
+
+不论哪种方式,在启动时候加载,加一行在/etc/rc.conf文件中
+linux_enable="YES"
+对于64位机器,/etc/rc.d/abi将会自动加载模块
+
+查看模块是否被加载
+#kldstat
+
+11.图形界面
+英文版文档有gnome3的安装步骤
+https://www.freebsd.org/doc/en_US.ISO8859-1/books/handbook/x11-wm.html
+
+中文版文档停留在gnome2
+https://www.freebsd.org/doc/zh_CN/books/handbook/x11-wm.html
+
+建议使用英文版
+
+A.添加用户到wheel组
+# pkg group mod wheel -m jack
+
+B.在安装图形界面之前,需要先装xorg
+# pkg install xorg
+
+或者
+
+# cd /usr/ports/x11/xorg
+# make install clean
+
+C.把用户加入到video组
+# pw groupmod video -m jack
+# pw groupmod wheel -m jack
+
+D.虚拟机(virtualbox)安装,本步骤必须
+# ee /boot/loader.conf 
+加入
+kern.vty=vt
+
+E.安装gnome3
+使用package模式安装
+# pkg install gnome3
+
+或者port模式
+# cd /usr/ports/x11/gnome3
+# make install clean
+
+F.添加proc分区到fstab
+# ee /etc/fstab
+proc	/proc	procfs	rw	0	0
+
+G.添加gnome的启动项
+# ee /etc/rc.conf
+dbus_enable="YES"
+hald_enable="YES"
+gdm_enable="YES"
+gnome_enable="YES"
+
+H.安装虚拟机附件，虚拟机安装必须
+# pkg install virtualbox-ose-additions
+# ee /etc/rc.conf
+vboxguest_enable="YES"
+vboxservice_enable="YES"
+
+12.Lumina Desktop
+# pkg install lumina
+# ee /etc/rc.conf
+dbus_enable="YES"
+# pkg install slim
+# ee /etc/rc.conf
+slim_enable="YES"
+$ echo "exec start-lumina-desktop" > "~/.xinitrc"
+
+13.KDE5(KDE Plasma) Desktop
+# pkg install kde5
+# ee /etc/sysctl.conf
+net.local.stream.recvspace=65536
+net.local.stream.sendspace=65536
+or # echo "exec startkde" > "~/.xinitrc"
+# pkg install sddm
+# ee /etc/rc.conf
+sddm_enable="YES"
+
+14.Cinnamon Desktop
+# pkg install cinnamon
+# pkg install gnome-themes
+# pkg install cinnamon
+# ee /etc/fstab
+proc /proc procfs rw 0 0
+# ee /etc/rc.conf
+dbus_enable="YES"
+hald_enable="YES"
+# pkg install gdm
+# ee /etc/rc.conf
+gdm_enable="YES"
+# echo "exec ck-launch-session dbus-launch --exit-with-session cinnamon-session" > "~/.xinitrc"
+
+在登录的时候，点选选项为cinnamon
+
+注意:
+鉴于自己安装的图形界面,安装完毕以后,有很多软件都是各种gui不自带的,需要自行安装,因此还是建议直接安装对应GUI的衍生版本,
+比如:furyBSD(KDE),GhostBSD(GNOME)等等
+
+15.设置中文环境
+
+在默认情况下，FreeBSD 12安装后的本地化环境为：
+
+这就造成中文显示乱码，可以通过以下办法解决。
+
+1、首先在/etc/login.conf中添加以下部分
+
+chinese:Chinese Users Account:\
+        :charset=UTF-8:\
+        :lang=zh_CN.UTF-8:\
+        :tc=default:
+		
+2、接下来执行下面的命令以便更新数据库。
+
+cap_mkdb /etc/login.conf
+
+3、尽管操作完了上面的步骤，但是对于已经存在的用户来说并不会生效，所以我们需要执行vipw[2]命令，然后找到我们的用户，
+然后在图中所指出的位置添加chinese（修改此项内容默认采用的是vi编辑器操作）。
+
+user:password:1111:11:language:0:0:User Name:/home/user:/bin/sh
+
+* 安装中文环境
+实际上上述的操作,只是在设置中文以后可能会出现问题,设置中文环境,是修改locale,就是说不管什么GUI,设置区域的时候,需要设置成china,
+同时使用locale命令查看编码，必须保证locale是如下的设置
+
+LANG=zh_CN.UTF-8
+LC_CTYPE="zh_CN.UTF-8"
+LC_COLLATE="zh_CN.UTF-8"
+LC_TIME="zh_CN.UTF-8"
+LC_NUMERIC="zh_CN.UTF-8"
+LC_MONETARY="zh_CN.UTF-8"
+LC_MESSAGES="zh_CN.UTF-8"
+LC_ALL=
+
+如果不是可以在~/.profile中添加export xxx来设置
+
+* 另外，支持中文环境，必须安装字体，否则，可能默认字体会显示乱七八糟，可以到如下的目录中查看字体
+
+/usr/ports/x11-fonts
+
+一般可以实现安装wqy，或者google的字体(时间长)
+
+16.调整GUI的现实效果
+在默认的情况下,系统的xorg并没有加载显卡的驱动,首先需要确认驱动已经安装,然后在系统启动的时候加载启动模块,最后在xorg中启用显卡设置
+
+# vim /boot/loader.conf
+intel_load="YES"
+
+
+#vim /etc/X11/xorg.conf
+Section "Device"
+        Identifier "Card0"
+        Driver     "intel"
+EndSection
+
+注意:这里使用的是intel的显卡,加载的是i915kms.ko这个模块
+通过命令#kldstat 查看
+
+如果系统默认没有加载这个模块可以通过
+#vim /etc/rc.conf
+
+kld_list="/boot/modules/i915kms.ko"
+
+这里有描述
+https://forums.freebsd.org/threads/how-to-use-the-old-or-the-new-i915kms-driver-for-intel-integrated-graphics-with-xorg.66732/
+
+
+
+
+
+时区等等设置
+bsdconfig
+
+
+
+
+pkg install zh-fcitx zh-fcitx-chewing zh-fcitx-configtool zh-fcitx-table-extra
+
+
+
+
+pkg install  ibus(ibus-qt) zh-ibus-libpinyin zh-ibus-chewing zh-ibus-cangjie
+備註
+zh-ibus-libpinyin 中文拼音
+zh-ibus-chewing 中文注音
+zh-ibus-cangjie 中文倉頡
+ibus-qt 包使用 qt4，默認 ibus 使用 gtk3。
+
+
+
+
+
+中文输入法
+Fcitx输入法
+本来是写X的，但是fcitx和X还是有点关系的，使用startx和使用gdm登录的fcitx的配置方法是不一样的，这里对使用gdm的配置方法做一下说明。
+
+首先，你要安装：
+# cd /usr/ports/chinese/fcitx/
+# make install clean
+然后，你需要配置环境变量：
+配置环境变量的方法并不唯一，在这里通过profile来实现，把下述内容下如.profile，
+
+LC_CTYPE=zh_CN.UTF-8; export LC_CTYPE
+XMODIFIERS=@im=fcitx; export XMODIFIERS
+fcitx&
+前面两行是配置fcitx运行时需要的环境变量，最后一行是告诉系统开机自动运行fcitx。按照上述配置完以后，fcitx会在进入gnome桌面环境以后自动运行，激活的命令是Ctrl+Space，如果你觉得fcitx默认的外观比较难看的话，你可以修改你home下面的.fcitx/config中的参数文件来调整fcitx的外观。
+
+配置fcitx的关键是环境变量，使用gdm和使用startx对环境变量的处理是不一样的。使用其他的XDM时，主要注意的问题也是环境变量，就是说你所使用的XDM如何处理对待环境变量。在上面的配置中我使用UFT-8编码方案，其具体含义可参考locale环境变量的资料，此处不做详细介绍。
+
+另一种方法： 在~/.xinitrc加入
+
+export XMODIFIERS=@im=fcitx
+fcitx -d &
+IBus 输入法
+SCIM 输入法
+使用CSH，修改 ~/.cshrc 添加以下内容，在英文环境下使用中文输入法。并可在 /usr/local/share/scim/tables目录下删除多余的输入法。
+
+setenv	LC_CTYPE zh_CN.UTF-8
+setenv	XMODIFIERS @im=SCIM
+setenv	XIM SCIM
+setenv	XIM_PROGRAM scim
+setenv	GTK_IM_MODULE scim
+setenv	QT_IM_MODULE scim
+并安装以下软件：（当然你不必在意版本号）
+
+% pkg_info -Ix scim
+scim-1.4.9_1          Smart Common Input Method platform
+scim-bridge-0.4.16_1           Scim-bridge agent (server)
+scim-bridge-qt4-0.4.16_1           Qt4 client for Scim-bridge
+scim-table-imengine-0.5.10_1           SCIM table based input method engine
+zh-scim-pinyin-0.5.92           SCIM Chinese Smart Pinyin input method
+zh-scim-tables-0.5.10_1           SCIM table based Chinese input methods
+并在 ~/.xinitrc 文件中加入 scim -d & 启动SCIM输入法。
+
+
+
+sysrc dbus_enable="YES" hald_enable="YES" lightdm_enable="YES"​ snd_driver_load="YES"
+等同于在/etc/rc.conf文件里添加
+
+
+pkg install chromium 
+
+
+
+
+
+

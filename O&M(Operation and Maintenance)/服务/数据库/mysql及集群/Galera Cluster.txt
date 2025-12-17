@@ -1,0 +1,58 @@
+Galera Cluster用于mysql或者mariadb的集群，支持innodb及xtrdb引擎
+
+有三种角色，管理(manage node)，查询(daemon node)，数据节点(data node)
+管理主要用于启动集群，监控等等功能，查询用于对外提供服务，实际数据存储在数据节点
+
+这里有个关键的概念，数据节点。
+在Galera cluster的管理下，所有的数据表会被分片到所有的节点上，如果有N个节点，表会被分成N份，
+每个节点存储一份，所有的data nodes上保存真个数据库
+
+2个data nodes叫一个node groups(这里不一定是2个，可以有多个)
+在一个node groups中的2个node数据互为备份，即每个node上有自己的一份数据，叫primary replic，同时会备份一份数据到同一个group的另外一个data node(如果同一个data groups中有多个data node，则备份到另外几个data node上)，叫second replic。同时另外节点也会备份自己数据到本节点。
+
+-----------------------------------
+|          nodes groups           |	
+-----------------------------------
+|  data node1        data node2   |    
+| ............      ............  | 
+|     P0                 P1       |
+| ............      ............  | 
+|     S1                 S0       |            
+| ............      ............  | 
+|                                 |
+-----------------------------------
+
+data node1的primary P0备份到data node2的S0
+data node2的primary P1备份到data node1的S1
+
+根据上述的描述，可以知道，所有的节点的地位都平等。
+
+Network Partitioning Protocol协议用于保证所有节点之间的通讯，本质上是为了防止“脑裂”出现
+所有的集群节点都认可一个仲裁服务器,那就是管理服务器;不过,可以把集群中的任意服务器配置称为仲裁服务器.
+所有的nodes groups都会联系仲裁者，如果没有成功，则会关闭自己。
+
+
+数据节点使用2个程序保持磁盘上的数据完整
+redo log
+事务被记录到REDO LOG buffer中，每个周期，被同步刷新到磁盘上，REDO LOG中只包含当刷新发生时候的事务，刷新通过global checkpoint或者GCP来实现。
+global checkpoint每隔几秒会发生一次，所有节点同步完成，并且redo log刷新到磁盘上。
+
+因为REDO LOG会无限循环的增长，所以必须限制，通过Local checkpoint或者LCP来达到目的，通过LCP，在数据被丢弃的时间点之前，数据节点将会存储一个所有REDO LOG日志内容的快照。
+因为安全性考虑，数据节点会保存2个LCP在磁盘上，第1个LCP开始到第3个LCP开始，当继续循环的时候，第3个将覆盖第1个
+local checkpoint是一种特殊的checkpoint，所有的data node都存在。
+LCP和REDO LOG用于节点恢复。从磁盘上恢复数据到最后的GCP点，并且在其恢复到主状态之前，从另一个节点恢复(同一个node group中)剩余的改变，当集群正常关闭的时候，所有节点将会保留最后的GCP。
+
+cluster使用同步复制的方式同步所有节点
+这里有一种协议the two-phase commit procotol(2PC)
+协议设计一种模式
+每个事务有2个阶段
+1.预备阶段 数据节点执行请求操作，预备提交事物，或者完成或者放弃
+2.提交阶段 事物被提交，所有的改变将不可回滚
+
+当某个MySql Server联系某个数据节点(或者某个数据节点联系MySql Server)，这个数据节点将会成为一个叫做协调者(coodination)或者管理者的角色
+而每台data node上都有一个transcation coodination的模块，并且是在此次transcations中
+TC将计算行所在的分片(因为表被分片到所有的数据节点)，然后把请求的操作提交到这个节点的primary replic，而primary replic将会执行操作同时锁行，相同的操作将被发送到同一个node group中的另一个节点的second replic，一旦second replic的操作执行完毕，TC将会被联系操作被提交或者取消
+
+提交阶段，执行次序正好相反，首先是在second replic上执行提交操作，然后在primary replic上执行，最后通知TC，TC收到消息将结果提交给客户端。
+
+

@@ -1,0 +1,24 @@
+目录结构：
+├── Debug
+│   ├── makefile
+│   ├── objects.mk
+│   ├── sources.mk
+│   └── subdir.mk
+├── main.cc
+├── md5.cpp
+├── md5.h
+├── send_msg.cc
+└── send_msg.h
+
+可以分开编译，先编译成单独的.o文件，然后编译最后。
+进入到Debug目录中，分开编译各个.cc文件
+
+g++ -O0 -g3 -Wall -c -fmessage-length=0 -pthread -std=c++11 -Wl,--no-as-needed -MMD -MP -MF"main.d" -MT"main.o" -o "main.o" "../main.cc"
+
+g++ -O0 -g3 -Wall -c -fmessage-length=0 -pthread -std=c++11 -Wl,--no-as-needed -MMD -MP -MF"md5.d" -MT"md5.o" -o "md5.o" "../md5.cpp"
+
+g++ -O0 -g3 -Wall -c -fmessage-length=0 -pthread -std=c++11 -Wl,--no-as-needed -MMD -MP -MF"send_msg.d" -MT"send_msg.o" -o "send_msg.o" "../send_msg.cc"
+
+g++ -pthread -std=c++11 -Wl,--no-as-needed -o "send_msg_v2"  ./main.o ./md5.o ./send_msg.o   -lboost_system -lcrypto -lboost_filesystem
+
+ 

@@ -1,0 +1,1301 @@
+索引:
+----------------------------------------------------------------------------------------------------------------
+第八部分(8/16)
+# 运行 Jobs
+
+## 使用 CronJob 运行自动化任务 - 类似 crontab 计划任务在 k8s 平台上运行,其中在 cronjob 上可以定义类似建立 pod 的 job
+本章节演示如何使用 Kubernetes CronJob 对象运行自动化任务.
+
+* 创建 CronJob
+CronJob 需要一个配置文件.以下是针对一个 CronJob 的清单,该 CronJob 每分钟运行一个简单的演示任务: 
+
+cronjob.yaml
+-------------------------
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: hello
+spec:
+  schedule: "* * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: hello
+            image: busybox:1.28
+            imagePullPolicy: IfNotPresent
+            command:
+            - /bin/sh
+            - -c
+            - date; echo Hello from the Kubernetes cluster
+          restartPolicy: OnFailure
+-------------------------------------
+执行以下命令以运行此 CronJob 示例: 
+$ kubectl create -f cronjob.yaml
+
+输出类似于: 
+cronjob.batch/hello created
+
+创建好 CronJob 后,使用下面的命令来获取其状态: 
+$ kubectl get cronjob hello
+
+输出类似于: 
+NAME    SCHEDULE      SUSPEND   ACTIVE   LAST SCHEDULE   AGE
+hello   */1 * * * *   False     0        <none>          10s
+
+就像你从命令返回结果看到的那样,CronJob 还没有调度或执行任何任务.等待大约一分钟,以观察作业的创建进程: 
+$ kubectl get jobs --watch
+
+输出类似于: 
+NAME               COMPLETIONS   DURATION   AGE
+hello-4111706356   0/1                      0s
+hello-4111706356   0/1           0s         0s
+hello-4111706356   1/1           5s         5s
+
+现在你已经看到了一个运行中的任务被 “hello” CronJob 调度.你可以停止监视这个任务,然后再次查看 CronJob 就能看到它调度任务: 
+$ kubectl get cronjob hello
+
+输出类似于: 
+NAME    SCHEDULE      SUSPEND   ACTIVE   LAST SCHEDULE   AGE
+hello   */1 * * * *   False     0        50s             75s
+
+你应该能看到 hello CronJob 在 LAST SCHEDULE 声明的时间点成功地调度了一次任务.目前有 0 个活跃的任务,这意味着任务执行完毕或者执行失败.
+
+现在,找到最后一次调度任务创建的 Pod 并查看一个 Pod 的标准输出.
+
+说明: 
+Job 名称与 Pod 名称不同.
+
+# 在你的系统上将 "hello-4111706356" 替换为 Job 名称
+pods=$(kubectl get pods --selector=job-name=hello-4111706356 --output=jsonpath={.items..metadata.name})
+
+查看 Pod 日志: 
+$ kubectl logs $pods
+
+输出类似于: 
+Fri Feb 22 11:02:09 UTC 2019
+Hello from the Kubernetes cluster
+
+* 删除 CronJob
+当你不再需要 CronJob 时,可以用 kubectl delete cronjob <cronjob name> 删掉它: 
+$ kubectl delete cronjob hello
+
+删除 CronJob 会清除它创建的所有任务和 Pod,并阻止它创建额外的任务.
+
+## 使用工作队列进行粗粒度并行处理
+本例中,你将会运行包含多个并行工作进程的 Kubernetes Job.
+
+本例中,每个 Pod 一旦被创建,会立即从任务队列中取走一个工作单元并完成它,然后将工作单元从队列中删除后再退出.
+
+下面是本次示例的主要步骤: 
+1. 启动一个消息队列服务.本例中,我们使用 RabbitMQ,你也可以用其他的消息队列服务.在实际工作环境中,你可以创建一次消息队列服务然后在多个任务中重复使用.
+2. 创建一个队列,放上消息数据.每个消息表示一个要执行的任务.本例中,每个消息是一个整数值.我们将基于这个整数值执行很长的计算操作.
+3. 启动一个在队列中执行这些任务的 Job.该 Job 启动多个 Pod.每个 Pod 从消息队列中取走一个任务,处理任务,然后退出.
+
+* 启动消息队列服务 
+本例使用了 RabbitMQ,但你可以更改该示例,使用其他 AMQP 类型的消息服务.
+
+在实际工作中,在集群中一次性部署某个消息队列服务,之后在很多 Job 中复用,包括需要长期运行的服务.
+
+按下面的方法启动 RabbitMQ: 
+
+# 为 StatefulSet 创建一个 Service 来使用
+$ kubectl create -f https://kubernetes.io/examples/application/job/rabbitmq/rabbitmq-service.yaml
+service "rabbitmq-service" created
+
+$ kubectl create -f https://kubernetes.io/examples/application/job/rabbitmq/rabbitmq-statefulset.yaml
+statefulset "rabbitmq" created
+
+* 测试消息队列服务
+现在,我们可以试着访问消息队列.我们将会创建一个临时的可交互的 Pod,在它上面安装一些工具,然后用队列做实验.
+
+首先创建一个临时的可交互的 Pod: 
+
+# 创建一个临时的可交互的 Pod
+$ kubectl run -i --tty temp --image ubuntu:22.04
+
+Waiting for pod default/temp-loe07 to be running,status is Pending,pod ready: false
+... [ previous line repeats several times .. hit return when it stops ] ...
+
+请注意你的 Pod 名称和命令提示符将会不同.
+
+接下来安装 amqp-tools,这样你就能用消息队列了.下面是在该 Pod 的交互式 shell 中需要运行的命令: 
+$ apt-get update && apt-get install -y curl ca-certificates amqp-tools python3 dnsutils
+
+后续,你将制作一个包含这些包的容器镜像.
+
+接着,你将要验证可以发现 RabbitMQ 服务: 
+
+# 在 Pod 内运行这些命令
+# 请注意 rabbitmq-service 拥有一个由 Kubernetes 提供的 DNS 名称: 
+
+nslookup rabbitmq-service
+Server:        10.0.0.10
+Address:    10.0.0.10#53
+
+Name:    rabbitmq-service.default.svc.cluster.local
+Address: 10.0.147.152
+(IP 地址会有所不同)
+
+如果 kube-dns 插件没有正确安装,上一步可能会出错.你也可以在环境变量中找到该服务的 IP 地址.
+
+# 在 Pod 内运行此检查
+env | grep RABBITMQ_SERVICE | grep HOST
+RABBITMQ_SERVICE_SERVICE_HOST=10.0.147.152
+(IP 地址会有所不同)
+
+接下来,你将验证是否可以创建队列以及发布和使用消息.
+
+# 在 Pod 内运行这些命令
+# 下一行,rabbitmq-service 是访问 rabbitmq-service 的主机名.5672是 rabbitmq 的标准端口.
+
+export BROKER_URL=amqp://guest:guest@rabbitmq-service:5672
+
+# 如果上一步中你不能解析 "rabbitmq-service",可以用下面的命令替换: 
+BROKER_URL=amqp://guest:guest@$RABBITMQ_SERVICE_SERVICE_HOST:5672
+
+# 现在创建队列: 
+/usr/bin/amqp-declare-queue --url=$BROKER_URL -q foo -d foo
+foo
+
+向队列推送一条消息: 
+/usr/bin/amqp-publish --url=$BROKER_URL -r foo -p -b Hello
+
+# 然后取回它: 
+/usr/bin/amqp-consume --url=$BROKER_URL -q foo -c 1 cat && echo
+Hello
+
+最后一个命令中,amqp-consume 工具从队列中取走了一个消息,并把该消息传递给了随机命令的标准输出.在这种情况下,cat 会打印它从标准输入中读取的字符,echo 会添加回车符以便示例可读.
+
+* 为队列增加任务
+现在用一些模拟任务填充队列.在此示例中,任务是多个待打印的字符串.
+
+实践中,消息的内容可以是: 
+. 待处理的文件名
+. 程序额外的参数
+. 数据库表的关键字范围
+. 模拟任务的配置参数
+. 待渲染的场景的帧序列号
+
+如果有大量的数据需要被 Job 的所有 Pod 读取,典型的做法是把它们放在一个共享文件系统中,如 NFS(Network File System 网络文件系统),并以只读的方式挂载到所有 Pod,或者 Pod 中的程序从类似 HDFS (Hadoop Distributed File System 分布式文件系统)的集群文件系统中读取.
+
+例如,你将创建队列并使用 AMQP 命令行工具向队列中填充消息.实践中,你可以写个程序来利用 AMQP 客户端库来填充这些队列.
+
+# 在你的计算机上运行此命令,而不是在 Pod 中 - 注意: 不一定需要在本地计算机上,在任意一个能解析到 kubernetes 的 service 的地方都可以,这里使用的是一个 pod,在 pod 中安装了 apt-get update && apt-get install -y curl ca-certificates amqp-tools python --no-install-recommends 这些工具,用以创建队列并向队列中推送消息.
+$ export BROKER_URL=amqp://guest:guest@rabbitmq-service:5672
+或者 
+$ export BROKER_URL=amqp://guest:guest@$RABBITMQ_SERVICE_SERVICE_HOST:5672
+$ /usr/bin/amqp-declare-queue --url=$BROKER_URL -q job1  -d
+job1
+
+将这几项添加到队列中: 
+$ for f in apple banana cherry date fig grape lemon melon
+do
+  /usr/bin/amqp-publish --url=$BROKER_URL -r job1 -p -b $f
+done
+
+你给队列中填充了 8 个消息.
+
+* 创建容器镜像 - 注意,当前运行的容器是使用 containerd 来完成的,因此,这部分的内容需要在有 docker 的机器上完成
+现在你可以创建一个做为 Job 来运行的镜像.
+
+这个 Job 将用 amqp-consume 实用程序从队列中读取消息并进行实际工作.这里给出一个非常简单的示例程序: 
+
+worker.py
+--------------------------
+#!/usr/bin/env python
+
+# Just prints standard out and sleeps for 10 seconds.
+import sys
+import time
+print("Processing " + sys.stdin.readlines()[0])
+time.sleep(10)
+-------------------
+
+赋予脚本执行权限: 
+$ chmod +x worker.py
+
+现在,编译镜像.创建一个临时目录,切换到这个目录.下载 Dockerfile(https://kubernetes.io/examples/application/job/rabbitmq/Dockerfile) 和 worker.py(https://kubernetes.io/examples/application/job/rabbitmq/worker.py).无论哪种情况,都可以用下面的命令编译镜像: 
+$ docker build -t job-wq-1 .
+
+对于 Docker Hub,给你的应用镜像打上标签,标签为你的用户名,然后用下面的命令推送到 Hub.用你的 Hub 用户名替换 <username>.
+docker tag job-wq-1 <username>/job-wq-1
+docker push <username>/job-wq-1
+
+如果你使用替代的镜像仓库,请标记该镜像并将其推送到那里.
+
+* 定义 Job
+这里给出一个 Job 的清单.你需要复制一份 Job 清单的副本(将其命名为 ./job.yaml),并编辑容器镜像的名称以匹配使用的名称.
+
+job.yaml
+-----------------------------
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: job-wq-1
+spec:
+  completions: 8
+  parallelism: 2
+  template:
+    metadata:
+      name: job-wq-1
+    spec:
+      containers:
+      - name: c
+        image: gcr.io/<project>/job-wq-1
+        env:
+        - name: BROKER_URL
+          value: amqp://guest:guest@rabbitmq-service:5672
+        - name: QUEUE
+          value: job1
+      restartPolicy: OnFailure
+-------------------------------------
+
+本例中,每个 Pod 使用队列中的一个消息然后退出.这样,Job 的完成计数就代表了完成的工作项的数量.这就是示例清单将 .spec.completions 设置为 8 的原因.
+
+* 运行 Job 
+运行 Job: 
+前提是已经完成上述建立队列,推送消息的过程,并且用于取消息的镜像已经做好.
+
+$ kubectl apply -f ./job.yaml
+
+你可以等待 Job 在某个超时时间后成功: 
+
+# 状况名称的检查不区分大小写
+$ kubectl wait --for=condition=complete --timeout=300s job/job-wq-1
+
+接下来查看 Job: 
+$ kubectl describe jobs/job-wq-1
+
+Name:             job-wq-1
+Namespace:        default
+Selector:         batch.kubernetes.io/controller-uid=012a0552-08c3-4e97-a679-b24f6bd02c31
+Labels:           batch.kubernetes.io/controller-uid=012a0552-08c3-4e97-a679-b24f6bd02c31
+                  batch.kubernetes.io/job-name=job-wq-1
+                  controller-uid=012a0552-08c3-4e97-a679-b24f6bd02c31
+                  job-name=job-wq-1
+Annotations:      <none>
+Parallelism:      2
+Completions:      8
+Completion Mode:  NonIndexed
+Suspend:          false
+Backoff Limit:    6
+Start Time:       Wed,23 Oct 2024 09:24:23 +0000
+Completed At:     Wed,23 Oct 2024 09:24:44 +0000
+Duration:         21s
+Pods Statuses:    0 Active (0 Ready) / 8 Succeeded / 0 Failed
+Pod Template:
+  Labels:  batch.kubernetes.io/controller-uid=012a0552-08c3-4e97-a679-b24f6bd02c31
+           batch.kubernetes.io/job-name=job-wq-1
+           controller-uid=012a0552-08c3-4e97-a679-b24f6bd02c31
+           job-name=job-wq-1
+  Containers:
+   c:
+    Image:      job-wq-1
+    Port:       <none>
+    Host Port:  <none>
+    Environment:
+      BROKER_URL:  amqp://guest:guest@rabbitmq-service:5672
+      QUEUE:       job1
+    Mounts:        <none>
+  Volumes:         <none>
+  Node-Selectors:  <none>
+  Tolerations:     <none>
+Events:
+  Type    Reason            Age   From            Message
+  ----    ------            ----  ----            -------
+  Normal  SuccessfulCreate  91s   job-controller  Created pod: job-wq-1-bgb25
+  Normal  SuccessfulCreate  91s   job-controller  Created pod: job-wq-1-cvkkc
+  Normal  SuccessfulCreate  87s   job-controller  Created pod: job-wq-1-xvfh8
+  Normal  SuccessfulCreate  83s   job-controller  Created pod: job-wq-1-mw967
+  Normal  SuccessfulCreate  82s   job-controller  Created pod: job-wq-1-b9vfm
+  Normal  SuccessfulCreate  79s   job-controller  Created pod: job-wq-1-4dhjb
+  Normal  SuccessfulCreate  78s   job-controller  Created pod: job-wq-1-4p94f
+  Normal  SuccessfulCreate  75s   job-controller  Created pod: job-wq-1-dkqnn
+  Normal  Completed         70s   job-controller  Job completed
+
+该 Job 的所有 Pod 都已成功！
+
+* 替代方案
+本文所讲述的处理方法的好处是你不需要修改你的 "worker" 程序使其知道工作队列的存在.你可以将未修改的工作程序包含在容器镜像中.
+
+使用此方法需要你运行消息队列服务.如果不方便运行消息队列服务,你也许会考虑另外一种任务模式(https://kubernetes.io/zh-cn/docs/concepts/workloads/controllers/job/#job-patterns).- 此种模式是通用的任务模式,即启动一个镜像,完成任务,销毁,使用的也是 kind: Job
+
+本文所述的方法为每个工作项创建了一个 Pod.如果你的工作项仅需数秒钟,为每个工作项创建 Pod 会增加很多的常规消耗.考虑另一种设计,例如精细并行工作队列(见后章节)示例,这种方案可以实现每个 Pod 执行多个工作项.
+
+示例中,你使用了 amqp-consume 从消息队列读取消息并执行真正的程序.这样的好处是你不需要修改你的程序使其知道队列的存在.
+
+* 友情提醒
+如果设置的完成数量小于队列中的消息数量,会导致一部分消息项不会被执行.
+
+如果设置的完成数量大于队列中的消息数量,当队列中所有的消息都处理完成后,Job 也会显示为未完成.Job 将创建 Pod 并阻塞等待消息输入.你需要建立自己的机制来发现何时有工作要做,并测量队列的大小,设置匹配的完成数量.
+
+当发生下面两种情况时,即使队列中所有的消息都处理完了,Job 也不会显示为完成状态: 
+. 在 amqp-consume 命令拿到消息和容器成功退出之间的时间段内,执行杀死容器操作;
+. 在 kubelet 向 API 服务器传回 Pod 成功运行之前,发生节点崩溃.
+
+## 带 Pod 间通信的 Job - 使用"索引完成模式"的 Job,类似 statefulset 的具有固定 pod 名称的模式,比如: job-name-0-xcv,job-name-1-dfx,job-name-2-dfe ... 这样的名称的 pod.同时在 pod 中能解析到的 hostname 为 JobName-${i}.ServiceName 这样的固定样式
+
+在此例中,你将以索引完成模式运行一个 Job,并通过配置使得该 Job 所创建的各 Pod 之间可以使用 Pod 主机名而不是 Pod IP 地址进行通信.
+
+某 Job 内的 Pod 之间可能需要通信.每个 Pod 中运行的用户工作负载可以查询 Kubernetes API 服务器以获知其他 Pod 的 IP,但使用 Kubernetes 内置的 DNS 解析会更加简单.
+
+索引完成模式下的 Job 自动将 Pod 的主机名设置为 ${jobName}-${completionIndex} 的格式.你可以使用此格式确定性地构建 Pod 主机名并启用 Pod 通信,无需创建到 Kubernetes 控制平面的客户端连接来通过 API 请求获取 Pod 主机名/IP.
+
+此配置可用于需要 Pod 联网但不想依赖 Kubernetes API 服务器网络连接的使用场景.
+
+* 启动带 Pod 间通信的 Job 
+要在某 Job 中启用使用 Pod 主机名的 Pod 间通信,你必须执行以下操作: 
+1. 对于 Job 所创建的那些 Pod,使用一个有效的标签选择算符创建无头服务.该无头服务必须位于与该 Job 相同的名字空间内.实现这一目的的一种简单的方式是使用 job-name: <任务名称> 作为选择算符,因为 job-name 标签将由 Kubernetes 自动添加.此配置将触发 DNS 系统为运行 Job 的 Pod 创建其主机名的记录.
+2. 通过将以下值包括到你的 Job 模板规约中,针对该 Job 的 Pod,将无头服务配置为其子域服务: 
+
+subdomain: <无头服务的名称>
+
+** 示例
+以下是启用通过 Pod 主机名来完成 Pod 间通信的 Job 示例.只有在使用主机名成功 ping 通所有 Pod 之后,此 Job 才会结束.
+
+说明: 
+在以下示例中的每个 Pod 中执行的 Bash 脚本中,如果需要从名字空间外到达 Pod,Pod 主机名也可以带有该名字空间作为前缀.
+----------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: headless-svc
+spec:
+  clusterIP: None # clusterIP 必须为 None 以创建无头服务
+  selector:
+    job-name: example-job # 必须与 Job 名称匹配
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: example-job
+spec:
+  completions: 3
+  parallelism: 3
+  completionMode: Indexed
+  template:
+    spec:
+      subdomain: headless-svc # 必须与 Service 名称匹配
+      restartPolicy: Never
+      containers:
+      - name: example-workload
+        image: bash:latest
+        command:
+        - bash
+        - -c
+        - |
+          for i in 0 1 2
+          do
+            gotStatus="-1"
+            wantStatus="0"             
+            while [ $gotStatus -ne $wantStatus ]
+            do                                       
+              ping -c 1 example-job-${i}.headless-svc > /dev/null 2>&1
+              gotStatus=$?                
+              if [ $gotStatus -ne $wantStatus ]; then
+                echo "Failed to ping pod example-job-${i}.headless-svc,retrying in 1 second..."
+                sleep 1
+              fi
+            done                                                         
+            echo "Successfully pinged pod: example-job-${i}.headless-svc"
+          done       
+------------------------------------
+应用上述示例之后,使用 <Pod 主机名>.<无头服务名> 通过网络到达彼此.你应看到类似以下的输出: 
+
+$ kubectl logs example-job-0-qws42
+Failed to ping pod example-job-0.headless-svc,retrying in 1 second...
+Successfully pinged pod: example-job-0.headless-svc
+Successfully pinged pod: example-job-1.headless-svc
+Successfully pinged pod: example-job-2.headless-svc
+
+说明: 
+谨记此例中使用的 <Pod 主机名>.<无头服务名称> 名称格式不适用于设置为 None 或 Default 的 DNS 策略.
+
+## 使用工作队列进行精细的并行处理
+在此章节中,你将运行一个 Kubernetes Job,该 Job 将多个并行任务作为工作进程运行,每个任务在单独的 Pod 中运行.
+
+在这个例子中,当每个 Pod 被创建时,它会从一个任务队列中获取一个工作单元,处理它,然后重复,直到到达队列的尾部.
+
+下面是这个示例的步骤概述: 
+1. 启动存储服务用于保存工作队列.在这个例子中,你将使用 Redis 来存储工作项.在上一个例子中,你使用了 RabbitMQ.在这个例子中,由于 AMQP 不能为客户端提供一个良好的方法来检测一个有限长度的工作队列是否为空,你将使用 Redis 和一个自定义的工作队列客户端库.在实践中,你可能会设置一个类似于 Redis 的存储库,并将其同时用于多项任务或其他事务的工作队列.
+2. 创建一个队列,然后向其中填充消息.每个消息表示一个将要被处理的工作任务.在这个例子中,消息是一个我们将用于进行长度计算的整数.
+3. 启动一个 Job 对队列中的任务进行处理.这个 Job 启动了若干个 Pod.每个 Pod 从消息队列中取出一个工作任务,处理它,然后重复,直到到达队列的尾部.
+
+* 启动 Redis 
+对于这个例子,为了简单起见,你将启动一个单实例的 Redis.了解如何部署一个可伸缩、高可用的 Redis 例子,请查看 Redis 示例
+
+你也可以直接下载如下文件: 
+. redis-pod.yaml  (https://kubernetes.io/examples/application/job/redis/redis-pod.yaml)
+. redis-service.yaml  (https://kubernetes.io/examples/application/job/redis/redis-service.yaml)
+. Dockerfile  (https://kubernetes.io/examples/application/job/redis/Dockerfile)
+. job.yaml  (https://kubernetes.io/examples/application/job/redis/job.yaml)
+. rediswq.py  (https://kubernetes.io/examples/application/job/redis/rediswq.py)
+. worker.py (https://kubernetes.io/examples/application/job/redis/worker.py)
+
+要启动一个 Redis 实例,你需要创建 Redis Pod 和 Redis 服务: 
+$ kubectl apply -f https://k8s.io/examples/application/job/redis/redis-pod.yaml
+$ kubectl apply -f https://k8s.io/examples/application/job/redis/redis-service.yaml
+
+* 使用任务填充队列 
+现在,让我们往队列里添加一些“任务”.在这个例子中,我们的任务是一些将被打印出来的字符串.
+
+启动一个临时的可交互的 Pod 用于运行 Redis 命令行界面.
+$ kubectl run -i --tty temp --image redis --command "/bin/sh"
+
+输出类似于: 
+Waiting for pod default/redis2-c7h78 to be running,status is Pending,pod ready: false
+Hit enter for command prompt
+
+现在按回车键,启动 Redis 命令行界面,然后创建一个存在若干个工作项的列表.
+redis-cli -h redis
+
+redis:6379> rpush job2 "apple"
+(integer) 1
+redis:6379> rpush job2 "banana"
+(integer) 2
+redis:6379> rpush job2 "cherry"
+(integer) 3
+redis:6379> rpush job2 "date"
+(integer) 4
+redis:6379> rpush job2 "fig"
+(integer) 5
+redis:6379> rpush job2 "grape"
+(integer) 6
+redis:6379> rpush job2 "lemon"
+(integer) 7
+redis:6379> rpush job2 "melon"
+(integer) 8
+redis:6379> rpush job2 "orange"
+(integer) 9
+redis:6379> lrange job2 0 -1
+1) "apple"
+2) "banana"
+3) "cherry"
+4) "date"
+5) "fig"
+6) "grape"
+7) "lemon"
+8) "melon"
+9) "orange"
+
+因此,这个键为 job2 的列表就是工作队列.
+
+注意: 如果你还没有正确地配置 Kube DNS,你可能需要将上面的第一步改为 redis-cli -h $REDIS_SERVICE_HOST
+
+* 创建容器镜像 - 注意,当前运行的容器是使用 containerd 来完成的,因此,这部分的内容需要在有 docker 的机器上完成
+现在你可以创建一个做为 Job 来运行的镜像.
+
+现在你已准备好创建一个镜像来处理该队列中的工作.
+
+你将使用一个带有 Redis 客户端的 Python 工作程序从消息队列中读出消息.
+
+这里提供了一个简单的 Redis 工作队列客户端库,名为 rediswq.py.
+
+Job 中每个 Pod 内的“工作程序” 使用工作队列客户端库获取工作.具体如下: 
+
+worker.py
+--------------------------
+#!/usr/bin/env python
+
+import time
+import rediswq
+
+host="redis"
+# 如果你未在运行 Kube-DNS,请取消下面两行的注释
+# import os
+# host = os.getenv("REDIS_SERVICE_HOST")
+
+q = rediswq.RedisWQ(name="job2",host=host)
+print("Worker with sessionID: " +  q.sessionID())
+print("Initial queue state: empty=" + str(q.empty()))
+while not q.empty():
+  item = q.lease(lease_secs=10,block=True,timeout=2)
+  if item is not None:
+    itemstr = item.decode("utf-8")
+    print("Working on " + itemstr)
+    time.sleep(10) # 将你的实际工作放在此处来取代 sleep
+    q.complete(item)
+  else:
+    print("Waiting for work")
+print("Queue empty,exiting")
+-------------------------------------
+你也可以下载 worker.py、 rediswq.py 和 Dockerfile 文件.然后构建容器镜像.以下是使用 Docker 进行镜像构建的示例: 
+
+docker build -t job-wq-2 .
+
+** Push 镜像 
+对于 Docker Hub,请先用你的用户名给镜像打上标签,然后使用下面的命令 push 你的镜像到仓库.请将 <username> 替换为你自己的 Hub 用户名.
+$ docker tag job-wq-2 <username>/job-wq-2
+$ docker push <username>/job-wq-2
+
+你需要将镜像 push 到一个公共仓库或者 配置集群访问你的私有仓库.
+
+* 定义一个 Job
+以下是你将创建的 Job 的清单: 
+
+job.yaml
+-----------------------------
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: job-wq-2
+spec:
+  parallelism: 2
+  template:
+    metadata:
+      name: job-wq-2
+    spec:
+      containers:
+      - name: c
+        image: gcr.io/myproject/job-wq-2
+      restartPolicy: OnFailure
+----------------------------------------------
+说明: 
+请确保将 Job 清单中的 gcr.io/myproject 更改为你自己的路径.
+
+在这个例子中,每个 Pod 处理了队列中的多个项目,直到队列中没有项目时便退出.因为是由工作程序自行检测工作队列是否为空,并且 Job 控制器不知道工作队列的存在,这依赖于工作程序在完成工作时发出信号.工作程序以成功退出的形式发出信号表示工作队列已经为空.所以,只要有任意一个工作程序成功退出,控制器就知道工作已经完成了,所有的 Pod 将很快会退出.因此,你不需要设置 Job 的完成次数.Job 控制器还是会等待其它 Pod 完成.
+
+* 运行 Job
+前提是已经完成上述建立队列,推送消息的过程,并且用于取消息的镜像已经做好.
+
+现在运行这个 Job: 
+
+# 这假设你已经下载并编辑了清单
+kubectl apply -f ./job.yaml
+
+稍等片刻,然后检查这个 Job: 
+$ kubectl describe jobs/job-wq-2
+Name:             job-wq-2
+Namespace:        default
+Selector:         controller-uid=b1c7e4e3-92e1-11e7-b85e-fa163ee3c11f
+Labels:           controller-uid=b1c7e4e3-92e1-11e7-b85e-fa163ee3c11f
+                  job-name=job-wq-2
+Annotations:      <none>
+Parallelism:      2
+Completions:      <unset>
+Start Time:       Mon,11 Jan 2022 17:07:59 +0000
+Pods Statuses:    1 Running / 0 Succeeded / 0 Failed
+Pod Template:
+  Labels:       controller-uid=b1c7e4e3-92e1-11e7-b85e-fa163ee3c11f
+                job-name=job-wq-2
+  Containers:
+   c:
+    Image:              container-registry.example/exampleproject/job-wq-2
+    Port:
+    Environment:        <none>
+    Mounts:             <none>
+  Volumes:              <none>
+Events:
+  FirstSeen    LastSeen    Count    From            SubobjectPath    Type        Reason            Message
+  ---------    --------    -----    ----            -------------    --------    ------            -------
+  33s          33s         1        {job-controller }                Normal      SuccessfulCreate  Created pod: job-wq-2-lglf8
+
+你可以等待 Job 成功,等待时长有超时限制: 
+
+# 状况名称的检查不区分大小写
+kubectl wait --for=condition=complete --timeout=300s job/job-wq-2
+
+$ kubectl logs pods/job-wq-2-7r7b2
+Worker with sessionID: bbd72d0a-9e5c-4dd6-abf6-416cc267991f
+Initial queue state: empty=False
+Working on banana
+Working on date
+Working on lemon
+
+你可以看到,此 Job 中的一个 Pod 处理了若干个工作单元.
+
+* 替代方案 
+如果你不方便运行一个队列服务或者修改你的容器用于运行一个工作队列,你可以考虑其它的 Job 模式(https://kubernetes.io/zh-cn/docs/concepts/workloads/controllers/job/#job-patterns).
+
+如果你有持续的后台处理业务,那么可以考虑使用 ReplicaSet 来运行你的后台业务,和运行一个类似 https://github.com/resque/resque 的后台处理库
+
+^^^^^^^^^^^^^^^^^^^^
+# 这里有个问题,当某一个 pod 完成将队列中的最后一个任务处理完毕以后,是如何通知控制器,job 完成了,这里如何处理的?
+# 重点: 根据下面的详细描述,队列并行的 Job 是否完成的关键在于某一个 pod 中的应用程序在完成队列的最后一项工作以后,关闭自己所在的 pod.
+# 详细的信息通过 "适合以 Job 形式来运行的任务主要有三种: " 来描述
+1. 非并行 Job: 
+  . 通常只启动一个 Pod,除非该 Pod 失败.
+  . 当 Pod 成功终止时,立即视 Job 为完成状态.
+
+对于非并行的 Job,你可以不设置 spec.completions 和 spec.parallelism.这两个属性都不设置时,均取默认值 1.
+
+2. 具有确定完成计数的并行 Job: 
+  . .spec.completions 字段设置为非 0 的正数值.
+  . Job 用来代表整个任务,当成功的 Pod 个数达到 .spec.completions 时,Job 被视为完成.
+  . 当使用 .spec.completionMode="Indexed" 时,每个 Pod 都会获得一个不同的 索引值,介于 0 和 .spec.completions-1 之间.
+
+对于确定完成计数类型的 Job,你应该设置 .spec.completions 为所需要的完成个数.你可以设置 .spec.parallelism,也可以不设置.其默认值为 1.
+
+3. 带工作队列的并行 Job: 
+  . 不设置 spec.completions,默认值为 .spec.parallelism.
+  . 多个 Pod 之间必须相互协调,或者借助外部服务确定每个 Pod 要处理哪个工作条目.例如,任一 Pod 都可以从工作队列中取走最多 N 个工作条目.
+  . 每个 Pod 都可以独立确定是否其它 Pod 都已完成,进而确定 Job 是否完成.
+  . 当 Job 中任何 Pod 成功终止,不再创建新 Pod.
+  . 一旦至少 1 个 Pod 成功完成,并且所有 Pod 都已终止,即可宣告 Job 成功完成.
+  . 一旦任何 Pod 成功退出,任何其它 Pod 都不应再对此任务执行任何操作或生成任何输出.所有 Pod 都应启动退出过程.
+
+对于一个工作队列 Job,你不可以设置 .spec.completions,但要将 .spec.parallelism 设置为一个非负整数.
+
+说明: Job 属于那种工作模式,取决于 .spec.completions 和 .spec.parallelism 的值.
+如下:
+---------------------------------------------------------------------------------------------------
+               配置参数                   | 非并行 Job 取值 | 具有确定完成计数的并行 Job 取值 | 带工作队列的并行 Job 取值 |
+---------------------------------------------------------------------------------------------------
+.spec.completions                 null              > 0 整数                                                             null
+.spec.parallelism                 null              null                         > 0 整数
+默认值(completions/parallelism)    1/1               /1                           null/
+---------------------------------------------------------------------------------------------------
+
+# 重要: 上述的 3 中任务中,带有 .spec.completionMode="Indexed",并且 completions 和 parallelism 都有计数或者 completions 和 parallelism 都有值的需要特别注意,后面的章节会讲解到.
+
+# 并行计算模式的取舍
+Job 对象可以用来处理一组相互独立而又彼此关联的“工作条目”.这类工作条目可能是要发送的电子邮件、要渲染的视频帧、要编解码的文件、NoSQL 数据库中要扫描的主键范围等等.
+
+在一个复杂系统中,可能存在多个不同的工作条目集合.这里我们仅考虑用户希望一起管理的工作条目集合之一: 批处理作业.
+
+并行计算的模式有好多种,每种都有自己的强项和弱点.这里要权衡的因素有: 
+  . 每个工作条目对应一个 Job 或者所有工作条目对应同一 Job 对象.为每个工作条目创建一个 Job 的做法会给用户带来一些额外的负担,系统需要管理大量的 Job 对象.用一个 Job 对象来完成所有工作条目的做法更适合处理大量工作条目的场景.
+  . 创建数目与工作条目相等的 Pod 或者令每个 Pod 可以处理多个工作条目.当 Pod 个数与工作条目数目相等时,通常不需要在 Pod 中对现有代码和容器做较大改动； 让每个 Pod 能够处理多个工作条目的做法更适合于工作条目数量较大的场合.
+  . 有几种技术都会用到工作队列.这意味着需要运行一个队列服务,并修改现有程序或容器使之能够利用该工作队列.与之比较,其他方案在修改现有容器化应用以适应需求方面可能更容易一些.
+  . 当 Job 与某个无头 Service 之间存在关联时,你可以让 Job 中的 Pod 之间能够相互通信,从而协作完成计算.
+
+下面是对这些权衡的汇总,第 2 到 4 列对应上面的权衡比较.模式的名称对应了相关示例和更详细描述的链接.
+----------------------------------------------------------------------------------------------------------
+模式	                                                        单个 Job 对象 | Pod 数少于工作条目数？| 直接使用应用无需修改? | 参考章节
+----------------------------------------------------------------------------------------------------------
+每工作条目一 Pod 的队列	              ✓		                                                                                          有时                                       使用工作队列进行粗粒度并行处理
+Pod 数量可变的队列	                          ✓	                                    ✓	                                                                                                        使用工作队列进行精细的并行处理
+静态任务分派的带索引的 Job	   ✓		                                                                                            ✓                                           使用索引作业完成静态工作分配下的并行处理
+带 Pod 间通信的 Job	         ✓	                                  有时	                                                   有时                                      带 Pod 间通信的 Job
+Job 模板扩展			                                                                                                                                    ✓                                           使用展开的方式进行并行处理
+-----------------------------------------------------------------------------------------
+
+vvvvvvvvvvvvvvvvvvvv
+
+## 使用索引作业完成静态工作分配下的并行处理
+特性状态:  Kubernetes v1.24 [stable]
+
+在此示例中,你将运行一个使用多个并行工作进程的 Kubernetes Job.每个 worker 都是在自己的 Pod 中运行的不同容器.Pod 具有控制平面自动设置的索引编号(index number),这些编号使得每个 Pod 能识别出要处理整个任务的哪个部分.
+
+Pod 索引在注解 batch.kubernetes.io/job-completion-index 中呈现,具体表示为一个十进制值字符串.为了让容器化的任务进程获得此索引,你可以使用 downward API 机制发布注解的值.为方便起见,控制平面自动设置 Downward API 以在 JOB_COMPLETION_INDEX 环境变量中公开索引.
+
+以下是此示例中步骤的概述: 
+1. 定义使用带索引完成信息的 Job 清单.Downward API 使你可以将 Pod 索引注解作为环境变量或文件传递给容器.
+2. 根据该清单启动一个带索引(Indexed)的 Job.
+
+* 选择一种方法
+要从工作程序访问工作项,你有几个选项: 
+1. 读取 JOB_COMPLETION_INDEX 环境变量.Job 控制器自动将此变量链接到包含完成索引的注解.
+2. 读取包含完整索引的文件.
+3. 假设你无法修改程序,你可以使用脚本包装它,该脚本使用上述任意方法读取索引并将其转换为程序可以用作输入的内容.
+
+对于此示例,假设你选择了选项 3 并且想要运行 rev 实用程序.这个程序接受一个文件作为参数并按逆序打印其内容.
+rev data.txt
+
+你将使用 busybox 容器镜像中的 rev 工具.
+
+由于这只是一个例子,每个 Pod 只做一小部分工作(反转一个短字符串).例如,在实际工作负载中,你可能会创建一个表示基于场景数据制作 60 秒视频任务的 Job .此视频渲染 Job 中的每个工作项都将渲染该视频剪辑的特定帧.索引完成意味着 Job 中的每个 Pod 都知道通过从剪辑开始计算帧数,来确定渲染和发布哪一帧.
+
+* 定义索引作业
+这是一个使用 Indexed 完成模式的示例 Job 清单: 
+
+indexed-job.yaml
+-----------------------------
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: 'indexed-job'
+spec:
+  completions: 5
+  parallelism: 3
+  completionMode: Indexed
+  template:
+    spec:
+      restartPolicy: Never
+      initContainers:
+      - name: 'input'
+        image: 'docker.io/library/bash'
+        command:
+        - "bash"
+        - "-c"
+        - |
+          items=(foo bar baz qux xyz)
+          echo ${items[$JOB_COMPLETION_INDEX]} > /input/data.txt          
+        volumeMounts:
+        - mountPath: /input
+          name: input
+      containers:
+      - name: 'worker'
+        image: 'docker.io/library/busybox'
+        command:
+        - "rev"
+        - "/input/data.txt"
+        volumeMounts:
+        - mountPath: /input
+          name: input
+      volumes:
+      - name: input
+        emptyDir: {}
+------------------------------------
+在上面的示例中,你使用 Job 控制器为所有容器设置的内置 JOB_COMPLETION_INDEX 环境变量.Init 容器 将索引映射到一个静态值,并将其写入一个文件,该文件通过 emptyDir 卷 与运行 worker 的容器共享.或者,你可以 通过 Downward API 定义自己的环境变量 将索引发布到容器.你还可以选择从 包含 ConfigMap 的环境变量或文件 加载值列表.
+
+或者也可以直接 使用 Downward API 将注解值作为卷文件传递,如下例所示: 
+
+indexed-job-vol.yaml
+------------------------------------
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: 'indexed-job'
+spec:
+  completions: 5
+  parallelism: 3
+  completionMode: Indexed
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: 'worker'
+        image: 'docker.io/library/busybox'
+        command:
+        - "rev"
+        - "/input/data.txt"
+        volumeMounts:
+        - mountPath: /input
+          name: input
+      volumes:
+      - name: input
+        downwardAPI:
+          items:
+          - path: "data.txt"
+            fieldRef:
+              fieldPath: metadata.annotations['batch.kubernetes.io/job-completion-index']
+---------------------------------
+
+* 执行 Job {running-the-job} 
+现在执行 Job: 
+
+# 使用第一种方法(依赖于 $JOB_COMPLETION_INDEX)
+$ kubectl apply -f https://kubernetes.io/examples/application/job/indexed-job.yaml
+
+当你创建此 Job 时,控制平面会创建一系列 Pod,你指定的每个索引都会运行一个 Pod..spec.parallelism 的值决定了一次可以运行多少个 Pod,而 .spec.completions 决定了 Job 总共创建了多少个 Pod.
+
+因为 .spec.parallelism 小于 .spec.completions,所以控制平面在启动更多 Pod 之前,将等待第一批的某些 Pod 完成.
+
+你可以等待 Job 成功,等待时间可以设置超时限制: 
+
+# 状况名称的检查不区分大小写
+$ kubectl wait --for=condition=complete --timeout=300s job/indexed-job
+
+现在,描述 Job 并检查它是否成功.
+$ kubectl describe jobs/indexed-job
+
+输出类似于: 
+Name:               indexed-job
+Namespace:          default
+Selector:           batch.kubernetes.io/controller-uid=98f7da22-19d0-4231-b6c6-3c85c714ebc5
+Labels:             batch.kubernetes.io/controller-uid=98f7da22-19d0-4231-b6c6-3c85c714ebc5
+                    batch.kubernetes.io/job-name=indexed-job
+                    controller-uid=98f7da22-19d0-4231-b6c6-3c85c714ebc5
+                    job-name=indexed-job
+Annotations:        <none>
+Parallelism:        3
+Completions:        5
+Completion Mode:    Indexed
+Suspend:            false
+Backoff Limit:      6
+Start Time:         Fri,25 Oct 2024 09:15:35 +0000
+Completed At:       Fri,25 Oct 2024 09:15:45 +0000
+Duration:           10s
+Pods Statuses:      0 Active (0 Ready) / 5 Succeeded / 0 Failed
+Completed Indexes:  0-4
+Pod Template:
+  Labels:  batch.kubernetes.io/controller-uid=98f7da22-19d0-4231-b6c6-3c85c714ebc5
+           batch.kubernetes.io/job-name=indexed-job
+           controller-uid=98f7da22-19d0-4231-b6c6-3c85c714ebc5
+           job-name=indexed-job
+  Init Containers:
+   input:
+    Image:      bash
+    Port:       <none>
+    Host Port:  <none>
+    Command:
+      bash
+      -c
+      items=(foo bar baz qux xyz)
+      echo ${items[$JOB_COMPLETION_INDEX]} > /input/data.txt          
+      
+    Environment:  <none>
+    Mounts:
+      /input from input (rw)
+  Containers:
+   worker:
+    Image:      busybox
+    Port:       <none>
+    Host Port:  <none>
+    Command:
+      rev
+      /input/data.txt
+    Environment:  <none>
+    Mounts:
+      /input from input (rw)
+  Volumes:
+   input:
+    Type:          EmptyDir (a temporary directory that shares a pod's lifetime)
+    Medium:        
+    SizeLimit:     <unset>
+  Node-Selectors:  <none>
+  Tolerations:     <none>
+Events:
+  Type    Reason            Age   From            Message
+  ----    ------            ----  ----            -------
+  Normal  SuccessfulCreate  18m   job-controller  Created pod: indexed-job-0-m5vqp
+  Normal  SuccessfulCreate  18m   job-controller  Created pod: indexed-job-2-nrxhx
+  Normal  SuccessfulCreate  18m   job-controller  Created pod: indexed-job-1-fxp4c
+  Normal  SuccessfulCreate  18m   job-controller  Created pod: indexed-job-3-7j9jr
+  Normal  SuccessfulCreate  18m   job-controller  Created pod: indexed-job-4-qsgzk
+  Normal  Completed         18m   job-controller  Job completed
+
+
+在此示例中,你使用每个索引的自定义值运行 Job.你可以检查其中一个 Pod 的输出: 
+$ kubectl logs indexed-job-3-7j9jr
+Defaulted container "worker" out of: worker,input (init)
+xuq
+
+## 使用展开的方式进行并行处理
+本章节展示基于一个公共的模板运行多个Jobs.你可以用这种方法来并行执行批处理任务.
+
+在本任务示例中,只有三个工作条目: apple、banana 和 cherry.示例任务处理每个条目时打印一个字符串之后结束.
+
+* 基于模板创建 Job - 说明,使用程序生成批量的 job 文件,同时每个 job 运行的是一个任务中的一部分,而且是非并行的任务
+首先,将以下作业模板下载到名为 job-tmpl.yaml 的文件中.
+
+job-tmpl.yaml
+--------------------------
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: process-item-$ITEM
+  labels:
+    jobgroup: jobexample
+spec:
+  template:
+    metadata:
+      name: jobexample
+      labels:
+        jobgroup: jobexample
+    spec:
+      containers:
+      - name: c
+        image: busybox:1.28
+        command: ["sh","-c","echo Processing item $ITEM && sleep 5"]
+      restartPolicy: Never
+-----------------------------------
+
+ # 使用 curl 下载 job-tmpl.yaml
+curl -L -s -O https://k8s.io/examples/application/job/job-tmpl.yaml
+
+你所下载的文件不是一个合法的 Kubernetes 清单.这里的模板只是 Job 对象的 yaml 表示,其中包含一些占位符,在使用它之前需要被填充.$ITEM 语法对 Kubernetes 没有意义.
+
+** 基于模板创建清单
+下面的 Shell 代码片段使用 sed 将字符串 $ITEM 替换为循环变量,并将结果写入到一个名为 jobs 的临时目录.
+
+# 展开模板文件到多个文件中,每个文件对应一个要处理的条目
+mkdir ./jobs
+for i in apple banana cherry
+do
+  cat job-tmpl.yaml | sed "s/\$ITEM/$i/" > ./jobs/job-$i.yaml
+done
+
+检查上述脚本的输出: 
+$ ls jobs/
+
+输出类似于: 
+job-apple.yaml
+job-banana.yaml
+job-cherry.yaml
+
+你可以使用任何一种模板语言(例如: Jinja2、ERB),或者编写一个程序来 生成 Job 清单.
+
+** 基于清单创建 Job
+接下来用一个 kubectl 命令创建所有的 Job: 
+$ kubectl create -f ./jobs
+
+输出类似于: 
+job.batch/process-item-apple created
+job.batch/process-item-banana created
+job.batch/process-item-cherry created
+
+现在检查 Job: 
+$ kubectl get jobs -l jobgroup=jobexample
+
+输出类似于: 
+NAME                  COMPLETIONS   DURATION   AGE
+process-item-apple    1/1           14s        22s
+process-item-banana   1/1           12s        21s
+process-item-cherry   1/1           12s        20s
+
+使用 kubectl 的 -l 选项可以仅选择属于当前 Job 组的对象 (系统中可能存在其他不相关的 Job).
+
+你可以使用相同的 标签选择算符 来过滤 Pods: 
+$ kubectl get pods -l jobgroup=jobexample
+
+输出类似于: 
+NAME                        READY     STATUS      RESTARTS   AGE
+process-item-apple-kixwv    0/1       Completed   0          4m
+process-item-banana-wrsf7   0/1       Completed   0          4m
+process-item-cherry-dnfu9   0/1       Completed   0          4m
+
+我们可以用下面的命令查看所有 Job 的输出: 
+$ kubectl logs -f -l jobgroup=jobexample
+
+输出类似于: 
+Processing item apple
+Processing item banana
+Processing item cherry
+
+** 清理
+# 删除所创建的 Job
+# 集群会自动清理 Job 对应的 Pod
+$ kubectl delete job -l jobgroup=jobexample
+
+* 使用高级模板参数
+在第一个例子中,模板的每个示例都有一个参数 而该参数也用在 Job 名称中.不过,对象 名称 被限制只能使用某些字符.
+
+这里的略微复杂的例子使用 Jinja 模板语言 来生成清单,并基于清单来生成对象,每个 Job 都有多个参数.
+
+在本任务中,你将会使用一个一行的 Python 脚本,将模板转换为一组清单文件.
+
+首先,复制下面的 Job 对象模板到一个名为 job.yaml.jinja2 的文件.
+
+{% set params = [{ "name": "apple","url": "http://dbpedia.org/resource/Apple",},
+                  { "name": "banana","url": "http://dbpedia.org/resource/Banana",},
+                  { "name": "cherry","url": "http://dbpedia.org/resource/Cherry" }]
+%}
+{% for p in params %}
+{% set name = p["name"] %}
+{% set url = p["url"] %}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: jobexample-{{ name }}
+  labels:
+    jobgroup: jobexample
+spec:
+  template:
+    metadata:
+      name: jobexample
+      labels:
+        jobgroup: jobexample
+    spec:
+      containers:
+      - name: c
+        image: busybox:1.28
+        command: ["sh","-c","echo Processing URL {{ url }} && sleep 5"]
+      restartPolicy: Never
+{% endfor %}
+
+上面的模板使用 python 字典列表(第 1-4 行)定义每个作业对象的参数.然后使用 for 循环为每组参数(剩余行)生成一个作业 yaml 对象.我们利用了多个 YAML 文档(这里的 Kubernetes 清单)可以用 --- 分隔符连接的事实.我们可以将输出直接传递给 kubectl 来创建对象.
+
+接下来我们用单行的 Python 程序将模板展开.
+$ alias render_template='python -c "from jinja2 import Template; import sys; print(Template(sys.stdin.read()).render());"'
+
+使用 render_template 将参数和模板转换成一个 YAML 文件,其中包含 Kubernetes 资源清单: 
+
+# 此命令需要之前定义的别名
+$ cat job.yaml.jinja2 | render_template > jobs.yaml
+
+你可以查看 jobs.yaml 以验证 render_template 脚本是否正常工作.
+
+当你对输出结果比较满意时,可以用管道将其输出发送给 kubectl,如下所示: 
+$ cat job.yaml.jinja2 | render_template | kubectl apply -f -
+
+Kubernetes 接收清单文件并执行你所创建的 Job.
+
+** 清理
+# 删除所创建的 Job
+# 集群会自动清理 Job 对应的 Pod
+$ kubectl delete job -l jobgroup=jobexample
+
+^^^^^^^^^^^^^^^^^^^^
+# 插入一个排错的内容,关于 kubectl remote error: tls: internal error 的报错及临时解决方法.
+报错:
+ 当使用 kubectl logs xxx 或者 kubectl get pod xxx 等类似的命令时候,运行在某个节点的 pod,当执行上述的命令会有 kubectl remote error: tls: internal error 的报错,使用 kubectl get csr 时,有
+csr-4f8ts   5d      kubernetes.io/kubelet-serving   system:node:k8s02   <none>              Pending
+
+这样的证书请求被 pending 了,而在 k8s02 这台机器上的 /var/lib/kubelet/config.yaml 中有 serverTLSBootstrap: true 配置,目的就是可以自动的去 api-server 上证书请求,其他的相同配置的节点没有这种问题,而在对应的 k8s02 节点上有 http: TLS handshake error from 192.168.1.13:2946: no serving certificate available for the kubelet 报错
+
+解决:
+看起描述是没有可用的证书与 api-server 通讯,将在 master 节点上的 apiserver-kubelet-client.crt, apiserver-kubelet-client.key 这 2 个证书放到 k8s02 的 /etc/kubernetes/pki(通过 kubeadm 安装的集群,证书的路径)下,就可以解决上述的报错.
+
+vvvvvvvvvvvvvvvvvvvv
+
+* 在真实负载中使用 Job
+在真实的负载中,每个 Job 都会执行一些重要的计算,例如渲染电影的一帧,或者处理数据库中的若干行.这时,$ITEM 参数将指定帧号或行范围.
+
+在此任务中,你运行一个命令通过取回 Pod 的日志来收集其输出.在真实应用场景中,Job 的每个 Pod 都会在结束之前将其输出写入到某持久性存储中.你可以为每个 Job 指定 PersistentVolume 卷,或者使用其他外部存储服务.例如,如果你在渲染视频帧,你可能会使用 HTTP 协议将渲染完的帧数据 用 'PUT' 请求发送到某 URL,每个帧使用不同的 URl.
+
+* Job 和 Pod 上的标签
+你创建了 Job 之后,Kubernetes 自动为 Job 的 Pod 添加 标签,以便能够将一个 Job 的 Pod 与另一个 Job 的 Pod 区分开来.
+
+在本例中,每个 Job 及其 Pod 模板有一个标签: jobgroup=jobexample.
+
+Kubernetes 自身对标签名 jobgroup 没有什么要求.为创建自同一模板的所有 Job 使用同一标签使得我们可以方便地同时操作组中的所有作业.在第一个例子中,你使用模板来创建了若干 Job.模板确保每个 Pod 都能够获得相同的标签,这样你可以用一条命令检查这些模板化 Job 所生成的全部 Pod.
+
+说明: 
+标签键 jobgroup 没什么特殊的,也不是保留字.你可以选择你自己的标签方案.如果愿意,有一些建议的标签 可供使用.
+
+* 替代方案
+如果你有计划创建大量 Job 对象,你可能会发现: 
+. 即使使用标签,管理这么多 Job 对象也很麻烦.
+. 如果你一次性创建很多 Job,很可能会给 Kubernetes 控制面带来很大压力.一种替代方案是,Kubernetes API 可能对请求施加速率限制,通过 429 返回 状态值临时拒绝你的请求.
+. 你可能会受到 Job 相关的资源配额 限制: 如果你在一个批量请求中触发了太多的任务,API 服务器会永久性地拒绝你的某些请求.
+还有一些其他作业模式 可供选择,这些模式都能用来处理大量任务而又不会创建过多的 Job 对象.
+
+你也可以考虑编写自己的控制器来自动管理 Job 对象.
+
+## 使用 Pod 失效策略处理可重试和不可重试的 Pod 失效
+特性状态: Kubernetes v1.31 [stable] (enabled by default: true)
+
+本文向你展示如何结合默认的 Pod 回退失效策略来使用 Pod 失效策略,以改善 Job 内处理容器级别或 Pod 级别的失效.
+
+Pod 失效策略的定义可以帮助你: 
+. 避免不必要的 Pod 重试,以更好地利用计算资源.
+. 避免由于 Pod 干扰(例如抢占、 API 发起的驱逐或基于污点的驱逐)而造成的 Job 失败.
+
+* 准备开始
+你的 Kubernetes 服务器版本必须不低于版本 v1.25. 要获知版本信息,请输入 kubectl version.
+
+* 使用 Pod 失效策略以避免不必要的 Pod 重试 - 使用 podFailurePolicy(Pod 失效策略)来防止 pod 失败重试,屏蔽 backoffLimit 参数的内容
+借用以下示例,你可以学习在 Pod 失效表明有一个不可重试的软件漏洞时如何使用 Pod 失效策略来避免不必要的 Pod 重启.
+
+首先,基于配置创建一个 Job: 
+-------------------------------------
+job-pod-failure-policy-failjob.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: job-pod-failure-policy-failjob
+spec:
+  completions: 8
+  parallelism: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: main
+        image: docker.io/library/bash:5
+        command: ["bash"]
+        args:
+        - -c
+        - echo "Hello world! I'm going to exit with 42 to simulate a software bug." && sleep 30 && exit 42
+  backoffLimit: 6   # 如果 Pod 失效策略被禁用,将会让 Pod 重试 6 次
+  podFailurePolicy:
+    rules:
+    - action: FailJob
+      onExitCodes:
+        containerName: main
+        operator: In
+        values: [42]
+-------------------------------------
+运行以下命令: 
+$ kubectl create -f job-pod-failure-policy-failjob.yaml
+
+大约 30 秒后,整个 Job 应被终止.通过运行以下命令来查看 Job 的状态: 
+$ kubectl get jobs -l job-name=job-pod-failure-policy-failjob -o yaml
+
+如下是部分内容:
+...
+  status:
+    conditions:
+    - lastProbeTime: "2024-11-04T07:47:25Z"
+      lastTransitionTime: "2024-11-04T07:47:25Z"
+      message: Container main for pod default/job-pod-failure-policy-failjob-xpbn6
+        failed with exit code 42 matching FailJob rule at index 0
+      reason: PodFailurePolicy
+      status: "True"
+      type: FailureTarget
+    - lastProbeTime: "2024-11-04T07:47:25Z"
+      lastTransitionTime: "2024-11-04T07:47:25Z"
+      message: Container main for pod default/job-pod-failure-policy-failjob-xpbn6
+        failed with exit code 42 matching FailJob rule at index 0
+      reason: PodFailurePolicy
+      status: "True"
+      type: Failed
+    failed: 2
+    ready: 0
+    startTime: "2024-11-04T07:46:51Z"
+    terminating: 0
+    uncountedTerminatedPods: {}
+...
+
+在 Job 状态中,显示以下情况: 
+. FailureTarget 状况: 有一个设置为 PodFailurePolicy 的 reason 字段和一个包含更多有关终止信息的 message 字段,例如 Container main for pod default/job-pod-failure-policy-failjob-8ckj8 failed with exit code 42 matching FailJob rule at index 0.一旦 Job 被视为失败,Job 控制器就会添加此状况.有关详细信息,请参阅 Job Pod 的终止.
+. Failed: 与 FailureTarget 状况相同的 reason 和 message.Job 控制器会在 Job 的所有 Pod 终止后添加此状况.
+为了比较,如果 Pod 失效策略被禁用,将会让 Pod 重试 6 次,用时至少 2 分钟.
+
+** 清理
+删除你创建的 Job: 
+$ kubectl delete jobs/job-pod-failure-policy-failjob
+
+* 使用 Pod 失效策略来忽略 Pod 干扰 - 使用 podFailurePolicy(Pod 失效策略)来防止 pod 干扰策略的影响(比如因为干扰策略设置驱逐此节点上所有的 pod),并将 pod 重拾计数向着参数 .spec.backoffLimit 的数值递增
+
+通过以下示例,你可以学习如何使用 Pod 失效策略将 Pod 重试计数器朝着 .spec.backoffLimit 限制递增来忽略 Pod 干扰.
+
+注意: 
+这个示例的时机比较重要,因此你可能需要在执行之前阅读这些步骤.为了触发 Pod 干扰,重要的是在 Pod 在其上运行时(自 Pod 调度后的 90 秒内)腾空节点.
+
+1. 基于配置创建 Job: 
+
+job-pod-failure-policy-ignore.yaml
+-----------------------------------------
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: job-pod-failure-policy-ignore
+spec:
+  completions: 4
+  parallelism: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: main
+        image: docker.io/library/bash
+        command: ["bash"]
+        args:
+        - -c
+        - echo "Hello world! I'm going to exit with 0 (success)." && sleep 90 && exit 0
+  backoffLimit: 0
+  podFailurePolicy:
+    rules:
+    - action: Ignore
+      onPodConditions:
+      - type: DisruptionTarget
+-----------------------------------
+
+运行以下命令: 
+$ kubectl create -f job-pod-failure-policy-ignore.yaml
+
+2. 运行以下这条命令检查将 Pod 调度到的 nodeName: 
+$ nodeName=$(kubectl get pods -l job-name=job-pod-failure-policy-ignore -o jsonpath='{.items[0].spec.nodeName}')
+
+3. 腾空该节点以便在 Pod 完成任务之前将其驱逐(90 秒内): 
+$ kubectl drain nodes/$nodeName --ignore-daemonsets --grace-period=0
+
+4. 查看 .status.failed 以检查针对 Job 的计数器未递增: 
+$ kubectl get jobs -l job-name=job-pod-failure-policy-ignore -o yaml
+
+5. 解除节点的保护: 
+$ kubectl uncordon nodes/$nodeName
+
+Job 恢复并成功完成.
+
+为了比较,如果 Pod 失效策略被禁用,Pod 干扰将使得整个 Job 终止(随着 .spec.backoffLimit 设置为 0).
+
+** 清理 
+删除你创建的 Job: 
+$ kubectl delete jobs/job-pod-failure-policy-ignore
+
+集群自动清理 Pod.
+
+* 基于自定义 Pod 状况使用 Pod 失效策略避免不必要的 Pod 重试 - 当 pod 处于 pending 的状态时,由于无法通过重试恢复状态,需要过渡到终止状态,可以借鉴在某些 pod 无法恢复,需要直接终止的状态
+根据以下示例,你可以学习如何基于自定义 Pod 状况使用 Pod 失效策略避免不必要的 Pod 重启.
+
+说明: 
+以下示例自 v1.27 起开始生效,因为它依赖于将已删除的 Pod 从 Pending 阶段过渡到终止阶段.
+
+1. 首先基于配置创建一个 Job: 
+-----------------------------------------------
+job-pod-failure-policy-config-issue.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: job-pod-failure-policy-config-issue
+spec:
+  completions: 8
+  parallelism: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: main
+        image: "non-existing-repo/non-existing-image:example"
+  backoffLimit: 6
+  podFailurePolicy:
+    rules:
+    - action: FailJob
+      onPodConditions:
+      - type: ConfigIssue
+-----------------------------------------
+执行以下命令: 
+$ kubectl create -f job-pod-failure-policy-config-issue.yaml
+
+请注意,镜像配置不正确,因为该镜像不存在.
+
+2. 通过执行以下命令检查任务 Pod 的状态: 
+$ kubectl get pods -l job-name=job-pod-failure-policy-config-issue -o yaml
+
+你将看到类似以下输出: 
+
+containerStatuses:
+- image: non-existing-repo/non-existing-image:example
+   ...
+   state:
+   waiting:
+      message: Back-off pulling image "non-existing-repo/non-existing-image:example"
+      reason: ImagePullBackOff
+      ...
+phase: Pending
+
+请注意,Pod 依然处于 Pending 阶段,因为它无法拉取错误配置的镜像.原则上讲这可能是一个暂时问题,镜像还是会被拉取.然而这种情况下,镜像不存在,因为我们通过一个自定义状况表明了这个事实.
+
+3. 添加自定义状况.执行以下命令先准备补丁: 
+
+cat <<EOF > patch.yaml
+status:
+  conditions:
+  - type: ConfigIssue
+    status: "True"
+    reason: "NonExistingImage"
+    lastTransitionTime: "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+EOF
+
+其次,执行以下命令选择通过任务创建的其中一个 Pod: 
+$ podName=$(kubectl get pods -l job-name=job-pod-failure-policy-config-issue -o jsonpath='{.items[0].metadata.name}')
+
+随后执行以下命令将补丁应用到其中一个 Pod 上: 
+$ kubectl patch pod $podName --subresource=status --patch-file=patch.yaml
+
+如果被成功应用,你将看到类似以下的一条通知: 
+pod/job-pod-failure-policy-config-issue-k6pvp patched
+
+4. 执行以下命令删除此 Pod 将其过渡到 Failed 阶段: 
+$ kubectl delete pods/$podName
+
+5. 执行以下命令查验 Job 的状态: 
+$ kubectl get jobs -l job-name=job-pod-failure-policy-config-issue -o yaml
+
+在 Job 状态中,看到任务 Failed 状况的 reason 字段等于 PodFailurePolicy.此外,message 字段包含了与 Job 终止相关的更多详细信息,例如: Pod default/job-pod-failure-policy-config-issue-k6pvp has condition ConfigIssue matching FailJob rule at index 0.
+
+说明: 
+在生产环境中,第 3 和 4 步应由用户提供的控制器进行自动化处理.
+
+** 清理
+删除你创建的 Job: 
+$ kubectl delete jobs/job-pod-failure-policy-config-issue
+
+集群自动清理 Pod.
+
+* 替代方案
+通过指定 Job 的 .spec.backoffLimit 字段,你可以完全依赖 Pod 回退失效策略.然而在许多情况下,难题在于如何找到一个平衡,为 .spec.backoffLimit 设置一个较小的值以避免不必要的 Pod 重试,同时这个值又足以确保 Job 不会因 Pod 干扰而终止.
+
+关于 pod 回退失效策略的描述如下:
+https://kubernetes.io/zh-cn/docs/concepts/workloads/controllers/job/#pod-backoff-failure-policy
+
+
+
+

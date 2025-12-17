@@ -1,0 +1,29 @@
+#yum -y install svn
+$cd
+$mkdir svndata
+$svnadmin create /home/blue/svndata/project
+编辑
+svndata/project/conf/passwd
+添加 
+jack = jack123
+
+编辑
+svndata/project/conf/authz
+添加
+admin = jack
+[/]
+@admin = rw
+
+编辑svnserve.conf文件
+添加
+[general]
+anon-access = none
+auth-access = write
+password-db = /home/blue/svndata/project/conf/passwd
+authz-db = /home/blue/svndata/project/conf/authz
+realm = project
+
+启动服务
+
+svnserve -d --config-file /home/blue/svndata/project/conf/svnserve.conf -r /home/blue/svndata
+

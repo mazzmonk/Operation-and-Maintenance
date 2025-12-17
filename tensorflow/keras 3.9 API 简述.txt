@@ -1,0 +1,291 @@
+来自官方文档 keras 3 api 文档
+https://keras.io/api/
+
+Models API	(模型 API)
+  . The Model class	(Model 类)
+  . The Sequential class	(Sequential 类)
+  . Model training APIs	(模型训练 API)
+  . Saving & serialization	(保存和序列化)
+Layers API	(Layers API)
+  . The base Layer class	(基础 Layer 类)
+  . Layer activations	(层激活函数)
+  . Layer weight initializers	(层权重初始化函数)
+  . Layer weight regularizers	(层权重正则化函数)
+  . Layer weight constraints	(层权重约束)
+  . Core layers	(核心层)
+  . Convolution layers	(卷积层)
+  . Pooling layers	(池化层)
+  . Recurrent layers	(循环层)
+  . Preprocessing layers	(预处理层)
+  . Normalization layers	(归一化层)
+  . Regularization layers	(正则化层)
+  . Attention layers	(注意力层)
+  . Reshaping layers	(重塑层)
+  . Merging layers	(合并层)
+  . Activation layers	(激活层)
+  . Backend-specific layers	(后端专用层)
+Callbacks API	(回调 API)
+  . Base Callback class	(基础回调类)
+  . ModelCheckpoint	(ModelCheckpoint)
+  . BackupAndRestore	(备份和重载)
+  . TensorBoard	(TensorBoard)
+  . EarlyStopping	(提前停止)
+  . LearningRateScheduler	(学习速率调度器)
+  . ReduceLROnPlateau	(降低LROnPlateau)
+  . RemoteMonitor	(远程监控器)
+  . LambdaCallback	(Lambda回调)
+  . TerminateOnNaN	(终止NaN)
+  . CSVLogger	(CSVLogger)
+  . ProgbarLogger	(ProgbarLogger)
+  . SwapEMAWeights	(SwapEMAWeights)
+Ops API	(操作 API)
+  . NumPy ops	(NumPy 操作)
+  . NN ops	(NN 操作)
+  . Linear algebra ops	(线性代数操作)
+  . Core ops	(核心操作)
+  . Image ops	(图像操作)
+  . FFT ops	(FFT操作)
+Optimizers	(优化器)
+  . SGD	(SGD)
+  . RMSprop	(RMSprop)
+  . Adam	(Adam)
+  . AdamW	(AdamW)
+  . Adadelta	(Adadelta)
+  . Adagrad	(Adagrad)
+  . Adamax	(Adamax)
+  . Adafactor	(Adafactor)
+  . Nadam	(Nadam)
+  . Ftrl	(Ftrl)
+  . Lion	(Lion)
+  . Lamb	(Lamb)
+  . Loss Scale Optimizer	(损失尺度优化器)
+Metrics	(指标)
+  . Base Metric class	(基础指标类)
+  . Accuracy metrics	(准确率指标)
+  . Probabilistic metrics	(概率指标)
+  . Regression metrics	(回归指标)
+  . Classification metrics based on True/False positives & negatives	(基于真/假正例和负例的分类指标)
+  . Image segmentation metrics	(图像分割指标)
+  . Hinge metrics for "maximum-margin" classification	(“最大间隔”分类的铰链指标)
+  . Metric wrappers and reduction metrics	(指标封装器和约简指标)
+Losses	(损失)
+  . Probabilistic losses	(概率损失)
+  . Regression losses	(回归损失)
+  . Hinge losses for "maximum-margin" classification	(“最大间隔”分类的铰链损失)
+Data loading	(数据加载)
+  . Image data loading	(图像数据加载)
+  . Timeseries data loading	(时间序列数据加载)
+  . Text data loading	(文本数据加载)
+  . Audio data loading	(音频数据加载)
+Built-in small datasets	(内置小型数据集)
+  . MNIST digits classification dataset	(MNIST 数字分类数据集)
+  . CIFAR10 small images classification dataset	(CIFAR10 小型图像分类数据集)
+  . CIFAR100 small images classification dataset	(CIFAR100 小型图像分类数据集)
+  . IMDB movie review sentiment classification dataset	(IMDB 电影评论情绪分类数据集)
+  . Reuters newswire classification dataset	(路透社新闻专线分类数据集)
+  . Fashion MNIST dataset, an alternative to MNIST	(Fashion MNIST 数据集，MNIST 的替代方案)
+  . California Housing price regression dataset	(加州房价回归数据集)
+Keras Applications	(Keras 应用)
+  . Xception	(Xception)
+  . EfficientNet B0 to B7	(EfficientNet B0 至 B7)
+  . EfficientNetV2 B0 to B3 and S, M, L	(EfficientNetV2 B0 至 B3 及 S、M、L)
+  . ConvNeXt Tiny, Small, Base, Large, XLarge	(ConvNeXt Tiny、Small、Base、Large、XLarge)
+  . VGG16 and VGG19	(VGG16 和 VGG19)
+  . ResNet and ResNetV2	(ResNet 和 ResNetV2)
+  . MobileNet, MobileNetV2, and MobileNetV3	(MobileNet、MobileNetV2 和 MobileNetV3)
+  . DenseNet	(DenseNet)
+  . NasNetLarge and NasNetMobile	(NasNetLarge 和 NasNetMobile)
+  . InceptionV3	(InceptionV3)
+  . InceptionResNetV2	(InceptionResNetV2)
+Mixed precision	(混合精度)
+  . Mixed precision policy API	(混合精度策略 API)
+Multi-device distribution	(多设备分布)
+  . LayoutMap API	(LayoutMap API)
+  . DataParallel API	(DataParallel API)
+  . ModelParallel API	(ModelParallel API)
+  . Distribution utilities	(分布实用程序)
+RNG API	(RNG API)
+  . SeedGenerator class	(SeedGenerator 类)
+  . Random operations	(随机操作)
+Rematerialization	(重新实现)
+  . RematScope	(RematScope)
+  . Remat	(Remat)
+Utilities	(实用程序)
+  . Experiment management utilities	(实验管理实用程序)
+  . Model plotting utilities	(模型绘图实用程序)
+  . Structured data preprocessing utilities	(结构化数据预处理实用程序)
+  . Tensor utilities	(Tensor 实用程序)
+  . Python & NumPy utilities	(Python 和 NumPy 实用程序)
+  . Scikit-Learn API wrappers	(Scikit-Learn API 包装器)
+  . Keras configuration utilities	(Keras 配置实用程序)
+
+
+
+# 层索引       来之 https://keras.io/api/layers/ 的一部分
+Core layers(核心层)
+. Input object
+. InputSpec object
+. Dense layer
+. EinsumDense layer
+. Activation layer
+. Embedding layer
+. Masking layer
+. Lambda layer
+. Identity layer
+
+Convolution layers(卷积层)
+. Conv1D layer
+. Conv2D layer
+. Conv3D layer
+. SeparableConv1D layer
+. SeparableConv2D layer
+. DepthwiseConv1D layer
+. DepthwiseConv2D layer
+. Conv1DTranspose layer
+. Conv2DTranspose layer
+. Conv3DTranspose layer
+
+Pooling layers(池化层)
+. MaxPooling1D layer
+. MaxPooling2D layer
+. MaxPooling3D layer
+. AveragePooling1D layer
+. AveragePooling2D layer
+. AveragePooling3D layer
+. GlobalMaxPooling1D layer
+. GlobalMaxPooling2D layer
+. GlobalMaxPooling3D layer
+. GlobalAveragePooling1D layer
+. GlobalAveragePooling2D layer
+. GlobalAveragePooling3D layer
+
+Recurrent layers(循环层)
+. LSTM layer
+. LSTM cell layer
+. GRU layer
+. GRU Cell layer
+. SimpleRNN layer
+. TimeDistributed layer
+. Bidirectional layer
+. ConvLSTM1D layer
+. ConvLSTM2D layer
+. ConvLSTM3D layer
+. Base RNN layer
+. Simple RNN cell layer
+. Stacked RNN cell layer
+
+Preprocessing layers(预处理层)
+  Text preprocessing
+    . TextVectorization layer
+  Numerical features preprocessing layers
+    . Normalization layer
+    . Spectral Normalization layer
+    . Discretization layer
+  Categorical features preprocessing layers
+    . CategoryEncoding layer
+    . Hashing layer
+    . HashedCrossing layer
+    . StringLookup layer
+    . IntegerLookup layer
+  Image preprocessing layers
+    . Resizing layer
+    . Rescaling layer
+    . CenterCrop layer
+    . AutoContrast layer
+  Image augmentation layers
+    . AugMix layer
+    . CutMix layer
+    . Equalization layer
+    . MixUp layer
+    . Pipeline layer
+    . RandAugment layer
+    . RandomBrightness layer
+    . RandomColorDegeneration layer
+    . RandomColorJitter layer
+    . RandomContrast layer
+    . RandomCrop layer
+    . RandomErasing layer
+    . RandomFlip layer
+    . RandomGaussianBlur layer
+    . RandomGrayscale layer
+    . RandomHue layer
+    . RandomInvert layer
+    . RandomPerspective layer
+    . RandomRotation layer
+    . RandomSaturation layer
+    . RandomSharpness layer
+    . RandomShear layer
+    . RandomTranslation layer
+    . RandomZoom layer
+    . Solarization layer
+  Audio preprocessing layers
+    . MelSpectrogram layer
+
+Normalization layers(规范化层)
+. BatchNormalization layer
+. LayerNormalization layer
+. UnitNormalization layer
+. GroupNormalization layer
+
+Regularization layers(正则化层)
+. Dropout layer
+. SpatialDropout1D layer
+. SpatialDropout2D layer
+. SpatialDropout3D layer
+. GaussianDropout layer
+. AlphaDropout layer
+. GaussianNoise layer
+. ActivityRegularization layer
+
+Attention layers(注意力层)
+. GroupQueryAttention
+. MultiHeadAttention layer
+. Attention layer
+. AdditiveAttention layer
+
+Reshaping layers(重塑层)
+. Reshape layer
+. Flatten layer
+. RepeatVector layer
+. Permute layer
+. Cropping1D layer
+. Cropping2D layer
+. Cropping3D layer
+. UpSampling1D layer
+. UpSampling2D layer
+. UpSampling3D layer
+. ZeroPadding1D layer
+. ZeroPadding2D layer
+. ZeroPadding3D layer
+
+Merging layers(合并层)
+. Concatenate layer
+. Average layer
+. Maximum layer
+. Minimum layer
+. Add layer
+. Subtract layer
+. Multiply layer
+. Dot layer
+
+Activation layers(激活层)
+. ReLU layer
+. Softmax layer
+. LeakyReLU layer
+. PReLU layer
+. ELU layer
+
+Backend-specific layers(后端特定层)
+. TorchModuleWrapper layer
+. Tensorflow SavedModel layer
+. JaxLayer
+. FlaxLayer
+
+
+
+
+
+
+
+
+

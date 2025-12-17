@@ -1,0 +1,170 @@
+来自官方文档 keras 3 api 文档
+https://keras.io/api/
+
+Core layers(核心层)
+. Input object
+. InputSpec object
+. Dense layer
+. EinsumDense layer
+. Activation layer
+. Embedding layer
+. Masking layer
+. Lambda layer
+. Identity layer
+
+Convolution layers(卷积层)
+. Conv1D layer
+. Conv2D layer
+. Conv3D layer
+. SeparableConv1D layer
+. SeparableConv2D layer
+. DepthwiseConv1D layer
+. DepthwiseConv2D layer
+. Conv1DTranspose layer
+. Conv2DTranspose layer
+. Conv3DTranspose layer
+
+Pooling layers(池化层)
+. MaxPooling1D layer
+. MaxPooling2D layer
+. MaxPooling3D layer
+. AveragePooling1D layer
+. AveragePooling2D layer
+. AveragePooling3D layer
+. GlobalMaxPooling1D layer
+. GlobalMaxPooling2D layer
+. GlobalMaxPooling3D layer
+. GlobalAveragePooling1D layer
+. GlobalAveragePooling2D layer
+. GlobalAveragePooling3D layer
+
+Recurrent layers(循环层)
+. LSTM layer
+. LSTM cell layer
+. GRU layer
+. GRU Cell layer
+. SimpleRNN layer
+. TimeDistributed layer
+. Bidirectional layer
+. ConvLSTM1D layer
+. ConvLSTM2D layer
+. ConvLSTM3D layer
+. Base RNN layer
+. Simple RNN cell layer
+. Stacked RNN cell layer
+
+Preprocessing layers(预处理层)
+  Text preprocessing
+    . TextVectorization layer
+  Numerical features preprocessing layers
+    . Normalization layer
+    . Spectral Normalization layer
+    . Discretization layer
+  Categorical features preprocessing layers
+    . CategoryEncoding layer
+    . Hashing layer
+    . HashedCrossing layer
+    . StringLookup layer
+    . IntegerLookup layer
+  Image preprocessing layers
+    . Resizing layer
+    . Rescaling layer
+    . CenterCrop layer
+    . AutoContrast layer
+  Image augmentation layers
+    . AugMix layer
+    . CutMix layer
+    . Equalization layer
+    . MixUp layer
+    . Pipeline layer
+    . RandAugment layer
+    . RandomBrightness layer
+    . RandomColorDegeneration layer
+    . RandomColorJitter layer
+    . RandomContrast layer
+    . RandomCrop layer
+    . RandomErasing layer
+    . RandomFlip layer
+    . RandomGaussianBlur layer
+    . RandomGrayscale layer
+    . RandomHue layer
+    . RandomInvert layer
+    . RandomPerspective layer
+    . RandomRotation layer
+    . RandomSaturation layer
+    . RandomSharpness layer
+    . RandomShear layer
+    . RandomTranslation layer
+    . RandomZoom layer
+    . Solarization layer
+  Audio preprocessing layers
+    . MelSpectrogram layer
+
+Normalization layers(规范化层)
+. BatchNormalization layer
+. LayerNormalization layer
+. UnitNormalization layer
+. GroupNormalization layer
+
+Regularization layers(正则化层)
+. Dropout layer
+. SpatialDropout1D layer
+. SpatialDropout2D layer
+. SpatialDropout3D layer
+. GaussianDropout layer
+. AlphaDropout layer
+. GaussianNoise layer
+. ActivityRegularization layer
+
+Attention layers(注意力层)
+. GroupQueryAttention
+. MultiHeadAttention layer
+. Attention layer
+. AdditiveAttention layer
+
+Reshaping layers(重塑层)
+. Reshape layer
+. Flatten layer
+. RepeatVector layer
+. Permute layer
+. Cropping1D layer
+. Cropping2D layer
+. Cropping3D layer
+. UpSampling1D layer
+. UpSampling2D layer
+. UpSampling3D layer
+. ZeroPadding1D layer
+. ZeroPadding2D layer
+. ZeroPadding3D layer
+
+Merging layers(合并层)
+. Concatenate layer
+. Average layer
+. Maximum layer
+. Minimum layer
+. Add layer
+. Subtract layer
+. Multiply layer
+. Dot layer
+
+Activation layers(激活层)
+. ReLU layer
+. Softmax layer
+. LeakyReLU layer
+. PReLU layer
+. ELU layer
+
+Backend-specific layers(后端特定层)
+. TorchModuleWrapper layer
+. Tensorflow SavedModel layer
+. JaxLayer
+. FlaxLayer
+
+
+
+
+
+
+
+
+

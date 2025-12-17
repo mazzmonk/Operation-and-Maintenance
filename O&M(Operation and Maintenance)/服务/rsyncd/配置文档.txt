@@ -1,0 +1,80 @@
+1 .这里使用的是服务器端在windows安装的,蛋疼得玩意
+安装服务端使用的是v4.10这个版本,安装就下一步,下一步,不需要更改任何东西,安装完毕以后修改rsyncd.conf这个文件,目录在c:\Program Files (x86) \ICW下
+
+# rsyncd.conf
+use chroot = false
+strict modes = false
+hosts allow = *
+log file = rsyncd.log
+lock file = rsyncd.lock
+uid = 0
+gid = 0
+
+
+# Module definitions
+# Remember cygwin naming conventions : c:\work becomes /cygwin/c/work
+#
+[webapi]
+path = /cygdrive/c/inetpub/webapi
+read only = false
+transfer logging = yes
+
+[test]
+path = /cygdrive/c/inetpub/test
+read only = false
+transfer logging = yes
+
+
+另外: 需要将c/inetpub/webapi及test目录的安全选项中添加SvcCWRSYNC这个账户的全部权限
+
+客户端是linux,从windows服务端同步到linux端,命令如下
+$ /usr/bin/rsync -avz --progress --delete -b --backup-dir=/home/blue/data/backup/ 172.20.20.6::webapi /home/blue/data/webapi/
+
+从linux同步到windows服务端
+$ /usr/bin/rsync -avz --progress --delete /home/blue/data/webapi/ 172.20.20.6::test
+
+
+2. 服务端为linux时候配置如下:
+操作系统为ubuntu 18.x
+
+# apt-get install rsync
+修改	/etc/init.d/rsync的如下行
+RSYNC_ENABLE=true
+
+建立配置文件如下:
+#touch /etc/rsyncd.conf
+内容如下:
+
+[webapi]
+path = /home/ubuntu/data/webapi
+hosts allow = *
+#hosts deny = *
+list = true
+uid = root
+gid = root
+read only = false
+secrets file = /home/ubuntu/data/rsyncd.secrets
+
+建立密钥文件/home/ubuntu/data/rsyncd.secrets,内容如下:
+root:admin$%^
+
+$ chmod 600 /home/ubuntu/data/rsyncd.secrets
+# systemctl enable rsync
+# systemctl start rsync
+
+
+从linux客户端同步数据到linux服务端
+建立密钥文件/home/blue/data/rsyncd.secrets,内容如下:
+root:admin$%^
+
+$ chmod 600 /home/blue/data/rsyncd.secrets
+$ /usr/bin/rsync -avz --progress --password-file=/home/blue/data/rsyncd.secrets --delete /home/blue/data/webapi/ 52.82.30.195::webapi
+
+从linux服务端同步数据到linux客户端
+$ /usr/bin/rsync -avz --progress --password-file=/home/blue/data/rsyncd.secrets --delete 52.82.30.195::webapi /home/blue/data/test/
+
+排除特定文件
+--exclude '*.txt' --exclude '*.py'
+
+
+

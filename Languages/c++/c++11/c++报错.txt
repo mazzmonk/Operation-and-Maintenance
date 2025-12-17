@@ -1,0 +1,10 @@
+1.vector排序问题<unresolved overloaded function type>
+要对vector中的自定义类型进行排序，首先需要提供一个函数bool comp(const Interval & a, const Interval & b) 来定义类型的排序准则 
+
+然后调用std::sort(intervals.begin(),intervals.end(),comp)  写了几个小的测试用例也都通过了，但是当集成在类中的时候编译遇到问题，
+
+Line 30: no matching function for call to 'sort(std::vector<Interval>::iterator, std::vector<Interval>::iterator, <unresolved overloaded function type>)'
+
+刚开始以为是类型不对，改用指针也不行，换用qsort进行排序也不行，折腾了好长时间终于找到资料http://blog.csdn.net/flybywind/article/details/7536311
+
+原来当comp作为类的成员函数时，默认拥有一个this指针，这样和sort函数所需要使用的排序函数类型不一样。解决方法是将comp改为非成员函数，或者改用静态函数。

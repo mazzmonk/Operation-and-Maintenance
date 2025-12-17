@@ -1,0 +1,958 @@
+# Title:docker,etcd,flannel,kubernetes技术汇总
+# Author:blue
+# Date:20180320
+# Version:v2.0
+####################################
+
+文档包括如下的几部分,docker容器的部分和原来的1.12版本没有太多的改变,k8s则改变的很多,增强了安全性,性能调整增加很多,功能上更丰富
+分为如下及部分
+1.docker容器
+2.etcd,flannel,kubernetes
+3.使用负载均衡负载k8s apiserver
+
+
+1.docker容器
+
+2.etcd,flannel,kubernetes
+上述3个组件的功能不再描述,强调一下flannel这个组件,尽量使用新的版本,因为flanel是一个网络插件,由于虚拟了网络层,和原生的网络通讯来说,其性能只能达到原生性能的60%,版本的升级能带来更多的性能提升
+
+软件环境:
+操作系统:CentOS Linux release 7.4.1708 (Core) 
+内核版本:3.10.0-693.17.1.el7.x86_64
+
+组件版本:
+所有下载都使用二进制版本
+etcd-v3.2.15-linux-amd64		# 下载 https://github.com/coreos/etcd/releases/
+flannel-v0.10.0-linux-amd64	    # 下载 https://github.com/coreos/flannel/releases 
+kubernetes-v1.8.7               # 下载 https://github.com/kubernetes/kubernetes/blob/master/CHANGELOG-1.8.md#server-binaries-2  原始的 https://github.com/kubernetes/kubernetes/releases 这个连接目前下载都是源代码,需要自己编译
+
+
+2.1 etcd
+当前使用的是etcd-v3.2.15-linux-amd64,etcd 3.x和2.0版本使用的api函数不同,客户端连接etcd服务的方式很不同,k8s目前默认支持的是3.x版本,而在早期的3.0版本安装模式比较繁琐,批量安装困难(主要是每个节点的安装模式都不同),而v3.2.15的版本,使用一种新的安装,适合批量安装,其主要的改变就是所有的节点可以使用同一个安装命令以及绝大多数的参数都可以通用
+
+
+mkdir -p $HOME_PATH/apps/etcd/{bin,data,wal,logs}
+etcd/bin/{etcd,etcdctl}
+
+启动脚本: 此脚本通用所有节点,每个节点修改--name为自己的名称即可,使用普通用户启动
+########################################################
+$HOME_PATH/apps/etcd/bin/etcd \
+--name $ETCD_NODE02 \
+--data-dir "$HOME_PATH/apps/etcd/data" \
+--wal-dir "$HOME_PATH/apps/etcd/wal" \
+--snapshot-count 100000 \
+--heartbeat-interval 100 \
+--election-timeout 1000 \
+--listen-peer-urls "http://0.0.0.0:2380" \
+--listen-client-urls "http://0.0.0.0:2379,http://0.0.0.0:4001" \
+--grpc-keepalive-min-time '10s' \
+--grpc-keepalive-interval '30m' \
+--grpc-keepalive-timeout '30s' \
+--initial-advertise-peer-urls "http://$LOCAL_IPADDRESS:2380" \
+--initial-cluster "$ETCD_NODE01=http://$ETCD_NODE01_IPADDRESS:2380,$ETCD_NODE02=http://$ETCD_NODE02_IPADDRESS:2380,$ETCD_NODE03=http://$ETCD_NODE03_IPADDRESS:2380" \
+--initial-cluster-token "etcd-cluster" \
+--advertise-client-urls "http://$LOCAL_IPADDRESS:2379,http://$LOCAL_IPADDRESS:4001" \
+--initial-cluster-state "new"
+
+########################################################
+变量说明:
+$HOME_PATH     							#HOME目录
+$ETCD_NODE02							#本节点的名称,这个值必须在所有节点统一
+$LOCAL_IPADDRESS 						#本地IP地址,必须有网关的地址
+$ETCD_NODE01,$ETCD_NODE01_IPADDRESS     #节点1的名称,IP地址
+$ETCD_NODE02,$ETCD_NODE02_IPADDRESS   	#节点2的名称,IP地址
+$ETCD_NODE03,$ETCD_NODE03_IPADDRESS		#节点3的名称,IP地址
+
+说明:
+1.这里使用的是3个节点,按照etcd的集群算法设计,节点数目必须是2n-1个,即奇数,3/5/7等,但是节点数目必须平衡冗余和性能,节点越多,冗余性越大,同时,性能会下降,反之,亦然
+2.这里有一个性能的指标,请参照,另外,etcd是一个磁盘I/O敏感性应用,磁盘越快,性能越好.
+https://github.com/coreos/etcd/blob/master/Documentation/op-guide/performance.md
+3.etcd 3.x的版本提供了proxy的功能,考虑到,性能的问题,以及节点数目并不多,没有采用.
+
+
+所有的参数分为2种,如下
+成员参数:
+--name							#方便理解的节点名称,默认为default,在集群中应该保持唯一,可以使用hostname
+--data-dir						#服务运行数据保存的路径,默认为 ${name}.etcd
+--snapshot-count				#指定有多少事务(transaction)被提交时,触发截取快照保存到磁盘,默认100000
+--heartbeat-interval:leader 	#多久发送一次心跳到followers.默认值是 100ms
+--eletion-timeout				#重新投票的超时时间,如果follow在该时间间隔没有收到心跳包,会触发重新投票,默认为 1000 ms
+--listen-peer-urls				#和同伴通信的地址,比如http://ip:2380,如果有多个,使用逗号分隔.需要所有节点都能够访问,所以不要使用localhost！如果指定IP为0.0.0.0,则etcd监听所有接口上给定的端口,同时如果使用域名将无效.
+--listen-client-urls			#对外提供服务的地址:比如http://ip:2379,http://127.0.0.1:2379,客户端会连接到这里和etcd交互,可以是http或https.如果指定IP为0.0.0.0,则etcd监听所有接口上的给定端口,同时如果使用域名将无效.
+--max-snapshots					#保留的最大快照文件数量(0无限制),默认:5
+--max-wals						#要保留的最大wal文件数(0是无限的),默认:5
+--cors ''						#未知如何使用
+--quota-backend-bytes '0'		#未知如何使用
+--max-TXN-OPS					#使用help没有此参数
+--max-request-bytes				#服务器将接受的最大客户端请求大小(字节).默认值:1572864
+--grpc-keepalive-min-time		#在ping服务器之前,客户端应该等待的最短时间间隔.默认:5s
+--grpc-keepalive-interval		#服务器到客户端ping的频率持续时间,用于检查连接是否处于活动状态(0表示禁用).默认:2小时
+--grpc-keepalive-timeout		#关闭无响应连接之前的等待时间(0为禁用).默认:20s
+
+
+集群参数:
+--initial前缀标志用于引导（静态引导,发现服务引导或运行时重新配置）新成员,并在重新启动现有成员时被忽略.
+--discovery在使用发现服务时需要设置前缀标志.
+
+--initial-advertise-peer-urls	#该节点同伴监听地址,这个值会告诉集群中其他节点,至少有一个必须可路由到所有集群成员,可以包含域名.格式:http://10.0.0.1:2380
+--initial-cluster				#集群初始信息,格式为 node1=http://ip1:2380,注意:这里的 node1 是节点的--name指定的名字；后面的 ip1:2380 是 --initial-advertise-peer-urls 指定的值,如果是多个节点需要使用node1=http://ip1:2380,node2=http://ip2:2380,node3=http://ip3:2380,并且对应--initial-cluster-state值为new
+--initial-cluster-state			#新建集群的时候,这个值为 new；假如已经存在的集群,这个值为 existing;默认是:new
+--initial-cluster-token			#创建集群的 token,这个值每个集群保持唯一.这样的话,如果你要重新创建集群,即使配置和之前一样,也会再次生成新的集群和节点 uuid；否则会导致多个集群之间的冲突,造成未知的错误
+--advertise-client-urls			#对外公告的该节点客户端监听地址,这个值会告诉集群中其他节点,客户端连接地址,格式:http://10.0.0.1:2379
+
+注意:使用的--force-new-cluster参数,强迫新建集群使用新的配置
+这里有个诡异的情况,就是直接用上述的脚本,所有日志都无法写入日志文件,因此用nohup x.sh &方式
+
+2.2 flannel
+使用flannel-v0.10.0-linux-amd64版本,因为flannel的工作很稳定,软件的版本迭代也很慢,不做过多的介绍
+flannel的大多数参数是和etcd通讯用证书,加密方式的介绍,以及对接k8s时使用,本身不带有性能调整的参数,因此版本尽量使用新的
+
+鉴于flannel的通讯本身的网络消耗,因此不使用证书,加密等等方式消耗性能,etcd也同样原因,不使用证书,加密等模式通讯.
+
+mkdir -p $HOME/apps/flannel/bin
+flannel/bin/{flanneld  mk-docker-opts.sh}
+
+在启动之前，需要在etcd中配置好整个docker容器使用的地址段
+在任意一个etcd端执行
+etcdctl set /coreos.com/network/config '{ "Network": "172.16.0.0/16" }'
+如此就设置了网络信息
+后续的所有关于pod的IP地址设置的组件都必须和此值统一,比如:controller-manager中的--cluster-cidr参数
+上述的地址设置完成以后,每台启动docker容器的机器将获取上述172.16段中随机一个24位子网,这里的24位通过controller-manager中的--node-cidr-mask-size设置
+
+
+启动脚本: 此脚本通用所有具有docker容器的节点,使用root启动
+########################################################
+$FLANNEL_PATH/bin/flanneld \
+-etcd-endpoints="http://$ETCD_NODE01_IPADDRESS:4001,http://$ETCD_NODE02_IPADDRESS:4001,http://$ETCD_NODE03_IPADDRESS:4001" &
+
+########################################################
+变量说明:
+$ETCD_NODE0X_IPADDRESS			#同etcd中的解释,需要把所有的etcd节点写入
+
+
+2.3 kubernetes
+当前使用的是k8s-v1.8.7版本,但是,所有的1.8.x版本都可以兼容.
+从1.4版本起,k8s就开始使用了证书的方式来保证数据通讯之间的安全性.从1.6版本起,将RBAC(角色控制)加入了测试功能,目前1.8.x开始已经是一个稳定的功能,因此将从2个方面来说明原理.
+
+2.3.1 认证模式
+根据官方的说法,包括:X509 Client Certs,Static Token File,Static Password File,即:X509证书,静态Token文件,静态Password文件
+
+* X509 认证模式采用建CA,自建证书,自签名证书,是双向认证模式
+* Static Token File,使用随机码生成64位Token值,然后加入用户,UID,角色形成Token文件
+* Static Password File,提供一个具有用户名,密码的文件作为认证使用
+
+鉴于安全性问题,使用X509的认证模式
+下面详细说明X509认证模式
+
+流程:生成ca key,根据key生成ca证书,生成用于server的key,生成签名配置文件,使用ca证书给server的key签名,生成server的证书
+
+具体的操作如下:
+官方提供了3种方式生成ca和server证书的方法,有2种方式需要下载工具,一种使用openssl,为了方便,采用openssl方式
+
+# 用2048bit生成一个ca.key
+openssl genrsa -out ca.key 2048
+
+# 根据ca.key生成一个ca.crt(使用-days设置证书生效时间)
+# ${MASTER_IP}指master端地址
+openssl req -x509 -new -nodes -key ca.key -subj CN=${MASTER_IP} -days 10000 -out ca.crt
+
+# 用2048bit生成server.key
+openssl genrsa -out server.key 2048
+
+# 生成签名配置文件 csr.conf,内容如下:
+###################################
+
+[ req ]
+default_bits = 2048
+prompt = no
+default_md = sha256
+req_extensions = req_ext
+distinguished_name = dn
+    
+[ dn ]
+C = cn
+ST = beijing
+L = beijing
+O = k8s
+OU = System
+    
+[ req_ext ]
+subjectAltName = @alt_names
+    
+[ alt_names ]
+DNS.1 = kubernetes
+DNS.2 = kubernetes.default
+DNS.3 = kubernetes.default.svc
+DNS.4 = kubernetes.default.svc.mycluster
+DNS.5 = kubernetes.default.svc.mycluster.net
+IP.1 = 192.168.10.15
+IP.2 = 10.0.0.1
+IP.3 = 127.0.0.1
+    
+[ v3_ext ]
+authorityKeyIdentifier=keyid,issuer:always
+basicConstraints=CA:FALSE
+keyUsage=keyEncipherment,dataEncipherment
+extendedKeyUsage=serverAuth,clientAuth
+subjectAltName=@alt_names
+
+###################################
+说明: 
+1.C - 国家,ST - 州,L - 城市,O - 组织,OU - organization unit,OU必须为System,后续解释理由
+2.mycluster,mycluster.net是在集群中使用的域名,配合kube-dns使用,同时必须在kubelet组件中相同
+3.IP.X必须将所有的master地址填入,master ip/如果有负责均衡,VIP/10.0.0.1指api server中的--service-cluster-ip-range参数中的第一个地址,即k8s启动以后的对应与service的cluster vip.
+
+# 根据配置文件生成证书签名请求
+openssl req -new -key server.key -out server.csr -config csr.conf
+
+# 使用ca.key,ca.crt和server.csr生成服务器证书:
+openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key \
+-CAcreateserial -out server.crt -days 10000 \
+-extensions v3_ext -extfile csr.conf
+
+# 查看证书
+openssl x509  -noout -text -in ./server.crt
+
+如上生成了ca.crt,ca.key,server.crt,server.key,这几个文件在用于api server启动时候使用
+
+2.3.2 授权控制
+k8s的授权采用插件的模式来完成,使用一个即可.
+k8s授权处理的请求主要是:
+* user, group, extra
+* API,请求方法(如get,post,update,patch和delete)和请求路径(如/api)
+* 请求资源和子资源
+* Namespace
+* API Group
+
+k8s支持的授权模式主要有以下几种:
+Node Authorization
+ABAC Authorization
+RBAC Authorization
+Webhook Authorization
+
+Node Authorization
+通过配合NodeRestriction control准入控制插件来限制kubelet访问node,endpoint,pod,service以及secret,configmap,PV和PVC等相关的资源.配置方式为:
+–authorization-mode=Node,RBAC –admission-control=…,NodeRestriction,…
+
+ABAC Authorization
+ABAC(Attribute-based access control)
+这种模式的实现相对比较生硬,就是在master node保存一份policy文件,指定不用用户(或用户组)对不同资源的访问权限,当修改该文件后,需要重启apiserver
+使用这种模式需要配置参数:
+–authorization-mode=ABAC –authorization-policy-file=SOME_FILENAME
+
+RBAC Authorization
+RBAC API定义了四个资源对象用于描述RBAC中用户和资源之间的连接权限:
+
+Role
+ClusterRole
+RoleBinding
+ClusterRoleBinding
+
+Role是定义在某个Namespace下的资源,在这个具体的Namespace下使用.
+ClusterRole与Role相似,只是ClusterRole是整个集群范围内使用的.
+RoleBinding把Role绑定到账户主体Subject,让Subject继承Role所在namespace下的权限.
+ClusterRoleBinding把ClusterRole绑定到Subject,让Subject集成ClusterRole在整个集群中的权限.
+
+通过启动参数–authorization-mode=RBAC
+
+# 通过如下的命令查看上述的信息
+kubectl get roles --all-namespaces
+kubectl get ClusterRoles
+kubectl get rolebinding --all-namespaces
+kubectl get clusterrolebinding
+
+API Server已经创建一系列ClusterRole和ClusterRoleBinding.这些资源对象中名称以system:开头的,表示这个资源对象属于Kubernetes系统基础设施.也就说RBAC默认的集群角色已经完成足够的覆盖,让集群可以完全在RBAC的管理下运行.修改这些资源对象可能会引起未知的后果,例如对于system:node这个ClusterRole定义了kubelet进程的权限,如果这个角色被修改,可能导致kubelet无法工作
+
+Webhook Authorization
+用户在外部提供HTTPS授权服务,然后配置apiserver调用该服务去进行授权.apiserver配置参数:
+–authorization-webhook-config-file=SOME_FILENAME
+配置文件的格式跟kubeconfig的格式类似
+
+
+Kubernetes的Admission Control实际上是一个准入控制器(Admission Controller)插件列表,发送到APIServer的请求都需要经过这个列表中的每个准入控制器插件的检查,如果某一个控制器插件准入失败,就准入失败,对应与api server启动参数--admission-control
+控制器插件如下:
+
+AlwaysAdmit:				#允许所有请求通过
+AlwaysPullImages:			#在启动容器之前总是去下载镜像,相当于每当容器启动前做一次用于是否有权使用该容器镜像的检查
+AlwaysDeny:					#禁止所有请求通过,用于测试
+DenyEscalatingExec:			#拒绝exec和attach命令到有升级特权的Pod的终端用户访问.如果集中包含升级特权的容器,而要限制终端用户在这些容器中执行命令的能力,推荐使用此插件
+ImagePolicyWebhook
+ServiceAccount:				#这个插件实现了serviceAccounts等等自动化,如果使用ServiceAccount对象
+SecurityContextDeny:		#将Pod定义中定义了的SecurityContext选项全部失效.SecurityContext包含在容器中定义了操作系统级别的安全选型如fsGroup,selinux等选项
+ResourceQuota:				#用于namespace上的配额管理,它会观察进入的请求,确保在namespace上的配额不超标.推荐将这个插件放到准入控制器列表的最后一个.ResourceQuota准入控制器既可以限制某个namespace中创建资源的数量,又可以限制某个namespace中被Pod请求的资源总量.ResourceQuota准入控制器和ResourceQuota资源对象一起可以实现资源配额管理.
+LimitRanger:				#用于Pod和容器上的配额管理,它会观察进入的请求,确保Pod和容器上的配额不会超标.准入控制器LimitRanger和资源对象LimitRange一起实现资源限制管理
+NamespaceLifecycle:			#当一个请求是在一个不存在的namespace下创建资源对象时,该请求会被拒绝.当删除一个namespace时,将会删除该namespace下的所有资源对象
+DefaultStorageClass
+DefaultTolerationSeconds
+PodSecurityPolicy
+
+2.4 kubernetes组件
+一共5个组件,kube-apiserver,kube-controller-manager,kube-scheduler对应于服务端,kubelet,kube-proxy对应客户端为了保证冗余,服务端至少需要2个,客户端则在每台安装docker的机器上都必须有
+
+说明:
+1.虽然kube-apiserver配置了证书的方式提供安全认证,但是为了保证性能,kube-controller-manager,kube-scheduler没有使用证书与apiserver通讯,仍然使用http模式
+2.在配置认证模块的时候,虽然没有使用static token file的模式,但是配置apiserver时,仍然需要配置此文件用于相关的参数,文件的作用提供给kubelet端使用,而提供一种叫做TLS bootstrapping的模式,此种模式保证在kubelet端生成bootstrapping相应的配置文件,用于kubelet第一次启动使用
+3.k8s-v1.8.x的版本提供了大量的调整性能的参数,目前来说很是实用,包括:保留资源,限制资源使用量,存储限制等等.
+
+
+介绍一下TLS bootstrapping
+由于通过手动创建CA方式太过繁杂,只适合少量机器,因为每次签证时都需要绑定Node IP,随机器增加会带来很多困扰,因此这边使用TLS Bootstrapping 方式进行授权,由apiserver自动给符合条件的Node发送证书来授权加入集群.
+原理:
+TLS bootstrapping功能就是让kubelet先使用一个预定的低权限用户连接到apiserver,然后向apiserver申请证书，kubelet的证书由apiserver动态签署,token文件与服务端ca证书一起生成用于kubelet启动用的bootstrap.kubeconfig文件,当kubelet第一次启动会读取此文件,然后到apiserver请求证书,apiserver会颁发证书给kubelet,详细操作见后续kubelet部分
+
+
+后续详细介绍几个组件的参数及启动脚本
+
+目录结构,操作使用普通用户完成
+
+master端的目录结构
+
+mkdir -p $HOME/apps/kubernetes/server/var/run/kubernetes
+mkdir -p $HOME/apps/kubernetes/server/bin
+mkdir -p $HOME/apps/kubernetes/server/logs
+mkdir -p $HOME/apps/kubernetes/server/conf
+mkdir -p $HOME/apps/kubernetes/certificate
+mkdir -p $HOME/apps/kubernetes/kubelet-plugins/volume/exec
+
+$HOME/apps/kubernetes/server/bin/{kube-apiserver  kube-controller-manager  kube-dns  kube-scheduler}
+
+
+slave端目录结构
+
+mkdir -p $HOME/apps/kubernetes/client/kubelet/{bin,etc,logs,plugins,pods,seccomp,var}
+mkdir -p $HOME/apps/kubernetes/client/kubelet/var/run/kubernetes
+touch $HOME/apps/kubernetes/client/kubelet/etc/machine-id
+
+mkdir -p $HOME/apps/kubernetes/client/kube-proxy/{bin,etc,logs}
+
+mkdir -p $HOME/apps/kubernetes/certificate
+mkdir -p $HOME/apps/kubernetes/kubelet-plugins
+
+$HOME_PATH/apps/kubernetes/client/kubelet/bin/kubelet 
+$HOME_PATH/apps/kubernetes/client/kube-proxy/bin/kubelet-proxy
+
+
+说明:
+$HOME/apps/kubernetes/certificate			#这里存放所有的证书及token文件
+$HOME/apps/kubernetes/client/kubelet/etc	#这里存放启动用配置文件,生成的配置文件
+
+
+2.4.1 kube-apiserver
+核心组件,所有的其他组件都与此组件交互,apiserver则与etcd交互.此组件可以冗余
+
+启动脚本 使用普通用户启动
+########################################################
+$KUBERNETES_PREFIX/server/bin/kube-apiserver \
+--admission-control="AlwaysAdmit" \
+--allow-privileged="true" \
+--alsologtostderr="false" \
+--anonymous-auth="false" \
+--apiserver-count="2" \
+--authorization-mode="AlwaysAllow" \
+--cert-dir="$CERTIFICATE_PATH/" \
+--default-watch-cache-size="150" \
+--delete-collection-workers="3" \
+--enable-bootstrap-token-auth="true" \
+--enable-garbage-collector="true" \
+--enable-logs-handler="true" \
+--etcd-servers="http://$ETCD_NODE01_IPADDRESS:4001,http://$ETCD_NODE02_IPADDRESS:4001,http://$ETCD_NODE0
+3_IPADDRESS:4001" \
+--event-ttl="30m" \
+--external-hostname="$LOCAL_IPADDRESS" \
+--insecure-bind-address="0.0.0.0" \
+--insecure-port="8080" \
+--kubelet-https="true" \
+--kubelet-preferred-address-types="InternalIP,ExternalIP,Hostname,InternalDNS,ExternalDNS" \
+--kubelet-timeout="8s" \
+--log-dir="$LOGS_PATH/" \
+--log-flush-frequency="2s" \
+--logtostderr="false" \
+--max-mutating-requests-inflight="300" \
+--profiling="true" \
+--runtime-config="rbac.authorization.k8s.io/v1alpha1" \
+--secure-port="6443" \
+--service-cluster-ip-range="10.0.0.0/16" \
+--service-node-port-range="30000-33500" \
+--v="6" \
+--watch-cache="true" \
+--client-ca-file="$CERTIFICATE_PATH/ca.crt" \
+--service-account-key-file="$CERTIFICATE_PATH/ca.key" \
+--tls-cert-file="$CERTIFICATE_PATH/server.crt"  \
+--tls-private-key-file="$CERTIFICATE_PATH/server.key" \
+--token-auth-file="$CERTIFICATE_PATH/token.csv"
+
+########################################################
+变量说明: 见前述,$CERTIFICATE_PATH证书文件路径
+
+参数说明: apiserver启动参数一共119个非实验性参数,大多数重要的参数在这里都有描述,也是目前部署使用的参数
+
+--admission-control						#有序的插件列表进行集群资源的准入控制,这里使用的AlwaysAdmit,表示全部允许
+--allow-privileged						#允许采用privileged模式启动容器
+--alsologtostderr						#log到标准错误以及文件
+--anonymous-auth						#允许API服务安全端口的匿名请求
+--apiserver-count						#集群中apiservers数量
+--authorization-mode					#认证模式,AlwaysAllow表示全部
+--cert-dir								#认证文件目录
+--default-watch-cache-size				#默认watch缓存大小
+--delete-collection-workers				#为DeleteCollection启用的工作进程数目
+--enable-bootstrap-token-auth			#启用允许“kube-system”名称空间中的类型“bootstrap.kubernetes.io/token”的加密用于TLS引导验证,这里配合kubelet的bootstrap使用
+--enable-garbage-collector				#启用通用垃圾收集器
+--enable-logs-handler					#为apiserver日志安装/logs处理程序.
+--etcd-servers							#etcd节点信息
+--event-ttl								#保留事务的时间
+--external-hostname						#hostname,覆盖默认机器名称
+--insecure-bind-address					#不安全访问网络接口
+--insecure-port							#不安全访问端口
+--kubelet-https							#开启https访问,证书,加密访问等等
+--kubelet-preferred-address-types		#用于kubelet连接的首选NodeAddressType的列表
+--kubelet-timeout						#Kubelet操作超时
+--log-dir								#日志文件路径
+--log-flush-frequency					#日志刷新时间间隔
+--logtostderr							#log到标准错误,如果要log到文件,设置为false,并且与前面的log-dir,--alsologtostderr配合使用
+--max-mutating-requests-inflight		#指定时间内转换的请求数目,超出此数会拒绝请求
+--profiling								#开启性能监视
+--runtime-config						#可能会传送给API服务的描述运行时环境的键值对
+--secure-port							#https端口
+--service-cluster-ip-range				#集群中service使用的集群IP范围
+--service-node-port-range				#对应集群中的service使用的端口范围
+--v="6" 								#日志级别
+--watch-cache							#开启watch缓存
+--client-ca-file						#client需要使用的ca证书
+--service-account-key-file				#根据ca签署的key文件
+--tls-cert-file							#x509证书
+--tls-private-key-file					#x509 key,对应--tls-cert-file
+--token-auth-file						#token文件,这里用于kubelet的bootstrap
+
+说明:
+1.在参数中,已经有了日志路径,因此启动时候不用在指定日志,这也是目前其他组件使用的方式,后续不在赘述
+2.日志的级别在2的时候,会显示比较粗略的信息,当4的时候,会出现启动的详细参数,部分代码级的信息,debug级别的信息,当到10的时候,汇编级别的信息将会出现.
+
+
+证书的相关见前述,这里说明token文件如何生成
+
+生成token值
+#head -c 16 /dev/urandom | od -An -t x | tr -d ' '
+73dec876dabd7a74ebbb092272307d85
+
+token文件token.csv内容
+token                            用户名             用户ID    
+73dec876dabd7a74ebbb092272307d85,kubelet-bootstrap,10001,"system:kubelet-bootstrap"
+
+最后system:kubelet-bootstrap中的system是必须的(具体见前面RBAC Authorization的描述),kubelet-bootstrap对应前面的用户名.
+
+2.4.2 kube-controller-manager
+此组件不可冗余,需要与本机的apiserver通讯
+
+启动脚本 使用普通用户启动
+########################################################
+$KUBERNETES_PREFIX/server/bin/kube-controller-manager \
+--address="0.0.0.0" \
+--alsologtostderr="false" \
+--cidr-allocator-type="RangeAllocator"  \
+--cluster-cidr="172.16.0.0/16"  \
+--cluster-name="kubernetes"  \
+--concurrent-deployment-syncs="10"  \
+--concurrent-endpoint-syncs="10"  \
+--concurrent-gc-syncs="20"  \
+--concurrent-namespace-syncs="10"  \
+--concurrent-rc-syncs="10"  \
+--concurrent-replicaset-syncs="10"  \
+--concurrent-resource-quota-syncs="10"  \
+--concurrent-service-syncs="3"  \
+--concurrent-serviceaccount-token-syncs="5"  \
+--configure-cloud-routes="false"  \
+--contention-profiling="true"  \
+--controllers="*"  \
+--deployment-controller-sync-period="45s"  \
+--enable-dynamic-provisioning="true"  \
+--enable-garbage-collector="true"  \
+--flex-volume-plugin-dir="$KUBERNETES_PREFIX/kubelet-plugins/volume/exec/"  \
+--horizontal-pod-autoscaler-downscale-delay="5m0s"  \
+--horizontal-pod-autoscaler-sync-period="45s"  \
+--horizontal-pod-autoscaler-upscale-delay="3m0s"  \
+--kube-api-burst="30"  \
+--kube-api-content-type="application/vnd.kubernetes.protobuf"  \
+--large-cluster-size-threshold="50"  \
+--log-dir="$LOGS_PATH/"  \
+--log-flush-frequency="2s"  \
+--loglevel="0"  \
+--logtostderr="false"  \
+--master="http://127.0.0.1:8080"  \
+--min-resync-period="12h0m0s"  \
+--namespace-sync-period="5m"  \
+--node-cidr-mask-size="24"  \
+--node-eviction-rate="0.1"  \
+--node-monitor-grace-period="40s"  \
+--node-monitor-period="3s"  \
+--node-startup-grace-period="2m"  \
+--pod-eviction-timeout="3m0s"  \
+--profiling="true"  \
+--pvclaimbinder-sync-period="20s"  \
+--resource-quota-sync-period="5m0s"  \
+--secondary-node-eviction-rate="0.01"  \
+--service-cluster-ip-range="10.0.0.0/16"  \
+--service-sync-period="3m0s" \
+--stderrthreshold="4"  \
+--terminated-pod-gc-threshold="12500"  \
+--unhealthy-zone-threshold="0.55"  \
+--use-service-account-credentials="true"  \
+--v="4" \
+--cluster-signing-cert-file="$CERTIFICATE_PATH/ca.crt"  \
+--cluster-signing-key-file="$CERTIFICATE_PATH/ca.key"  \
+--root-ca-file="$CERTIFICATE_PATH/ca.crt"  \
+--service-account-private-key-file="$CERTIFICATE_PATH/ca.key"  
+
+########################################################
+变量说明: 见前述,$CERTIFICATE_PATH证书文件路径
+
+参数说明: kube-controller-manager启动参数一共85个非实验性参数,大多数重要的参数在这里都有描述,也是目前部署使用的参数
+
+--address								#监听的接口
+--alsologtostderr						#同前
+--cidr-allocator-type					#要使用的CIDR分配器的类型
+--cluster-cidr							#集群中Pod的CIDR范围
+--cluster-name							#集群实例前缀
+--concurrent-deployment-syncs			#允许同时同步的部署对象的数量.更大的数字=响应速度更快的部署,但CPU(和网络)负载越多
+--concurrent-endpoint-syncs				#将同时完成的端点同步操作的数量.数字越大,端点更新速度越快,但CPU(和网络)负载更多
+--concurrent-gc-syncs					#允许同时同步的垃圾收集器的数量
+--concurrent-namespace-syncs			#允许同时同步的名称空间对象的数量.更大的数字=响应式命名空间终端响应越多,但CPU(和网络)负载越多
+--concurrent-rc-syncs					#允许同时同步的复制控制器的数量.更大的数字=副本管理响应越多,但CPU(和网络)负载越多
+--concurrent-replicaset-syncs			#允许同时同步的副本集数量.更大的数字=副本管理响应越多,但CPU(和网络)负载越多
+--concurrent-resource-quota-syncs		#允许同时同步的资源配额数量.更大的数字=响应式配额管理响应越多,但CPU(和网络)负载越多
+--concurrent-service-syncs="3"  		#允许同时同步的服务数量.更大的数字=响应能力越强的服务管理,但CPU(和网络)负载越多
+--concurrent-serviceaccount-token-syncs	#允许同时同步的服务帐户令牌对象的数量.更大的数字=生成更多响应式令牌,但CPU(和网络)负载更多
+--configure-cloud-routes				#是否应在云提供商上配置由allocate-node-cidrs分配的CIDR
+--contention-profiling					#启用锁定争用分析
+--controllers							#要启用的控制器列表.'*' 启动所有on-by-default控制器
+--deployment-controller-sync-period		#同步部署的时间间隔
+--enable-dynamic-provisioning			#为支持它的环境启用动态配置
+--enable-garbage-collector				#启用通用垃圾回收器.必须与kube-apiserver的相应标志同步
+--flex-volume-plugin-dir				#Flex卷插件应在其中搜索其他第三方卷插件的目录的完整路径
+--horizontal-pod-autoscaler-downscale-delay		#自上一个降级以来的时间间隔,在水平pod自动配置器下,另外一个降级被执行之前
+--horizontal-pod-autoscaler-sync-period			#在水平pod自动配置器中同步pod数量的时间间隔
+--horizontal-pod-autoscaler-upscale-delay		#自上一个升级以来的时间间隔,在水平pod自动配置器下,另外一个升级被执行之前
+--kube-api-burst								#和kubernetes apiserver通信时使用的burst值
+--kube-api-content-type							#发送给apiserver的请求的content type
+--large-cluster-size-threshold					#NodeController根据驱逐逻辑的目的将节点视为较大的节点数.对于此大小或者更小数量的集群,--secondary-node-eviction-rate被隐式地覆盖为0
+--log-dir										#同前
+--log-flush-frequency							#同前
+--loglevel										#同前
+--logtostderr									#同前
+--master										#master地址,使用http://127.0.0.1:8080
+--min-resync-period								#Reflector中的resync周期将为MinResyncPeriod到 2*MinResyncPeriod之间的随机值
+--namespace-sync-period							#同步命名空间生命周期更新的时间间隔
+--node-cidr-mask-size							#集群中node cidr的掩码大小
+--node-eviction-rate							#区域健康时,node发生故障时,删除pod的每秒的node数目
+--node-monitor-grace-period						#在标记为不健康之前,我们允许运行中的node无响应的时间量
+--node-monitor-period							#NodeController中NodeStatus的同步时间周期
+--node-startup-grace-period						#在标记不健康之前,我们允许staring的node无响应的时间量
+--pod-eviction-timeout							#用于在失败node上的删除pods的宽限期
+--profiling										#同前
+--pvclaimbinder-sync-period						#同步持续卷之间要求的时间间隔
+--resource-quota-sync-period					#在系统中同步配额使用状态的时间段
+--secondary-node-eviction-rate					#区域不健康时,node发生故障时,删除pod的node数量
+--service-cluster-ip-range						#集群中services的CIDR范围
+--service-sync-period							#与外部负载平衡器同步服务的时间间隔
+--stderrthreshold								#日志达到或高于此阈值将转至stderr
+--terminated-pod-gc-threshold					#已终止的pod垃圾收集器开始删除已终止的pod之前可以存在的已终止的pod数
+--unhealthy-zone-threshold						#区域中节点的分数不需要准备就绪(最少3次)以便区域被视为不健康
+--use-service-account-credentials				#如果为true,则为每个控制器使用单独的service account凭据
+--v												#同前
+--cluster-signing-cert-file						#ca证书
+--cluster-signing-key-file						#ca key
+--root-ca-file									#ca证书
+--service-account-private-key-file				#ca key
+
+说明:
+1.controller-manager与apiserver通讯不使用https模式,但是仍然需要配置证书
+
+2.4.3 kube-scheduler
+此组件不可冗余,需要与本机的apiserver通讯
+
+启动脚本 使用普通用户启动
+########################################################
+$KUBERNETES_PREFIX/server/bin/kube-scheduler \
+--address="0.0.0.0" \
+--algorithm-provider="DefaultProvider" \
+--alsologtostderr=false \
+--contention-profiling=true  \
+--kube-api-burst="100"  \
+--kube-api-content-type="application/vnd.kubernetes.protobuf"  \
+--kube-api-qps="50" \
+--log-dir="$LOGS_PATH/"  \
+--log-flush-frequency="2s"  \
+--logtostderr=false  \
+--master="http://127.0.0.1:8080"  \
+--profiling=true \
+--stderrthreshold="4"  \
+--v="4"
+
+########################################################
+变量说明: 见前述
+
+参数说明: kube-scheduler启动参数一共30个非实验性参数,大多数重要的参数在这里都有描述,也是目前部署使用的参数
+
+--address								#同前
+--algorithm-provider					#要使用的调度算法提供者
+--alsologtostderr						#同前							
+--contention-profiling					#开启锁内容分析
+--kube-api-burst						#同前
+--kube-api-content-type					#发送给apiserver的请求的内容类型
+--kube-api-qps							#与kubernetes apiserver会话时使用QPS
+--log-dir								#同前
+--log-flush-frequency					#同前
+--logtostderr							#同前
+--master								#同前
+--profiling								#同前
+--stderrthreshold						#同前
+--v										#同前
+
+
+2.4.4 kubelet
+kubelet是客户端核心组件,负责与docker通讯,同时与master端组件交互,功能繁多,控制资源的参数也很多,某些和性能有关的参数,目前没有明白具体的使用场景,使用的默认值,后续将更新
+
+与apiserver通讯的原理:使用token文件(前文生成)与apiserver通讯,使用一个权限较低的用户,apiserver如果确认此认证没有问题,apiserver将动态颁发证书给此节点,节点将此证书及信息写入本地的目录和文件中.
+
+
+详细的脚本如下: 必须使用root用户启动
+########################################################
+$KUBERNETES_PREFIX/client/kubelet/bin/kubelet \
+--address="0.0.0.0" \
+--allow-privileged="true" \
+--alsologtostderr="false" \
+--anonymous-auth="true" \
+--application-metrics-count-limit="150" \
+--authorization-mode="AlwaysAllow" \
+--cadvisor-port="4194" \
+--cgroup-driver="systemd" \
+--cluster-dns="$KUBE_DNS" \
+--cluster-domain="$CLUSTER_DOMAIN" \
+--container-hints="$KUBERNETES_PREFIX/client/kubelet/etc/cadvisor/container_hints.json" \
+--container-runtime="docker" \
+--container-runtime-endpoint="unix://$HOME_PATH/apps/docker/var/run/dockershim.sock" \
+--contention-profiling="true" \
+--cpu-cfs-quota="true" \
+--docker="unix://$HOME_PATH/apps/docker/var/run/socket" \
+--docker-endpoint="unix://$HOME_PATH/apps/docker/var/run/socket" \
+--docker-root="$HOME_PATH/apps/docker/var/lib/docker" \
+--enable-controller-attach-detach="true" \
+--enable-debugging-handlers="true" \
+--enable-load-reader="true" \
+--event-burst="20" \
+--event-qps="10" \
+--eviction-hard="memory.available<200Mi,nodefs.available<10%,nodefs.inodesFree<10%" \
+--eviction-pressure-transition-period="5m0s" \
+--eviction-soft="memory.available<300Mi,nodefs.available<15%,nodefs.inodesFree<15%" \
+--eviction-soft-grace-period="memory.available=1m0s,nodefs.available=3m0s,nodefs.inodesFree=3m0s" \
+--exit-on-lock-contention="false" \
+--experimental-dockershim-root-directory="$HOME_PATH/apps/docker/var/lib/dockershim/" \
+--experimental-qos-reserved="memory=85%" \
+--fail-swap-on="true" \
+--healthz-bind-address="0.0.0.0" \
+--healthz-port="10248" \
+--hostname-override="$LOCAL_IPADDRESS" \
+--http-check-frequency="15s" \
+--image-gc-high-threshold="85" \
+--image-gc-low-threshold="80" \
+--image-pull-progress-deadline="2m30s" \
+--image-service-endpoint="unix://$HOME_PATH/apps/docker/var/run/dockershim.sock" \
+--iptables-drop-bit="15" \
+--iptables-masquerade-bit="14" \
+--kube-api-burst="10" \
+--kube-api-content-type="application/vnd.kubernetes.protobuf" \
+--kube-api-qps="5" \
+--kube-reserved="cpu=200m,memory=500Mi" \
+--log-cadvisor-usage="true" \
+--log-dir="$LOGS_PATH/" \
+--log-flush-frequency="2s" \
+--logtostderr="false" \
+--machine-id-file="$KUBERNETES_PREFIX/client/kubelet/etc/machine-id" \
+--make-iptables-util-chains="true" \
+--max-open-files="1000000" \
+--max-pods="110" \
+--minimum-image-ttl-duration="30m0s" \
+--node-ip="$LOCAL_IPADDRESS" \
+--node-status-update-frequency="10s" \
+--oom-score-adj="-999" \
+--pod-infra-container-image="gcr.io/google_containers/pause-amd64:3.0" \
+--pods-per-core="0" \
+--port="10250" \
+--read-only-port="10255" \
+--register-node="true" \
+--registry-burst="10" \
+--registry-qps="8" \
+--root-dir="$KUBERNETES_PREFIX/client/kubelet/" \
+--runonce="false" \
+--runtime-request-timeout="5m0s" \
+--seccomp-profile-root="$KUBERNETES_PREFIX/client/kubelet/seccomp/" \
+--stderrthreshold="4" \
+--storage-driver-buffer-duration="1m30s" \
+--storage-driver-db="cadvisor" \
+--storage-driver-host="0.0.0.0:8086" \
+--storage-driver-password="root" \
+--storage-driver-secure="false" \
+--storage-driver-table="stats" \
+--storage-driver-user="root" \
+--streaming-connection-idle-timeout="2h0m0s" \
+--sync-frequency="1m0s" \
+--v="4" \
+--volume-plugin-dir="$KUBERNETES_PREFIX/client/kubelet/plugins/volume/exec/" \
+--volume-stats-agg-period="1m0s" \
+--bootstrap-kubeconfig="$KUBERNETES_PREFIX/client/kubelet/etc/bootstrap.kubeconfig" \
+--cert-dir="$CERTIFICATE_PATH/" \
+--kubeconfig="$KUBERNETES_PREFIX/client/kubelet/etc/kubelet.kubeconfig" 
+
+
+########################################################
+变量说明: 见前述
+
+参数说明: kubelet启动参数一共158个非实验性参数,大多数重要的参数在这里都有描述,也是目前部署使用的参数
+
+--address								#同前
+--allow-privileged						#允许容器以privileged方式启动,此时,修改物理机器相关内核,系统文件才能使用
+--alsologtostderr						#同前
+--anonymous-auth						#允许使用匿名方式验证,这里必须是true,后边将详细介绍原因
+--application-metrics-count-limit		#要存储的最大应用程序度量标准数量(每个容器)
+--authorization-mode					#同前
+--cadvisor-port							#cadvisor端口
+--cgroup-driver							#docker驱动,与docker相关
+--cluster-dns							#配合kube-dns使用,用于在pod中解析hostname
+--cluster-domain						#集群域名,必须和证书中的名称相同
+--container-hints						#容器提示文件的位置
+--container-runtime						#要使用的容器运行时.可能的值:'docker','rkt'
+--container-runtime-endpoint			#远程运行时服务的端点.目前unix套接字在Linux上受支持,并且tcp在Windows上受支持
+--contention-profiling					#同前
+--cpu-cfs-quota							#为指定CPU限制的容器启用CPU CFS配额
+--docker								#docker节点
+--docker-endpoint						#将此用于Docker节点与之通信
+--docker-root							#从docker信息读取docker root(这是一个后备,默认:/var/lib/docker)(默认为“/var/lib/docker”)
+--enable-controller-attach-detach		#启用Attach/Detach控制器来管理排定到此节点的卷的附件/分离,并禁用kubelet执行任何attach/detach操作
+--enable-debugging-handlers				#启用服务器节点以进行日志收集和本地运行容器和命令
+--enable-load-reader					#是否启用CPU读取器
+--event-burst							#突发事件记录的最大大小暂时允许事件记录突发到该数字,但仍不超过事件qps
+--event-qps								#如果 > 0,则将事件创建次数限制为此值
+--eviction-hard							#一系列的驱逐阈值(例如,memory.available <1Gi)如果符合,将触发pod驱逐.
+--eviction-pressure-transition-period	#在离开驱逐压力条件之前,Kubelet必须等待的时间
+--eviction-soft							#如果在相应的宽限期内遇到一组驱逐阈值(例如memory.available <1.5Gi),则会触发pod驱逐.
+--eviction-soft-grace-period			#一系列驱逐宽限期(例如,memory.available = 1m30s)对应于软驱逐阈值必须持续多长时间,才能触发pod驱逐.
+--exit-on-lock-contention				#Kubelet是否应该在锁定文件争用时退出
+--experimental-dockershim-root-directory		#这个参数需要说明一下,当不加的时候,启动会有如下的报错:
+error: failed to run Kubelet: failed to create kubelet: mkdir /var/lib/dockershim: permission denied
+此参数是隐藏参数.
+--experimental-qos-reserved				#一组ResourceName =百分比(例如 memory=50%)对,描述了在QoS级别如何保留pod资源请求.目前仅支持内存
+--fail-swap-on							#如果在节点上启用了swap功能,Kubelet将无法启动
+--healthz-bind-address					#服务于Healthz服务器的IP地址
+--healthz-port							#本地主机healthz节点的端口
+--hostname-override						#同前
+--http-check-frequency					#检查http数据的持续时间
+--image-gc-high-threshold				#image垃圾收集始终运行之后的磁盘使用率百分比
+--image-gc-low-threshold				#image垃圾收集永远不会运行之前的磁盘使用百分比.垃圾收集的最低磁盘使用率
+--image-pull-progress-deadline			#如果在截止日期之前没有进行拉动,image pull操作将被取消.
+--image-service-endpoint				#[实验]远程图像服务的终点.如果未指定,则默认情况下它将与容器运行时端点相同.目前unix套接字在Linux上受支持,并且tcp在Windows上受支持
+--iptables-drop-bit						#fwmark空间的位标记丢弃的数据包
+--iptables-masquerade-bit				#用于标记SNAT包的fwmark空间位
+--kube-api-burst						#与kubernetes apiserver交互时的burst值
+--kube-api-content-type					#同前
+--kube-api-qps							#同前
+--kube-reserved							#描述为kubernetes系统组件预留的一组资源的ResourceName=ResourceQuantity,这里不要用storage相关的资源,有bug,将会导致无法启动
+--log-cadvisor-usage					#是否记录cAdvisor容器的使用情况
+--log-dir								#同前
+--log-flush-frequency					#同前
+--logtostderr							#同前
+--machine-id-file						#用逗号分隔的文件列表来检查机器ID
+--make-iptables-util-chains				#如果为true,kubelet将确保主机上存在iptables实用程序规则
+--max-open-files						#Kubelet进程可以打开的文件数量
+--max-pods								#kubelet默认可以运行的最大pod数
+--minimum-image-ttl-duration			#垃圾收集前未使用image的最小age
+--node-ip								#node的IP地址.如果设置,kubelet将使用该node的IP地址
+--node-status-update-frequency			#指定kubelet将节点状态发布到master的频率
+--oom-score-adj							#kubelet过程的oom-score-adj值
+--pod-infra-container-image				#其每个pod中的network/ipc名称空间容器将使用的映像
+--pods-per-core							#每个核心上可以运行的pods数量在该Kubelet上.值为0将禁用此限制
+--port									#Kubelet服务的端口
+--read-only-port						#Kubelet的只读端口在没有authentication/authorization 的情况下投入使用
+--register-node							#用apiserver注册节点
+--registry-burst						#最大的bursty pulls,临时允许pull burst到这个值,但仍然不超过registry-qps
+--registry-qps							#如果> 0,请将注册表的QPS限制为此值
+--root-dir								#管理kubelet文件的目录路径
+--runonce								#如果为true，则从本地清单或远程网址产生pod后退出
+--runtime-request-timeout				#所有运行时请求超时(除长时间运行请求外)-pull,logs,exec and attach.当超过了超时时间，kubelet将取消请求，抛出错误并稍后重试 
+--seccomp-profile-root					#seccomp配置文件的目录路径
+--stderrthreshold						#同前
+--storage-driver-buffer-duration	 	#在此期间,存储驱动程序中的写入将被缓存,并作为单个事务提交给非内存后端
+--storage-driver-db						#数据库名称
+--storage-driver-host					#数据库 host:port
+--storage-driver-password				#数据库 password
+--storage-driver-secure					#使用安全连接到数据库
+--storage-driver-table					#表名称
+--storage-driver-user					#数据库 username
+--streaming-connection-idle-timeout		#在连接自动关闭之前,流连接可以处于空闲状态的最长时间
+--sync-frequency						#同步运行容器和配置之间的最大时间间隔
+--v										#同前
+--volume-plugin-dir						#<警告：Alpha功能>用于搜索其他第三方卷插件的目录的完整路径
+--volume-stats-agg-period				#指定kubelet的时间间隔，以计算并缓存所有容器和卷的卷磁盘使用量
+--bootstrap-kubeconfig					#用于第一次启动时候与apiserver交互用的配置文件,与bootstrap配合使用
+--cert-dir								#证书路径
+--kubeconfig							#kubeconfig文件路径
+
+
+TLS bootstrapping配置(重要)
+原理不在叙述,前边证书部分已经详细描述
+有几个很重要的参数,并且需要特别注意的地方
+
+# bootstrap.kubeconfig文件中记录了kubelet第一次启动与apiserver交互的所有信息,具体的文件内容及配置方法见后
+--bootstrap-kubeconfig="$KUBERNETES_PREFIX/client/kubelet/etc/bootstrap.kubeconfig"  
+
+# 与apiserver建立联系以后,会把配置全部写到此文件,特别注意的是,此文件必须不能先存在,否则,会出现
+# error: failed to run Kubelet: No authentication method configured
+####################################################
+--kubeconfig="$KUBERNETES_PREFIX/client/kubelet/etc/kubelet.kubeconfig"
+
+# 这里必须配合上述的参数,如果设置成false,就会出现如下的报错
+# kubelet config controller: validating combination of defaults and flags
+# 就是说,kubelet第一次启动的时候使用的是anonymous模式,必须注意
+####################################################
+--anonymous=="true"
+
+# 这里是当从apiserver端请求到证书以后会将生成本地证书在此目录下
+--cert-dir="$CERTIFICATE_PATH/"
+
+总结:这里的逻辑是kubelet第一次启动使用bootstrap.kubeconfig的配置去apiserver申请证书,如果认证成功,apiserver将会动态生成的证书颁发给kubelet,kubelet把所有的配置写入文件kubelet.kubeconfig,并且生成的证书在--cert-dir目录下,以后再次启动kubelet,根据上述的kubelet.kubeconfig和证书启动.
+
+
+操作步骤:
+1.生成token文件,再描述一次,此文件放在master端,随kube-controller-manager启动使用
+$head -c 16 /dev/urandom | od -An -t x | tr -d ' '
+73dec876dabd7a74ebbb092272307d85					#这里生成的token值,每次都不同
+
+$touch token.csv
+
+#内容及字段说明
+token                            用户名             用户ID   
+###################################################################################
+
+73dec876dabd7a74ebbb092272307d85,kubelet-bootstrap,10001,"system:kubelet-bootstrap"
+
+
+2.给建立的用户授权,在kubelet端使用此用户在k8s apiserver端才可以被识别并通过,master端执行
+$kubectl create clusterrolebinding kubelet-bootstrap --clusterrole=system:node-bootstrapper --user=kubelet-bootstrap
+
+3.生成bootstrap.kubeconfig
+# 注意的是bootstrap.kubeconfig是由3部分组成
+# set-cluster kubernetes 这里set-cluster后面的名称必须和kube-controller-manager中的--cluster-name一致,并且在其他组件的此参数
+# 也必须一致
+# --certificate-authority后面是在apiserver端生成的ca证书
+# --embed-certs="true" 指嵌入
+# --server master端地址,必须是https地址和端口
+####################################################
+
+$kubectl config set-cluster kubernetes --certificate-authority=/home/blue/apps/kubernetes/certificate/ca.crt --embed-certs="true" --server=https://192.168.10.15:6443 --kubeconfig=bootstrap.kubeconfig
+
+# 将token及用户信息设置到文件中
+# kubelet-bootstrap token文件中的用户,必须一致
+# --token token值
+####################################################
+
+$kubectl config set-credentials kubelet-bootstrap --token="79b80c1f8df0ae6ac78cf771269c75f6" --kubeconfig=bootstrap.kubeconfig
+
+# 这里的--cluster和--user同上,配置关联
+$kubectl config set-context default --cluster=kubernetes --user=kubelet-bootstrap --kubeconfig=bootstrap.kubeconfig
+
+# 配置默认关联
+$kubectl config use-context default --kubeconfig=bootstrap.kubeconfig
+
+
+通过上述的步骤,启动组件,在master端通过命令可以查看kubelet请求证书的以及授权的情况,如下,已经成功的状态
+$./kubectl get csr
+NAME                                                   AGE       REQUESTOR           CONDITION
+node-csr-MAd6HS07Exnat-B8YuziNAKW1U-GG-NY-KbA7630K_M   17h       kubelet-bootstrap   Approved,Issued
+node-csr-On9hICMGb7ywJSpPeySbOwjbvvxMsgg8Tf0QLJHdBVA   16h       kubelet-bootstrap   Approved,Issued
+
+证书文件及配置文件信息
+#具体的文件内容不在展示,除了token文件,其他文件内容都是命令生成.
+
+# 证书目录,包含CA相关,kubelet相关的证书,以及其他的一些master端用的文件,为了保持一致,因此将master用的证书及文件也同步到此
+
+ca.crt  ca.srl    kubelet-client.crt  kubelet.crt  kube-proxy-csr.conf  server.csr  token.csv
+ca.key  csr.conf  kubelet-client.key  kubelet.key  server.crt           server.key
+
+# 配置文件
+
+bootstrap.kubeconfig  kubelet.kubeconfig  machine-id
+
+2.4.5 kube-proxy
+kube-proxy组件主要完成本地容器上的iptables设置,即网络请求的端口转发,数据流向的问题.参数的调整有部分是关于iptables的调整,以及部分系统级别的网络参数调整.
+
+
+详细的脚本如下: 必须使用root用户启动
+########################################################
+$KUBERNETES_PREFIX/client/kube-proxy/bin/kube-proxy \
+--alsologtostderr="false" \
+--config-sync-period="30m0s" \
+--conntrack-max-per-core="65535" \
+--conntrack-tcp-timeout-close-wait="10m0s" \
+--conntrack-tcp-timeout-established="30m0s" \
+--healthz-bind-address="0.0.0.0" \
+--healthz-port="10256" \
+--hostname-override="$LOCAL_IPADDRESS" \
+--iptables-min-sync-period="5s" \
+--iptables-sync-period="15s" \
+--kube-api-burst="10" \
+--kube-api-content-type="application/vnd.kubernetes.protobuf" \
+--kube-api-qps="5" \
+--kubeconfig="/home/blue/apps/kubernetes/client/kubelet/etc/kubelet.kubeconfig" \
+--log-dir="$LOGS_PATH/" \
+--log-flush-frequency="2s" \
+--logtostderr="false" \
+--metrics-bind-address="0.0.0.0" \
+--oom-score-adj="-999" \
+--profiling="true" \
+--stderrthreshold="4" \
+--v="4"  
+
+########################################################
+变量说明: 见前述
+
+参数说明: kube-proxy启动参数一共40个非实验性参数,大多数重要的参数在这里都有描述,也是目前部署使用的参数
+
+--alsologtostderr							#同前
+--config-sync-period						#刷新apisever的配置的频率
+--conntrack-max-per-core					#每个CPU核心跟踪的最大NAT连接数
+--conntrack-tcp-timeout-close-wait			#在CLOSE_WAIT状态下TCP连接的NAT超时
+--conntrack-tcp-timeout-established			#已建立的TCP连接的空闲超时
+--healthz-bind-address						#同前
+--healthz-port								#同前
+--hostname-override							#同前
+--iptables-min-sync-period					#iptables规则在端点和服务更改时可刷新的最小时间间隔
+--iptables-sync-period						#iptables规则刷新频率的最大时间间隔
+--kube-api-burst							#与apiserver通讯的burst值
+--kube-api-content-type						#同前
+--kube-api-qps								#与kubernetes apiserver通讯时使用QPS
+--kubeconfig								#关于认证信息的kubeconfig 文件路径
+--log-dir									#同前
+--log-flush-frequency						#同前
+--logtostderr								#同前
+--metrics-bind-address						#metrics服务的接口
+--oom-score-adj								#同前
+--profiling									#同前
+--stderrthreshold							#同前
+--v											#同前
+
+说明:
+这里有个需要注意的地方
+--kubeconfig="$KUBERNETES_PREFIX/client/kubelet/etc/kubelet.kubeconfig"
+
+这个参数用的kubelet产生的kubelet.kubeconfig文件,因此在启动的时候,必须是kubelet启动完成以后,才启动kube-proxy组件
+
+
+3.使用负载均衡负载k8s apiserver
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,21 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  namespace: own-project 
+  name: zabbix-mysql
+  labels:
+    name: zabbix-mysql
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        name: zabbix-mysql
+    spec:
+      containers:
+      - name: zabbix-mysql
+        image: 192.168.81.97:5000/zabbix/mysql:latest
+        ports:
+        - containerPort: 3306
+
+

@@ -1,0 +1,19 @@
+#include <stdio.h>
+
+int main() 
+{
+	char *diamond = "5克拉钻石";
+	char *p1 = diamond;                  //p1等于字符串首地址
+	char **p2 = &p1;
+	char ***p3 = &p2;
+
+	printf("diamond = %p\n", diamond);   //diamond指字符串首地址
+	printf("&p1 = %p, p1 = %p\n", &p1, p1);  //&p1指p1的地址,p1等于diamond
+	printf("&p2 = %p, p2 = %p\n", &p2, p2);  //&p2指p2的地址,p2存放p1的地址,等于&p1
+	printf("&p3 = %p, p3 = %p\n", &p3, p3);  //&p3指p3的地址,p3存放p2的地址,等于&p2
+
+	printf("以下方法可得到钻石: \n");
+	printf("**p3 = %s, *p2 = %s, p1 = %s, diamond = %s\n", **p3, *p2, p1, diamond);
+  //所有内容都为"5克拉钻石"
+	return 0;
+}

@@ -1,0 +1,41 @@
+vim kubeadm-config.yaml # 添加 apiserver,controller-manager,scheduler 的 --feature-gates=InPlacePodVerticalScaling=true部分,即特性门
+kubectl edit cm kubeadm-config -n kube-system -o yaml  
+什么都没有变  
+
+kubeadm init phase control-plane apiserver --config kubeadm-config.yaml  --v=5 
+controller-manager,scheduler 重启了 apiserver pod 新建了,pod 值没有变,生成了新的证书,覆盖了 /etc/kubernetes/manifests/kube-apiserver.yaml  # ???,即使删除了 pod, kubectl get pod -n kube-system -o  yaml 时候仍然没有看见参数
+
+kubeadm init phase control-plane controller-manager --config kubeadm-config.yaml  --v=5
+controller-manager pod 重启了,pod 值也变了,同时,覆盖了 /etc/kubernetes/manifests/kube-controller-manager.yaml 文件,正常
+
+kubeadm init phase control-plane scheduler --config kubeadm-config.yaml  --v=5
+scheduler pod 重启了,pod 值也变了,同时,覆盖了/etc/kubernetes/manifests/kube-scheduler.yaml,正常
+
+kubectl edit cm -n kube-system kubelet-config 
+没有任何变化
+
+kubeadm upgrade node phase kubelet-config
+覆盖了 /var/lib/kubelet/config.yaml 
+
+systemctl restart kubelet
+服务中参数已经变更好了,正常
+
+kubeadm edit cm kube-proxy -n kube-system 
+添加了关于 feature-gates 的部分
+
+kubectl delete pod kube-proxy-xxx -n kube-system 
+重新生成的 pod 没有改变值  # ???
+
+
+初步怀疑是从 configmap 同步到 pod 中出现错误,通过登陆 etcd 查看关于 apiserver 的 pod,其中并没有 configmap 中添加的内容,即是 configmap 的内容没有同步到 etcd 中
+
+由于其他原因,通过 kubeadm reset 然后   kubeadm init 重新配置了 master 节点,在 kubeadm-config 中配置的特性门部分在新的 apiserver
+中启动完成了.
+
+可能是问题出在 configmap 写入 etcd - 需要查询是否有 configmap 缓存写入 etcd 中时出现错误
+
+
+
+关于 kubeadm init phase 的详细信息
+https://kubernetes.io/zh-cn/docs/reference/setup-tools/kubeadm/kubeadm-init-phase/#cmd-phase-control-plane
+

@@ -1,0 +1,106 @@
+/* strategy.h */
+
+class Strategy {
+ public:
+  Strategy();
+  virtual ~Strategy();
+  virtual void AlgrithmInterface() = 0;
+};
+
+class ConcreteStrategyA : public Strategy {
+ public:
+  ConcreteStrategyA();
+  virtual ~ConcreteStrategyA();
+  void AlgrithmInterface();
+};
+
+class ConcreteStrategyB : public Strategy {
+ public:
+  ConcreteStrategyB();
+  virtual ~ConcreteStrategyB();
+  void AlgrithmInterface();
+};
+
+/* strategy.cc */
+#include "strategy.h"
+#include <iostream>
+
+Strategy:: Strategy() {
+}
+
+Strategy::~Strategy() {
+  std::cout << "~Strategy..." << std::endl;
+}
+
+void Strategy::AlgrithmInterface() {
+}
+
+ConcreteStrategyA::ConcreteStrategyA(){
+
+}
+
+ConcreteStrategyA::~ConcreteStrategyA() {
+  std::cout << "~ConcreteStrategyA..." << std::endl;
+}
+
+void ConcreteStrategyA::AlgrithmInterface() {
+  std::cout << "test ConcreteStragegyA..." << std::endl;
+}
+
+ConcreteStrategyB::ConcreteStrategyB(){
+
+}
+
+ConcreteStrategyB::~ConcreteStrategyB() {
+  std::cout << "~ConcreteStrategyB..." << std::endl;
+}
+
+void ConcreteStrategyB::AlgrithmInterface() {
+  std::cout << "test ConcreteStragegyB  ..." << std::endl;
+}
+
+/* context.h */
+class Strategy;
+
+class Context {
+ public:
+  Context(Strategy* stg);
+  ~Context();
+  void DoAction();
+ private:
+  Strategy* _stg;
+};
+
+/* context.cc */
+#include "context.h"
+#include "strategy.h"
+#include <iostream>
+
+Context::Context(Strategy* stg) {
+  _stg = stg;
+}
+
+Context::~Context() {
+  if (!_stg)
+    delete _stg;
+}
+
+void Context::DoAction() {
+  _stg->AlgrithmInterface();
+}
+
+/* main.cc */
+#include "context.h"
+#include "strategy.h"
+
+int main(int argc, char* argv[]) {
+  Strategy* ps;
+  ps = new ConcreteStrategyA();
+  Context* pc = new Context(ps);
+  pc->DoAction();
+
+  return 0;
+}
+
+该模式有点像生产者-消费者模式,strategy是生产者,context是消费者,所有的操作都在context中进行,实际操作的是strategy对象.
+

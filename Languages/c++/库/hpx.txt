@@ -1,0 +1,37 @@
+需要安装gperftools
+需要安装hwolc
+
+版本
+libunwind-1.1.tar.gz
+gperftools-2.4.tar.gz
+boost-1.56.0
+hpx_0.9.10
+
+安装次序
+1.boost-1.56.0
+忽略
+
+2.libunwind
+tar zxvf libunwind-1.1.tar.gz
+cd libunwind 
+./configure --prefix=/usr && make && make install
+
+3.gperftools
+tar zxvf gperftools-2.4.tar.gz
+cd gperftools 
+./configure --prefix=/usr && make && make install
+
+3.hwloc
+tar zxvf hwloc-1.10.1.tar.gz 
+cd hwloc-1.10.1 
+./configure --prefix=/usr && make && make install
+
+4.hpx
+cd /home/jack/apps
+tar zxvf hpx_0.9.10
+mkdir build
+cd build 
+cmake /home/jack/apps/hpx_0.9.10
+
+
+

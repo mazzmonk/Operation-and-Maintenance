@@ -1,0 +1,88 @@
+/* product.h */
+class Product {
+ public:
+  virtual ~Product() = 0;
+ protected:
+  Product();                      //不允许实例化
+ private:
+};
+
+class ConcreteProduct: public Product {
+ public:
+  ~ConcreteProduct();
+  ConcreteProduct();
+ protected:
+ private:
+};
+
+/* product.cc */
+#include "product.h"
+#include <iostream>
+
+Product::Product() {
+}
+
+Product::~Product() {
+}
+
+ConcreteProduct::ConcreteProduct() {
+  std::cout << "ConcreteProduct..." << std::endl;
+}
+
+ConcreteProduct::~ConcreteProduct() {
+}
+
+/* factory.h */
+class Product;
+
+class Factory {
+ public:
+  virtual ~Factory() = 0;
+  virtual Product* CreateProduct() = 0;
+ protected:
+  Factory();                                //不允许实例化
+ private:
+};
+
+class ConcreteFactory : public Factory {
+ public:
+  ~ConcreteFactory();
+  ConcreteFactory();
+  Product* CreateProduct();
+ protected:
+ private:
+};
+
+/* factory.cc */
+#include "factory.h"
+#include "product.h"
+
+#include <iostream>
+
+Factory::Factory() {
+}
+
+Factory::~Factory() {
+}
+
+ConcreteFactory::ConcreteFactory() {
+  std::cout << "ConcreteFactory..." << std::endl;
+}
+
+ConcreteFactory::~ConcreteFactory() {
+}
+
+Product* ConcreteFactory::CreateProduct() {
+  return new ConcreteProduct();
+}
+
+/* main.cc */
+#include "factory.h"
+#include "product.h"
+
+int main(int argc,char* argv[]) {
+  Factory* fac = new ConcreteFactory();
+  Product* p = fac->CreateProduct();
+  return 0;
+}
+

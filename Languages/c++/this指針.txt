@@ -1,0 +1,89 @@
+成员函数具有一个附加的隐含形参，即指向该类对象的一个指针。
+这个隐含形参命名为this,与调用成员函数的对象绑定在一起。成员函数不能定义this形参，而是又编译器隐含定义。
+
+当我们需要一个对象作为整体引用而不是一个对象的一个成员函数时。最常见的是在这样的函数中使用this:该函数返回对调用该函数的对象的引用。
+
+比如：
+Class Item {
+public:
+	int insert();
+...
+
+}
+
+Item item;
+item.insert();
+
+这里的insert这个函数就有一个this指针，指向item的地址。
+
+Class Screen {
+public:
+	Screen& move(index r, index c);
+	Screen& set(char);
+	Screen& set(index, index, char);
+}
+
+Screen& Screen::set(char c)
+{
+	contents[cursor]  = c;
+	return *this;
+}
+
+Screen& Screen::move(index r, index c)
+{
+	index row = r * width; 
+	cursor = row + c;
+	return *this;
+}
+
+
+在使用*this指针做操作符重载函数的返回值的时候，有个地方需要注意
+就是当在同一个程序中多次调用重载函数所在类的对象时候，可能会导致后续的类对象的*this指针都指向第一个类对象。
+
+class Rational {
+ public:
+  Rational(int n, int d)
+      : num_d(n),
+        denom_d(d) {
+    check_zero(d);
+  }
+  ~Rational() { std::cout << "Hello,I'm leave.\n"; }
+  int get_num() const {
+    return num_d;
+  }
+  int get_denom() const {
+    return denom_d;
+  }
+  void num(int n) {
+    num_d = n;
+  }
+  void denom(int);
+
+  Rational& operator+=(const double& rhs);
+
+ private:
+  int num_d;      //分子
+  int denom_d;    //分母
+  static void check_zero(int d) {
+    if (d == 0) {
+      std::cerr << "Zero denominator in Rational\n";
+    }
+  }
+};
+
+Rational operator+(const Rational& lhs, const double& rhs);  //將rhs裝換成分數形式
+Rational operator+(const double& lhs, const Rational& rhs);  //將rhs裝換成分數形式
+
+/*
+ * 当上述的2个重载设置成全局函数以后，多次调用的时候，会出现，*this指向最开始的一个对象。
+ * 可能的原因是只有对象被析构的时候，才会同时删除*this这指针，不知道是否可以手动的删除*this
+ * 这个指针指向的内容，但是这样会产生另外一个问题，删除*this指向的内容，是否会导致函数
+ * operator+=()返回的内容是个不存在的内容，最终导致异常。
+ */
+
+本质上说，应该是上述的全局函数写法有问题
+
+
+
+
+

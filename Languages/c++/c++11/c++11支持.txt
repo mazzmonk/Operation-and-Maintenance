@@ -1,0 +1,26 @@
+1. 右键项目 -> properties -> C/C++ Build -> Settings -> GCC C++ Compiler -> Miscellaneous
+添加 ”-std=c++0x" ，不要引号 ，然后各种apply 和OK
+
+只设置上述内容,运行编译好的程序,会有如下错误
+terminate called after throwing an instance of 'std::system_error'
+  what():  Enable multithreading to use std::thread: Operation not permitted
+
+The answer was to add the following to two locations:
+
+It should be added to:
+1) Project Properties -> C/C++ Build -> Settings -> Tool Settings -> GCC C++ Compiler -> Miscellaneous -> Other flags
+Example: -c -fmessage-length=0 	-pthread -std=c++11 -Wl,--no-as-needed
+2) Project Properties -> C/C++ Build -> Settings -> Tool Settings -> GCC C++ Linker -> Miscellaneous -> Linker flags
+Example: -pthread -std=c++11 -Wl,--no-as-needed
+3) Window -> Preferences -> C/C++ -> Build -> Settings -> Discovery -> CDT GCC Build-in Compiler Settings
+in the text box entitled Command to get compiler specs append -std=c++11
+最后在Libraries中添加pthread
+
+
+另外为了在使用c++11的时候有提示
+需要做如下的设置：
+C/C++ General -> Paths and Symbols -> Symbols -> GNU C++. Click "Add..." and paste __GXX_EXPERIMENTAL_CXX0X__ (ensure to append and prepend two underscores) into "Name" and leave "Value" blank.
+
+同时
+
+Project->Properties->C/C++ Build->Settings->Tool Settings->GCC C++ Compiler->Dialect and choose c++0x from the drop-down

@@ -1,0 +1,50 @@
+###### zabbix ######
+a.b.com:9090
+Admin/zabbix
+
+server,agent安装（服务端）
+cd src
+tar zxvf zabbix-2.4.6.tar.gz
+cd zabbix-2.4.6	 	
+./configure --prefix=$HOME/apps/zabbix --enable-server --enable-agent --with-mysql=$HOME/apps/mysql/bin/mysql_config --enable-ipv6 --with-net-snmp --with-libcurl --with-libxml2
+make && make install
+
+数据库用户及密码
+create database zabbix;
+grant all privileges on *.* to zabbix@'127.0.0.1' identified by 'bjtxj_*0987';
+grant all privileges on *.* to zabbix@'localhost' identified by 'bjtxj_*0987';
+
+添加
+/home/blue/apps/mysql/lib
+到/etc/ld.so.conf
+
+mkdir -p $HOME/logs/zabbix
+mkdir -p $HOME/apps/zabbix/run
+
+启动
+$HOME/apps/zabbix/sbin/zabbix_server -c $HOME/apps/zabbix/etc/zabbix_server.conf
+$HOME/apps/zabbix/sbin/zabbix_agentd -c $HOME/apps/zabbix/etc/zabbix_agentd.conf
+
+agent安装（客户端）
+cd src
+tar zxvf zabbix-2.4.6.tar.gz
+cd zabbix-2.4.6	 	
+./configure --prefix=$HOME/apps/zabbix --enable-agent && make && make install
+mkdir -p $HOME/apps/zabbix/run
+mkdir -p $HOME/logs/zabbix && touch $HOME/logs/zabbix/zabbix_agentd.log 
+
+
+mv $HOME/apps/zabbix/etc/zabbix_agentd.conf $HOME/apps/zabbix/etc/zabbix_agentd.conf.bak
+touch $HOME/apps/zabbix/etc/zabbix_agentd.conf
+echo 'PidFile=/home/blue/apps/zabbix/run/zabbix_agentd.pid' >> $HOME/apps/zabbix/etc/zabbix_agentd.conf
+echo 'LogFile=/home/blue/logs/zabbix/zabbix_agentd.log' >> $HOME/apps/zabbix/etc/zabbix_agentd.conf
+echo 'Server=192.168.81.100' >> $HOME/apps/zabbix/etc/zabbix_agentd.conf
+echo "ServerActive=`ifconfig |grep Bcast|cut -d':' -f2|cut -d' ' -f1`" >> $HOME/apps/zabbix/etc/zabbix_agentd.conf
+echo "Hostname=`ifconfig |grep Bcast|cut -d':' -f2|cut -d' ' -f1`" >> $HOME/apps/zabbix/etc/zabbix_agentd.conf
+echo 'UnsafeUserParameters=1' >> $HOME/apps/zabbix/etc/zabbix_agentd.conf
+
+$HOME/apps/zabbix/sbin/zabbix_agentd -c $HOME/apps/zabbix/etc/zabbix_agentd.conf
+
+
+
+

@@ -1,0 +1,116 @@
+#!/bin/bash
+# author:jack
+# date:20170209
+# startup kubelet service
+# FILENAME:srv.kubelet
+###########################
+set -e
+set -x
+
+if [ -e GLOBAL-ENV ];then
+  source GLOBAL-ENV
+else
+  echo 'File GLOBAL-ENV does not exist.'
+  echo -1
+fi
+
+LOGS_PATH="$KUBERNETES_PREFIX/client/kubelet/logs"
+
+$KUBERNETES_PREFIX/client/kubelet/bin/kubelet \
+--address="0.0.0.0" \
+--allow-privileged="true" \
+--alsologtostderr="false" \
+--anonymous-auth="true" \
+--application-metrics-count-limit="150" \
+--authorization-mode="AlwaysAllow" \
+--cadvisor-port="4194" \
+--cgroup-driver="systemd" \
+--cluster-dns="$KUBE_DNS" \
+--cluster-domain="$CLUSTER_DOMAIN" \
+--container-hints="$KUBERNETES_PREFIX/client/kubelet/etc/cadvisor/container_hints.json" \
+--container-runtime="docker" \
+--container-runtime-endpoint="unix://$HOME_PATH/apps/docker/var/run/dockershim.sock" \
+--contention-profiling="true" \
+--cpu-cfs-quota="true" \
+--docker="unix://$HOME_PATH/apps/docker/var/run/socket" \
+--docker-endpoint="unix://$HOME_PATH/apps/docker/var/run/socket" \
+--docker-root="$HOME_PATH/apps/docker/var/lib/docker" \
+--enable-controller-attach-detach="true" \
+--enable-debugging-handlers="true" \
+--enable-load-reader="true" \
+--event-burst="20" \
+--event-qps="10" \
+--eviction-hard="memory.available<200Mi,nodefs.available<10%,nodefs.inodesFree<10%" \
+--eviction-pressure-transition-period="5m0s" \
+--eviction-soft="memory.available<300Mi,nodefs.available<15%,nodefs.inodesFree<15%" \
+--eviction-soft-grace-period="memory.available=1m0s,nodefs.available=3m0s,nodefs.inodesFree=3m0s" \
+--exit-on-lock-contention="false" \
+--experimental-dockershim-root-directory="$HOME_PATH/apps/docker/var/lib/dockershim/" \
+--experimental-qos-reserved="memory=85%" \
+--fail-swap-on="true" \
+--healthz-bind-address="0.0.0.0" \
+--healthz-port="10248" \
+--hostname-override="$LOCAL_IPADDRESS" \
+--http-check-frequency="15s" \
+--image-gc-high-threshold="85" \
+--image-gc-low-threshold="80" \
+--image-pull-progress-deadline="2m30s" \
+--image-service-endpoint="unix://$HOME_PATH/apps/docker/var/run/dockershim.sock" \
+--iptables-drop-bit="15" \
+--iptables-masquerade-bit="14" \
+--kube-api-burst="10" \
+--kube-api-content-type="application/vnd.kubernetes.protobuf" \
+--kube-api-qps="5" \
+--kube-reserved="cpu=200m,memory=500Mi" \
+--log-cadvisor-usage="true" \
+--log-dir="$LOGS_PATH/" \
+--log-flush-frequency="2s" \
+--logtostderr="false" \
+--machine-id-file="$KUBERNETES_PREFIX/client/kubelet/etc/machine-id" \
+--make-iptables-util-chains="true" \
+--max-open-files="1000000" \
+--max-pods="110" \
+--minimum-image-ttl-duration="30m0s" \
+--node-ip="$LOCAL_IPADDRESS" \
+--node-status-update-frequency="10s" \
+--oom-score-adj="-999" \
+--pod-infra-container-image="gcr.io/google_containers/pause-amd64:3.0" \
+--pods-per-core="0" \
+--port="10250" \
+--read-only-port="10255" \
+--register-node="true" \
+--registry-burst="10" \
+--registry-qps="8" \
+--root-dir="$KUBERNETES_PREFIX/client/kubelet/" \
+--runonce="false" \
+--runtime-request-timeout="5m0s" \
+--seccomp-profile-root="$KUBERNETES_PREFIX/client/kubelet/seccomp/" \
+--stderrthreshold="4" \
+--storage-driver-buffer-duration="1m30s" \
+--storage-driver-db="cadvisor" \
+--storage-driver-host="0.0.0.0:8086" \
+--storage-driver-password="root" \
+--storage-driver-secure="false" \
+--storage-driver-table="stats" \
+--storage-driver-user="root" \
+--streaming-connection-idle-timeout="2h0m0s" \
+--sync-frequency="1m0s" \
+--v="4" \
+--volume-plugin-dir="$KUBERNETES_PREFIX/client/kubelet/plugins/volume/exec/" \
+--volume-stats-agg-period="1m0s" \
+--bootstrap-kubeconfig="$KUBERNETES_PREFIX/client/kubelet/etc/bootstrap.kubeconfig" \
+--cert-dir="$CERTIFICATE_PATH/" \
+--kubeconfig="$KUBERNETES_PREFIX/client/kubelet/etc/kubelet.kubeconfig" 
+#--client-ca-file="$CERTIFICATE_PATH/ca.crt"
+
+#--authorization-mode="AlwaysAllow" \
+
+#--client-ca-file="$CERTIFICATE_PATH/ca.crt" \
+#--tls-cert-file="$CERTIFICATE_PATH/kubelet-client.crt" \
+#--tls-private-key-file="$CERTIFICATE_PATH/kubelet-client.key" 
+
+
+#--cgroup-driver="cgroupfs" \
+#--stderrthreshold="0"  \
+#--log-backtrace-at=":0" \
+

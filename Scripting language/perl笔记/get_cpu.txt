@@ -1,0 +1,200 @@
+#!/usr/bin/perl 
+#autor:jack
+#date:20130827
+#
+#cat /proc/stat
+#example:(jiffies) 时间单位
+#        user	 nice   system      idle      iowait    irq  softirq 
+#cpu  427682140  2185  82472691  5680157375  19168239  1092  1509432  0 0
+#cpu0 227698126  70    43983741  494866810   5851659   1092  1425524  0 0
+#cpu1 58230052   404   10765478  700764382   5889377   0     42173    0 0
+#cpu2 44546488   179   8539818   721527530   2198901   0     3800     0 0
+#cpu3 22394623   1006  3333398   751344722   814746    0     6913     0 0
+#cpu4 44914717   93    10223777  719355344   2555473   0     2547     0 0
+#cpu5 6352838    316   1303201   768852437   447972    0     14772    0 0
+#cpu6 20202280   39    3716850   751268889   1237561   0     3932     0 0
+#cpu7 3343012    74    606424    772177257   172547    0     9769     0 0
+#
+#cpu time = user + nice + system + idle + iowait + irq +softirq
+#cpu idle = (idle2 - idle1)/(total2 - total1)*100 //idle% 
+#cpu usage = [(user2 + sys2 + nice2) - (user1 + sys1 + nice1)]/(total2 - total1) * 100 
+#
+############################################################################
+
+
+
+# 从数组的第二个元素开始计算总和
+sub array_sum {
+	my (@array) = @_;
+	$total = 0;                                                                       #这里必须初始化，否则会把每次调用的数据累计
+	$result = 0;
+	foreach ($j = 1;$j <= $#array;$j++) {
+	$total += $array[$j];
+	}
+        $result = $total;
+}
+
+# 第一次读取/proc/stat，同时存储在数组中
+# 把包含cpu关键字的行储存在数组中@stat1
+my $f1 = "/proc/stat";
+open $fd1,'<',$f1 or die "Can't open $f1:$!";
+my @stat1;
+
+while (my $line1 = <$fd1>) {
+	push (@stat1,$line1) if  ($line1 =~  /^cpu/);
+}
+
+my $num = $#stat1;  #用于做为后边数组的索引值
+
+# 总的cpu时间,存储在@time1_total,然后把总cpu的user,nice,system,idle,iowait,irq,softirq分别存储在对应的数组
+# 对应stat1的第0行
+my @cpuA = split /\s+/,$stat1[0];
+my $cpuA_total = &array_sum(@cpuA);
+
+push (@timeA_total,$cpuA_total); 
+push (@timeA_user,$cpuA[1]);
+push (@timeA_nice,$cpuA[2]);
+push (@timeA_system,$cpuA[3]);
+push (@timeA_idle,$cpuA[4]);
+push (@timeA_iowait,$cpuA[5]);
+push (@timeA_irq,$cpuA[6]);
+push (@timeA_softirq,$cpuA[7]);
+
+# 计算每个核的总cpu时间并把数据存储在@time1_total
+# 从stat1的第1行开始循环,原始形式应该是:@cpuA{$i}的模式，但是这种模式
+#无法表示，因此用cpuA$i来表示成一个字符串数组
+for (my $i=0;$i<$#stat1;$i++) {
+	my $name = "cpuA$i";
+        @$name = split (/\s+/,$stat1[$i+1]);
+	$$name_total = &array_sum(@$name),"\n";    #$cpuA{$i}_total
+	push (@timeA_total,$$name_total);
+
+# 把各个核的user,nice,system,idle,iowait,irq,softirq数据存储在各个数组中
+	push (@timeA_user,$$name[1]);
+	push (@timeA_nice,$$name[2]);
+	push (@timeA_system,$$name[3]);
+	push (@timeA_idle,$$name[4]);
+	push (@timeA_iowait,$$name[5]);
+	push (@timeA_irq,$$name[6]);
+	push (@timeA_softirq,$$name[7]);
+}
+
+close $fd1;
+
+print join(' ',@stat1);
+#print $#stat1,"\n";
+print join(' ', @timeA_total),"\n";
+#print join(' ', @timeA_user),"\n";
+#print join(' ', @timeA_nice),"\n";
+#print join(' ', @timeA_system),"\n";
+#print join(' ', @timeA_idle),"\n";
+#print join(' ', @timeA_iowait),"\n";
+#print join(' ', @timeA_irq),"\n";
+#print join(' ', @timeA_softirq),"\n";
+
+#睡眠5秒
+$SLEEPTIME = 3;
+sleep $SLEEPTIME;
+
+print "########################\n";
+
+#第二次读取/proc/stat，同时存储在数组中
+#把包含cpu关键字的行储存在数组中@stat2
+#后续过程同上
+my $f2 = "/proc/stat";
+open $fd2,'<',$f2 or die "Can't open $f2:$!";
+my @stat2;
+
+while ($line2 = <$fd2>) {
+	push (@stat2,$line2) if ($line2 =~ /^cpu/);
+}
+
+my @cpuB = split /\s+/,$stat2[0];
+my $cpuB_total = &array_sum(@cpuB);
+
+push (@timeB_total,$cpuB_total); 
+push (@timeB_user,$cpuB[1]);
+push (@timeB_nice,$cpuB[2]);
+push (@timeB_system,$cpuB[3]);
+push (@timeB_idle,$cpuB[4]);
+push (@timeB_iowait,$cpuB[5]);
+push (@timeB_irq,$cpuB[6]);
+push (@timeB_softirq,$cpuB[7]);
+
+# 计算每个核的总cpu时间并把数据存储在@time1_total
+# 从stat2的第1行开始循环
+for (my $k=0;$k<$#stat2;$k++) {
+	my $name1 = "cpuB$k";
+        @$name1 = split (/\s+/,$stat2[$k+1]);
+	$$name1_total = &array_sum(@$name1),"\n";
+	push (@timeB_total,$$name1_total);
+
+# 把各个核的user,nice,system,idle,iowait,irq,softirq数据存储在各个数组中
+	push (@timeB_user,$$name1[1]);
+	push (@timeB_nice,$$name1[2]);
+	push (@timeB_system,$$name1[3]);
+	push (@timeB_idle,$$name1[4]);
+	push (@timeB_iowait,$$name1[5]);
+	push (@timeB_irq,$$name1[6]);
+	push (@timeB_softirq,$$name1[7]);
+}
+
+close $fd2;
+
+print join(' ',@stat2);
+#print $#stat2,"\n";
+print join(' ', @timeB_total),"\n";
+#print join(' ', @timeB_user),"\n";
+#print join(' ', @timeB_nice),"\n";
+#print join(' ', @timeB_system),"\n";
+#print join(' ', @timeB_idle),"\n";
+#print join(' ', @timeB_iowait),"\n";
+#print join(' ', @timeB_irq),"\n";
+#print join(' ', @timeB_softirq),"\n";
+
+print "##################\n";
+
+# 计算cpu占用率及user,nice,system,idle,iowait,irq,softirq的占用率
+$cpu_user = ($timeB_user[0] - $timeA_user[0])/($timeB_total[0] - $timeA_total[0]) * 100;
+$cpu_nice = ($timeB_nice[0] - $timeA_nice[0])/($timeB_total[0] - $timeA_total[0]) * 100;
+$cpu_system = ($timeB_system[0] - $timeA_system[0])/($timeB_total[0] - $timeA_total[0]) * 100;
+$cpu_idle = ($timeB_idle[0] - $timeA_idle[0])/($timeB_total[0] - $timeA_total[0]) * 100;
+$cpu_used = 100 - ($timeB_idle[0] - $timeA_idle[0])/($timeB_total[0] - $timeA_total[0]) * 100;
+$cpu_iowait  = ($timeB_iowait[0] - $timeA_iowait[0])/($timeB_total[0] - $timeA_total[0]) * 100;
+$cpu_irq = ($timeB_irq[0] - $timeA_irq[0])/($timeB_total[0] - $timeA_total[0]) * 100;
+$cpu_softirq = ($timeB_softirq[0] - $timeA_softirq[0])/($timeB_total[0] - $timeA_total[0]) * 100;
+
+print "user:		$cpu_user","\n";
+print "nice:		$cpu_nice","\n";
+print "system:	$cpu_system","\n";
+print "idle:		$cpu_idle","\n";
+print "used:		$cpu_used","\n";
+print "iowait:		$cpu_iowait","\n";
+print "irq:		$cpu_irq","\n";
+print "softirq:		$cpu_softirq","\n";
+
+
+print "###########################\n";
+
+# 计算各个内核的cpu占用率及user,nice,system,idle,iowait,irq,softirq的占用率
+for ($m = 0;$m <= $num;$m++) {
+	my $tmp = "cpu$m";
+	$$tmp_user = ($timeB_user[$m + 1] - $timeA_user[$m + 1])/($timeB_total[$m + 1] - $timeA_total[$m + 1]) * 100;
+	$$tmp_nice = ($timeB_nice[$m + 1] - $timeA_nice[$m + 1])/($timeB_total[$m + 1] - $timeA_total[$m + 1]) * 100;
+	$$tmp_system = ($timeB_system[$m + 1] - $timeA_system[$m + 1])/($timeB_total[$m + 1] - $timeA_total[$m + 1]) * 100;
+	$$tmp_idle =  ($timeB_idle[$m+1] - $timeA_idle[$m+1])/($timeB_total[$m+1] - $timeA_total[$m+1]) * 100;   
+       $$tmp_used = 100 - ($timeB_idle[$m + 1] - $timeA_idle[$m + 1])/($timeB_total[$m + 1] - $timeA_total[$m + 1]) * 100;   
+	$$tmp_iowait = ($timeB_iowait[$m + 1] - $timeA_iowait[$m + 1])/($timeB_total[$m + 1] - $timeA_total[$m + 1]) * 100;
+	$$tmp_irq = ($timeB_irq[$m + 1] - $timeA_irq[$m + 1])/($timeB_total[$m + 1] - $timeA_total[$m + 1]) * 100;
+	$$tmp_softirq = ($timeB_softirq[$m + 1] - $timeA_softirq[$m + 1])/($timeB_total[$m + 1] - $timeA_total[$m + 1]) * 100;
+	print "Core $m user:		$$tmp_user","\n";
+	print "Core $m nice:		$$tmp_nice","\n";
+	print "Core $m system:		$$tmp_system","\n";
+	print "Core $m idle:		$$tmp_idle","\n";
+	print "Core $m used:		$$tmp_used","\n";
+	print "Core $m iowait:		$$tmp_iowait","\n";
+	print "Core $m irq:		$$tmp_irq","\n";
+	print "Core $m softirq:		$$tmp_softirq","\n";
+}
+
+

@@ -1,0 +1,17 @@
+explicit
+用关键字explicit声明构造函数,防止编译器执行自动(隐式)转换,一般用于只有1个参数的构造函数
+
+extern
+声明变量,但是不定义,比如必须在.cc文件中定义static类型或者全局变量,但是在其他文件中引用的时候,必须是.h文件,因此在.h文件中声明static类型,或者全局变量,然后在.cc文件中定义,典型的,多线程编程的时候,全局锁,条件变量等等全局对象
+
+typedef
+用来定义类型的同义词
+typedef double wages
+wages hourly, weekly; //double hourly, weekly;
+
+namespace primer = cplusplus_primer
+这里模式表示primer是cpluscplus_primer的一个别名,但是cpluscplus_primer必须存在,比如:namespace cpluscplus_primer { /* ... */ };
+
+
+
+

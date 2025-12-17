@@ -1,0 +1,43 @@
+#!/bin/bash
+# author:jack
+# date:20170209
+# startup kube-proxy service
+# FILENAME:srv.kube-proxy
+###########################
+set -e
+set -x
+
+if [ -e GLOBAL-ENV ];then
+  source GLOBAL-ENV
+else
+  echo 'File GLOBAL-ENV does not exist.'
+  echo -1
+fi
+
+LOGS_PATH="$KUBERNETES_PREFIX/client/kube-proxy/logs"
+
+$KUBERNETES_PREFIX/client/kube-proxy/bin/kube-proxy \
+--alsologtostderr="false" \
+--config-sync-period="30m0s" \
+--conntrack-max-per-core="65535" \
+--conntrack-tcp-timeout-close-wait="10m0s" \
+--conntrack-tcp-timeout-established="30m0s" \
+--healthz-bind-address="0.0.0.0" \
+--healthz-port="10256" \
+--hostname-override="$LOCAL_IPADDRESS" \
+--iptables-min-sync-period="5s" \
+--iptables-sync-period="15s" \
+--kube-api-burst="10" \
+--kube-api-content-type="application/vnd.kubernetes.protobuf" \
+--kube-api-qps="5" \
+--kubeconfig="/home/blue/apps/kubernetes/client/kubelet/etc/kubelet.kubeconfig" \
+--log-dir="$LOGS_PATH/" \
+--log-flush-frequency="2s" \
+--logtostderr="false" \
+--metrics-bind-address="0.0.0.0" \
+--oom-score-adj="-999" \
+--profiling="true" \
+--stderrthreshold="4" \
+--v="4"  
+
+

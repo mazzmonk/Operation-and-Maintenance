@@ -1,0 +1,5 @@
+#!/bin/bash
+
+
+
+java -jar $HOME/apps/jenkins.war --httpPort=19999 --logfile=/home/blue/logs/jenkis/config.log --daemon

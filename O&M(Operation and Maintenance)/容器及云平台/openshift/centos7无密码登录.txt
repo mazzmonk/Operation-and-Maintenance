@@ -1,0 +1,41 @@
+CentOS 7下实现SSH无密码登录
+
+要实现CentOS无密码SSH登陆，需分别在服务器端（被登录的机器）和客户端（用于SSH的机器）上分别配置。
+
+服务器侧配置：
+
+确认本机sshd的配置文件（需要root权限）
+　　# vi /etc/ssh/sshd_config
+　　找到以下内容，并去掉注释符”#“
+　　RSAAuthentication yes
+　　PubkeyAuthentication yes
+　　AuthorizedKeysFile .ssh/authorized_keys
+　 2、重启sshd服务 （需要root权限）
+　　# systemctl restart sshd
+
+客户端侧配置：
+1.生成公钥和私钥
+2.导入公钥到认证文件,更改权限
+
+1.生成公钥和私钥
+#ssh-keygen -t rsa
+
+默认在 ~/.ssh目录生成两个文件：
+id_rsa ：私钥
+id_rsa.pub ：公钥
+
+2.导入公钥到认证文件,更改权限
+
+2、1 导入本机
+    # cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys  
+
+2、2 导入要免密码登录的服务器
+    首先将公钥复制到服务器
+    #scp ~/.ssh/id_rsa.pub xxx@host:/home/id_rsa.pub  
+
+    然后，将公钥导入到认证文件(这一步的操作在服务器上进行)
+    #cat /home/id_rsa.pub >> ~/.ssh/authorized_keys 
+
+2、3 在服务器上更改权限
+  #chmod 700 ~/.ssh
+  #chmod 600 ~/.ssh/authorized_keys

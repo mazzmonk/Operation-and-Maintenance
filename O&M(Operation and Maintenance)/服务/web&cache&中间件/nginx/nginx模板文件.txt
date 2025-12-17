@@ -1,0 +1,336 @@
+﻿# 指定了nginx要开启的进程数
+worker_processes 4;
+
+# ginx进程和CPU亲和力的参数，即把不同的进程分给不同的cpu处理，这里的0001 0010 0100 1000是掩码，
+# 分别代表第1，2，3，4核CPU，默认的情况下不绑定任何CPU，参数位置main段
+# 八核CPU参数00000001 00000010 00000100 00001000 00010000 00100000 01000000 10000000
+# 或者0001 0010 0100 1000 0001 0010 0100 10000
+worker_cpu_affinity 0001 0010 0100 1000;
+
+#设定nginx的工作模式及连接上限，参数位置main段
+events {
+
+#	Linux2.6+的内核，使用epoll工作模式 
+use epoll;
+
+# 每个nginx进程的最大连接数，默认1024。
+# 最大客户端连接数max_client = worker_connections * worker_processes
+# 进程的最大连接数收到Linux系统进程最大打开文件数限制，使用"ulimit -HSn 65535"或配置文件以后，
+# worker_connections的设置才生效
+worker_connections 20480;
+
+# nginx worker进程的最大打开文件数，可设置为系统优化后的的ulimit -HSn的结果
+worker_rlimit_nofile_number 65535;
+
+}
+
+http {
+
+# 设置存放域名的最大散列表大小，默认512K，用于控制域名的长短及数量，与下边参数一起使用
+# 仅能用于http段
+server_names_hash_max_size 512;
+
+# 此参数和上述参数一起作用
+#仅能用于http段
+server_names_hash_bucket_size 128;
+
+# 激活或者禁用sendfile()功能
+# sendfile()是作用于两个文件描述符之间的数据复制函数，这个复制操作是发生在内核之中，被称为“零复制”
+# 可用于http，server，location段
+sendfile on;
+
+# 激活或者禁用Linux上的TCP_CORK_socket选项，此选项当sendfile开启时才能生效
+# 参数可以允许把http_response_header和文件的开始部分放在一个文件里发布，其积极作用是减少网络报文段的数量
+tcp_nopush on;
+
+# 用于设置客户端连接保持会话的超时时间为60秒。
+# 可用于http，server，location段
+keepalive_timeout 60;
+
+# 默认情况下当数据发送时候，内核并不马上发送，可能会等待更多的字节组成一个数据包，这样提高I/0性能。
+# 但是在每次只发送很少字节的场景中，等待时间会比较长
+# 当一个连接进入到keep-alive状态时候生效。
+# 可用于http，server，location段
+tcp_nodelay on;
+
+# 读取客户端请求头数据的超时时间
+# 如果超过时间，客户端还没有发送完整的header数据，那么服务器返回"Request time out (408)"错误
+client_header_timeout 15;
+
+# 读取客户端请求主体的超时时间。
+# 这个超时时间仅仅为两次成功读取操作之间的一个超时，而不是请求整个主体数据的超时时间，如果在这个
+# 超时时间内，客户端没有发送任何数据，nginx将返回"Request time out (408)"错误
+# 默认60s，可用于http，server，location
+client_body_timeout 15;
+
+# 用于指定响应客户端的超时时间。
+# 这个超时时间仅限于两个连接活动之间的时间，如果超过这个时间，客户端没有活动，nginx将会关闭连接
+# 官方说明设置服务器端传送HTTP响应信息到客户端的超时时间，这个超时时间仅仅为两次成功握手后的一个超时，
+# 而不是整个请求响应数据的超时时间，如果在这个超时时间内，客户端没有接受任何数据，那么连接关闭。
+# 默认60s，可用于http，server，location
+send_timeout 25;
+
+# 允许客户端请求主体大小，在请求头域有"Content-Length"，如果超过此值，客户端会收到413错误
+# 设置为0则表示禁止检查客户端请求主体的大小
+# 默认1m，可用于http，server，location
+client_max_body_size 8m;
+
+# 表示nginx服务器和后端FastCGI服务器连接的超时时间，默认60s，这个参数值通常不超过75s，
+# 因为建立的连接数越多，消耗的资源越多
+fastcgi_connect_timeout 60;
+
+# 允许FastCGI服务器端返回数据的超时时间，即在规定时间之内后端服务器必须传完所有的数据，
+# 否则，nginx将断开这个连接，默认60s
+fastcgi_send_timeout 60;
+
+# nginx从FastCGI服务器端读取响应信息的超时时间，表示连接建立成功后，nginx等待后端服务器的响应
+# 时间，是nginx已经进入后端的排队之中等候处理的时间
+fastcgi_read_timeout 60;
+
+# nginx FastCGI的缓冲区大小参数，设定用来读取从FastCGI服务器收到的第一部分响应信息的缓冲区的大小，
+# 这里的第一部分通常会包含一个小的响应头部，默认情况下，这个参数的大小是由fastcgi_buffers指定的一个
+# 缓冲区的大小
+fastcgi_buffer_size 64k;
+
+# 用来读取从FastCGI服务器端收到的响应信息的缓冲区大小和缓冲区数量，默认值为fastcgi_buffers 8 4k|8k
+# 指定本地需要用多少和多少的缓冲区来缓冲FastCGI的应答请求。
+# 如果一个PHP脚本所产生的页面大小为256KB，那么会为其分配4个64KB的缓冲区来缓存；如果页面大小大于256KB，
+# 那么大于256KB的部分会缓存到fastcgi_temp指定的路径中，但是这并不是好的方法，因为内存中的数据处理速度要
+# 快于硬盘。一般这个值应该为站点中PHP脚本所产生页面大小的中间值，如果站点大部分脚本所产生的页面大小是
+# 256KB，那么这个值设置为“16 16k”、“4 64k”等
+fastcgi_buffers 4 64k;
+
+# 用于设置系统很忙时可以使用的proxy_buffers大小，官方推荐的大小proxy_buffers*2
+# proxy_busy_buffers_size
+
+# 用于设置系统很忙时可以使用的fastcgi_buffers大小，官方推荐的大小fastcgi_buffers*2 
+# 默认值为fastcgi_busy_buffers_size 8k|16k
+fastcgi_busy_buffers_size 128k;
+
+# FastCGI临时文件的大小，可设置为128～256KB
+fastcgi_temp_file_write_size 128k;
+
+# 开启FastCGI缓存并为其指定一个名称。开启缓存非常有用，可以有效降低CPU负载，并且防止502错误的发生，
+# 但是开启缓存也可能引起其他问题，要根据具体情况选择
+# fastcgi_cache_oldboy_nginx
+
+# 
+#fastcgi_temp_path /data/ngx_fcgi_tmp;
+
+# 示例：fastcgi_cache_path /data/ngx_fcgi_cache levels=2:2 keys_zone=ngx_fcgi_cache:512m inactive=1d max_size=40g
+# fastcgi_cache缓存目录，可以设置目录前列层级，比如2:2会生成256*256个子目录，keys_zone是这个缓存空间的名字，cache
+# 是用多少内存，inactive表示默认失效时间，max_size表示最多使用多少硬盘空间，需要注意的是fastcgi_cache缓存是先写
+# fastcgi_temp_path再移到fastcgi_cache_path中去，所以这两个目录最好放在同一个分区
+fastcgi_cache_path /data/ngx_fcgi_cache levels=2:2 keys_zone=ngx_fcgi_cache:512m inactive=1d max_size=40g;
+
+# 示例：fastcgi_cache_valid 200 302 1h;
+# 用来指定应答代码的缓存时间，实例中的值表示将200和302应答缓存一个小时
+# 示例：fastcgi_cache_valid 301 1d;
+# 将301应答缓存1天
+# 示例：fastcgi_cache_valid any 1m;
+# 其他应答缓存设置为1分钟
+fastcgi_cache_valid 200 302 1h;
+
+# 示例：fastcgi_cache_min_uses 1;
+# 请求几次以后响应将被缓存，1表示一次即被缓存
+fastcgi_cache_min_uses 1;
+ 
+# 示例：fastcgi_cache_use_stale error timeout invalid_header http_500;
+# 定义那些情况下使用过期缓存
+fastcgi_cache_use_stale error timeout invalid_header http_500;
+
+# 示例：fastcgi_cache_key $request_method://$host$request_uri;fastcgi_cache_key http://$host$request_uri;
+# 定义fastcgi_cache的key，示例中以请求的url作为缓存的key，nginx会取这个key的md5作为缓存文件，
+# 如果设置了缓存散列目录，nginx会从后往前取相应的位数作为目录。
+# 注意一定要加上$request_method作为cache key，否则如果先请求的为head类型，那么后边的的GET
+# 请求将返回为空
+fastcgi_cache_key $request_method://$host$request_uri;fastcgi_cache_key http://$host$request_uri;
+
+# 开启gzip压缩功能
+gzip on;
+
+# 设置允许压缩的最小页面字节数，页面字节数从header头的Content-Length中获取。
+# 默认值为0，表示不论页面多大都压缩。建议设置成大于1KB，如果小于1KB可能会越压越大。
+gzip_min_length 1k;
+
+# 压缩缓冲区大小。表示申请4个单位为16KB的内存作为压缩结果流缓存，默认值是申请和原始数据大小相同
+# 的内存空间来存储gzip压缩结果。
+gzip_buffers 4 16k;
+
+# 压缩版本（默认是1.1，前端是squid2.5时使用1.0），用于识别HTTP协议版本，默认是1.1
+gzip_http_version 1.1;
+
+# 压缩比率。指定gzip压缩比，1表示压缩比最小，处理速度最快，9表示压缩比最大，处理速度最慢，比较消耗CPU资源
+gzip_comp_level 2;
+
+# 用来指定压缩的类型，"text/html"类型总会压缩
+#gzip_types text/plain application/x-javascript text/css application/xml; #老式的不争取写法
+gzip_types text/css text/xml application/x-javascript;                 #这里的配置根据nginx1.6.3，不同版本有不同
+
+# vary header支持。该选项可以让前端的缓存服务器缓存经过gzip压缩的页面
+gzip_vary on;
+
+# 限制单IP并发连接数
+limit_conn_zone $binary_remote_addr zone=addr:10m;
+
+# 限制虚拟机总连接数
+limit_conn_zone $server_name zone=perserver:10m;
+
+# 以请求的客户端IP作为key值，内存区域命名为one，分配10MB内存空间，访问速率限制1秒1次请求（request）
+limit_req_zone $binary_remote_addr zone=one:10m rate=1r/s;
+
+
+
+server {
+		listen 80;
+		server_name www.abc.com;
+		
+		location / {
+				root html/www;
+				index index.html index.htm;
+				limit_conn addr 1;		#见上述的limit_conn_zone定义
+				limit_conn perserver 2;     #设置虚拟主机连接数为2
+				limit_req zone=one burst=5;			#使用前面的定义名为one的内存空间，队列值为5，即可以有5个请求队列等待
+		}
+		
+		# 当用户访问网站URL结尾的文件扩展名为如下的时候，设置缓存时间为10年。
+		location ~ .*\.(gif|jpg|jpeg|png|bmp|swf)$ {
+				expires 10y;
+				root html/www;
+		}
+		# 当用户访问到下述路径时候（例如：images、js、css，这些路径在服务器端是程序目录)
+		# 将访问的内容设置缓存360天。
+		location ~ ^/(images|javascript|js|css|flash|media|static)/ {
+				expires 360d;
+		}
+		
+		# 给robots.txt机器人文件设置过期时间（这里为7天），在这7天内不记录404错误日志
+		location ~(robots.txt) {
+				expires 7d;
+				break;
+		}
+		
+		# 禁止访问指定目录下的指定文件
+		location ~ ^/images/.*\.(php|php5|sh|pl|py)$ {
+				deny all;
+		}
+		
+		location ~ ^/static/.*\.(php|php5|sh|pl|py)$ {
+				deny all;
+		}
+		
+		location ~ ^/data/(attachment|avstar)/.*\.(php|php5)$ {
+				deny all;
+		}		
+		
+		#上述内容必须写在nginx处理php服务器配置的前面
+		location ~ .*\.(php|php5)?$ {
+				fastcgi_pass 127.0.0.1:9000;
+				fastcgi_index index.php;
+				include fcgi.conf;
+		}
+		
+		# 禁止访问.txt和.doc文件
+		location ~* \.(txt|doc)$ {
+				if (-f $request_filename) {
+						root /data/www/www;
+						#rewrite ...		#可以重定向到某个url
+						break;
+				}
+		}
+		
+		location ~* \.(txt|doc)$ {
+				root /data/www/www;
+				deny all;
+		}
+		
+		# 禁止访问单个目录
+		location ~ ^/(static)/ {
+				deny all;
+		}
+		
+		# 禁止访问多个目录
+		location ~ ^/(static|js) {
+				deny all;
+		}
+		
+		# 禁止访问某个目录，并且返回指定的HTTP状态码
+		location	/admin/ {
+				return 404;
+		}
+		
+		location /templates/ {
+				return 403;
+		}
+
+		# 限制只允许某固定IP访问
+		location ~ ^/oldbody/ {
+				allow 202.111.12.211;
+				deny all;
+		}
+		
+		# 限制某IP或者IP段访问
+		location / {
+				deny 192.168.1.1;
+				allow 192.168.1.0/24;
+				allow 10.1.1.0/16;
+				deny all;
+		}
+		
+		# 控制远程客户端地址访问
+		if ($remote_addr = 10.0.0.7) {
+				return 403;
+		}
+		
+		if ($remote_addr = 218.247.17.130) {
+		set $allow_access_root 'true';
+		}
+		
+		# 使用IP访问的用户，跳转到501错误，或者重定向
+		# server {
+		#		listen 80 default_server;
+		#		server_name _;
+		#		return 501;
+		#		return ^(.*) http://blog.aaa.com/$1 permanent;
+		# }
+		
+		# 恶意解析域名的用户，如果header信息的host主机名字段非www.abc.com，就301跳转到
+		# www.abc.com
+		if ($host !~ ^www/.abc/.com$) {
+				rewrite ^(.*) http://www.abc.com$1 permanent;
+		}
+		
+		# 使用referer，并且针对扩展名rewrite重定向，即实现防盗链的nginx设置，同时设置过期时间
+		# 重定向或者返回403错误，access_log off，不记录日志。
+		location ~* \.(jpg|gif|png|swf|flv|wma|wmv|asf|mp3|mmf|zip|rar)$ {
+				valid_referers none blocked server_name *.abc.com abc.com;
+				if ($invalid_referer) {
+						rewrite ^/ http://www.abc.com/img/nolink.jpg;
+						#return 403;
+				}
+				access_log off;
+				root html/www;
+				expires 1d;
+				break;
+		}
+		
+		# 让HTTP只能使用GET，HEAD，POST方法
+		if ($request_method !~ ^(GET|HEAD|POST))$ {
+				return 501;
+		}
+		
+		# 禁止GET方法，显示501错误
+		if ($request_method ~* ^(GET)$) {
+				return 501;
+		}
+		
+
+
+
+}
+
+
+}
+
+
+

@@ -1,0 +1,254 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+struct student {
+  int id;
+  int score;
+  struct student* next;
+};
+
+int main(int argc, char* argv[]) {
+  struct student *head, *current;
+  head = (struct student*) malloc(sizeof(struct student));
+  head->next = NULL;
+
+  int i;
+  for (i = 0; i < 10; i++) {
+    current = (struct student*) malloc(sizeof(struct student));
+    current->id = i;
+    current->score = i + 100;
+
+    current->next = head->next;   //建立链表的操作从这里开始
+    head->next = current;
+  }
+
+//打印操作
+  struct student *ptr;   
+  ptr = head->next;
+  while (ptr != NULL) {
+    printf("Id is: %d", ptr->id);
+    printf("\t");
+    printf("Score is: %d", ptr->score);
+    printf("\n");
+    ptr = ptr->next;
+  }
+  return 0;
+}
+
+堆栈是一种后进先出的链表结构,插入的操作都在链表头,一般来说链表的最开始一个节点都是空节点,就是说没有内容,只有next地址.插入和删除都在头部
+这里说的头部实际是最后插入的数据,区别于逻辑上说的头部,比如数组,{1,2,3,4,5,6},这里说的头部是指"1",但是堆栈这里说的头部是指最后插入的数据"6"
+
+
+#include <stdio.h>
+#include <stdlib.h>
+
+struct student {
+  int id;
+  struct student *next;
+};
+
+struct student *head, *rear, *p;
+
+int main(int argc, char *argv[]) {
+  head = (struct student*) malloc(sizeof(struct student));
+  head->next = NULL;
+  p = head;
+  rear = head;
+
+  printf("head address is %x\n", head);
+  printf("p address is %x\n", p);
+  printf("rear address is %x\n", rear);
+
+  int i;
+  for (i = 0; i < 10; i++) {
+    p = (struct student*) malloc(sizeof(struct student));
+    p->id = i + 50;
+    printf("\n----------------\n");
+    printf("p address is %x\n", p);
+    printf("head address is %x\n", head);
+    printf("head->next is %x\n", head->next);
+    p->next = head->next;
+    head->next = p;
+    printf("After p->next is %x\n", p->next);
+    printf("input %d node.\n", i);
+    printf("\n----------------\n");
+  }
+
+  struct student *ptr;
+  ptr = head->next;
+
+  printf("Here head->next is %x\n",head->next);
+
+  while (ptr != NULL) {
+    printf("ID is: %d\n", ptr->id);
+    printf("ptr->next is %x: ", ptr->next);
+    ptr = ptr->next;
+  }
+
+  printf("head address is %x\n", head);
+  printf("ptr address is %x\n", p);
+  printf("rear address is %x\n", rear);
+
+  return 0;
+}
+
+
+head address is ab9010
+p address is ab9010
+rear address is ab9010
+
+----------------
+p address is ab9030
+head address is ab9010
+head->next is 0
+After p->next is 0
+input 0 node.
+
+----------------
+
+----------------
+p address is ab9050
+head address is ab9010
+head->next is ab9030
+After p->next is ab9030
+input 1 node.
+
+----------------
+
+----------------
+p address is ab9070
+head address is ab9010
+head->next is ab9050
+After p->next is ab9050
+input 2 node.
+
+----------------
+
+----------------
+p address is ab9090
+head address is ab9010
+head->next is ab9070
+After p->next is ab9070
+input 3 node.
+
+----------------
+
+----------------
+p address is ab90b0
+head address is ab9010
+head->next is ab9090
+After p->next is ab9090
+input 4 node.
+
+----------------
+
+----------------
+p address is ab90d0
+head address is ab9010
+head->next is ab90b0
+After p->next is ab90b0
+input 5 node.
+
+----------------
+
+----------------
+p address is ab90f0
+head address is ab9010
+head->next is ab90d0
+After p->next is ab90d0
+input 6 node.
+
+----------------
+
+----------------
+p address is ab9110
+head address is ab9010
+head->next is ab90f0
+After p->next is ab90f0
+input 7 node.
+
+----------------
+
+----------------
+p address is ab9130
+head address is ab9010
+head->next is ab9110
+After p->next is ab9110
+input 8 node.
+
+----------------
+
+----------------
+p address is ab9150
+head address is ab9010
+head->next is ab9130
+After p->next is ab9130
+input 9 node.
+
+----------------
+Here head->next is ab9150
+ID is 59
+ptr->next is ab9130
+ID is 58
+ptr->next is ab9110
+ID is 57
+ptr->next is ab90f0
+ID is 56
+ptr->next is ab90d0
+ID is 55
+ptr->next is ab90b0
+ID is 54
+ptr->next is ab9090
+ID is 53
+ptr->next is ab9070
+ID is 52
+ptr->next is ab9050
+ID is 51
+ptr->next is ab9030
+ID is 50
+ptr->next is 0
+head address is ab9010
+ptr address is ab9150
+rear address is ab9010
+
+
+这里的程序输出时候是反序,是因为,head->next得到的是最后一个节点的地址.
+
+
+通过上述的结果可以看出:
+1.插入的操作其实都是不断修改头节点中的next数据来构造新的节点,
+比如头节点地址0x01,其中next成员存放地址0x04,则下一个节点的地址在0x04,添加第一个节点的时候,新的节点中的next成员先取得head中next内容,然后把自己的地址填充到head的next成员中,这样当添加第二个节点的时候,从head的next成员中就能取得上一个节点的地址.
+2.这里有个的现象,新增节点的next成员存储的是上一个节点的地址.
+可以解释这种现象是因为,新增的节点是链表的头,同时新增的节点地址总是在高位.因此通过这个头的next成员能遍历到以往的节点.
+哈哈,就是高位地址节点next存储的是低位地址节点的地址.就像上述的现象
+这里说的高位地址是指的是后边地址值比前边大
+3.这里其实是把head的next成员做为了一个临时存储地址的变量使用,所有的节点都将自己的地址写如head的next中,然后下一个节点更新这个值.
+4.head这个节点实际是个空节点,只有next成员有内容,它将作为一个临时存储变量用
+节点的添如下:
+
+head->frist->second->third->.....->last
+
+last节点是最后加入的节点.每个节点中next地址存储结构如下:
+
+head<-first<-second<-third<-.....<-last
+  |                                 ^
+  V --------------------------------| 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

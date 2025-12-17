@@ -1,0 +1,20 @@
+#include <cstdio>
+#include <cstdlib>
+
+int main(int argc,char* argv[]) 
+{
+	int a = 100, b = 200;
+	const int *p = &a;                  //p指向的变量的值不可变       
+	int * const q = &b;                 //q存储的地址不可变
+	printf("a=%d, *p=%d\n", a, *p);
+	printf("b=%d, *q=%d\n", b, *q);
+	
+	*p = b;                     //这里错误,值不可变
+	printf("*p=%d\n", *p);
+
+	q=&a;                       //这里错误,值不可变
+	printf("*q=%d\n", *q);
+
+ return 0;
+}
+

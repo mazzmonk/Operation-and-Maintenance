@@ -1,0 +1,196 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+int main()
+{
+	struct employee {
+		char id[7];
+		char name[20];
+		int salay;
+	};
+
+	struct employee manager = {"54321", "Peter", 35000};
+	struct employee *ptr = &manager;
+
+	printf("%x\n", &ptr);           //这里显示ptr地址，使用c++的std::cout也是如此
+	printf("%x\n", ptr);            //这里显示地址，使用c++的std::cout也是如此
+	printf("%x\n", &manager);       //这里显示地址，使用c++的std::cout也是如此
+	printf("%x\n", manager.id);			//这里显示地址
+	
+	上述3条显示的内容相同
+
+
+	printf("%x\n", ptr->id);  //这里显示地址，具体显示什么内容，完全取决于%x这个参数，但是使用c++的std::cout将显示内容               
+	printf("%x\n", ptr->name); //当使用%s时,将取得元素内容
+	printf("%x\n", ptr->salay);
+       
+	printf("%s\n", (*ptr).id); 
+	printf("%s\n", (*ptr).name);
+	printf("%s\n", (*ptr).salary);
+	上述三条取得元素内容.
+
+	return 0;
+}
+
+结构中的成员都是通过地址来完成相应的操作，比如ptr->id
+
+
+
+#include <stdio.h>
+#include <stdlib.h>
+
+int main()
+{
+	struct student {
+		char name[20];
+		int score;
+		};
+	
+		struct student st1, *st2;
+		st2 = (struct student*) malloc(sizeof(struct student));           //注意这里，使用指针的方式必须分配内存空间，才可以使用
+		printf("input name: ");
+		scanf("%s", st1.name);         //从这里可以看出结构是通过地址来完成相应的操作，因为scanf的第二个参数是地址类型
+		printf("input score: ");
+		scanf("%d", &st1.score);
+
+    printf("input anther one: ");
+		scanf("%s", st2->name);
+		printf("input score: ");
+		scanf("%s", &st2->score);
+
+		free(st2);
+
+		return 0;
+}
+
+malloc需要头文件stdlib.h
+
+下边2个函数都用于动态分配内存
+malloc(bytes数目)
+calloc(分配笔数，每一笔bytes数目)
+
+st2 = (struct student *)	malloc(sizeof(struct student);
+st2	= (struct student *)	calloc(1,	sizeof(struct student));
+上述函数都是强制类型转换，因此必须(struct student *)
+
+free(指针名称)
+用于释放指针
+
+
+int main(int argc, char* argv[]) {
+  struct student {
+    char* name;
+    int score;
+  };
+  struct student st = {"Brian", 97};
+  struct student *ptr = &st;
+
+  printf("%s\n", ptr->name);	//等同于(*ptr).name
+  printf("%c\n", *ptr->name);	//->优先级高于*,等同于*(ptr->name),显示字符B
+  printf("%c\n", *ptr->name++);	//++和*优先级相同,这里具有右结合性,等同于*(ptr->name)++,得到B字符,将name指针右移一位到r
+  printf("%c\n", *ptr->name);	//得到上述一条结果
+  printf("%d\n", ptr->score);
+  printf("%d\n", (ptr->score)++);	//这里区别于第三条,先得到结果,在++
+  printf("%d\n", ptr->score);	//显示上述一条结果
+
+  return 0;
+}
+
+
+int main() {
+	struct student {
+		char name[20];
+		int score;
+	};
+
+	struct student st = {"John", 97};
+	struct student *ptr = &st;
+
+	printf("%s", ptr->name);	
+	printf("%c", *(ptr->name));	
+	上2条等同于上一个例子中的内容
+
+	printf("%c", ++*(ptr->name));	//这里++在前边,因此ptr->name最后的内容为K(J+1)
+	printf("%s", ptr->name);	//原来字符串的内容已经改变,因为ptr->name的首字母已经改变,被上一句中内容替换掉
+	
+	printf("%d", ptr->score);	
+	printf("%d", (ptr->score)++);
+	printf("%d", ptr->score);
+	上三条和上一个例子相同
+	return 0;
+}
+
+链表结构
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(int argc, char* argv[]) {
+  struct student {
+    char* name;
+    int score;
+    struct student* next;
+  };
+
+  struct student *p, *q, *r, *current;
+  p = (struct student*) malloc(sizeof(struct student));
+  p->name = "Bright";
+  p->score = 98;
+
+  q = (struct student*) malloc(sizeof(struct student));
+  q->name = "Linda";
+  q->score = 95;
+
+  r = (struct student*) malloc(sizeof(struct student));
+  r->name = "Jennifer";
+  r->score = 95;
+
+  p->next = q;
+  q->next = r;
+  r->next = NULL;                  //这里需要注意
+
+  printf("There are three students in my class\n");
+  current = p;
+  while (current != NULL) {        //判断条件
+    printf("%10s %10d\n", current->name, current->score);
+    current = current->next;
+  }
+  return 0;
+}
+
+
+需要特别注意:
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(int argc, char* argv[]) {
+  struct student {
+    char firstname[20];
+    char *lastname;
+    int score;
+  };
+
+  struct student st1, *st2;
+
+  printf("input firstname: ");
+  scanf("%s", st1.firstname);	//正确做法
+
+  printf("input lastname: ");
+  scanf("%s", st1.lastname);	//错误
+	scanf("%s", &st1.lastname);	//错误
+	这里必须用st2来操作,不能用st1
+
+
+  printf("input score: ");
+  scanf("%d", &st1.score);	//正确
+
+  return 0;
+}
+
+这里说明,如果在struct中有指针类型成员,必须定义struct类型指针,通过这个指针来操作这个指针成员.比如上述的例子,必须使用st2来操作lastname这个成员,st1操作此成员的时候造成错误,这里的操作指的是scanf这个函数.
+
+
+
+
+
+
+

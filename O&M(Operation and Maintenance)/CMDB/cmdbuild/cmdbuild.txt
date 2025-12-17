@@ -1,0 +1,23 @@
+postgresql 安装
+https://www.cnblogs.com/freeweb/p/8006639.html
+
+# 启动
+$mkdir data
+$bin/initdb -D data/
+$bin/pg_ctl -D data/ -l logfile start
+$bin/pg_ctl -D data/ stop
+
+# 登录
+$bin/psql -h 127.0.0.1 -d postgres  -p 5432
+
+cmdbuild 安装
+http://www.voidcn.com/article/p-oylxjysv-bpo.html
+
+http://www.atomicgain.com/install-cmdbuild/
+
+http://idc.wanyunshuju.com/cmdb/759.html
+
+
+
+docker
+https://jerryw.blog/2018/10/30/%E7%94%A8-docker-compse-%E6%9E%B6%E8%A8%AD-cmdbuild-%E5%8F%8A%E8%A8%AD%E7%BD%AE%E8%87%AA%E5%8B%95%E5%95%9F%E5%8B%95%E5%9F%B7%E8%A1%8C/

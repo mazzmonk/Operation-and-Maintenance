@@ -1,0 +1,235 @@
+需要详细了解:
+3. numpy 库
+np.expand_dims(x_train, -1)
+1. keras.datasets, tensorflow datasets
+2. python 的 astype("float32") 函数  
+例子: x_train = x_train.astype("float32") / 255
+4. Sequential 模型 API
+5. 在模型中的层,有那些类型的层,及每种类型层处理什么问题
+6. compile 函数  API
+7. fit 函数 API,其中包括 keras.callbacks 函数
+8. model.evaluate() 评估函数
+9. model.save() 函数及加载函数 keras.saving.load_model()
+10. model.predict(x_test) 预测函数
+高级内容
+11. keras.layers.Layer 基类,用于所有自定义层的基类,如何编写自定义层
+12. keras.ops.x 函数
+13. keras.random.SeedGenerator() 函数
+14. 数据源: NumPy 数组,tensorflow 的 tf.data.DataSet 对象, keras 的 PyDataset 对象
+
+
+流程:
+1. 导入数据,并需要训练和测试集
+可能会将数据导入分成训练集和测试集
+这里会涉及到数据的预处理,比如统一格式,将图像规范化等等
+
+2. 建立模型
+Keras 提供的不同模型构建选项包括：
+. Sequential API（我们下面使用的）
+. 函数式 API(Functional API)（最典型） 
+. 通过子类化自己编写模型（适用于高级用例）    - 注意:这里可以编写自定义的层,并应用于自定义的模型中
+
+比如:
+num_classes = 10
+input_shape = (28, 28, 1)
+
+model = keras.Sequential(
+  [
+    keras.layers.Input(shape=input_shape),
+    keras.layers.Conv2D(64, kernel_size=(3, 3), activation="relu"),
+    keras.layers.Conv2D(64, kernel_size=(3, 3), activation="relu"),
+    keras.layers.Conv2D(64, kernel_size=(3, 3), activation="relu"),
+    keras.layers.MaxPooling2D(pool_size=(2, 2)),
+    keras.layers.Conv2D(128, kernel_size=(3, 3), activation="relu"),
+    keras.layers.Conv2D(128, kernel_size=(3, 3), activation="relu"),
+    keras.layers.GlobalAveragePooling2D(),
+    keras.layers.Dropout(0.5),
+    keras.layers.Dense(num_classes, activation="softmax"),
+  ]
+)
+
+3. 编译
+使用 compile()方 法来指定优化器、损失函数以及需要监控的指标。请注意，使用 JAX 和 TensorFlow 后端时，XLA 编译功能默认处于启用状态。
+比如:
+model.compile(
+    loss=keras.losses.SparseCategoricalCrossentropy(),
+    optimizer=keras.optimizers.Adam(learning_rate=1e-3),
+    metrics=[
+        keras.metrics.SparseCategoricalAccuracy(name="acc"),
+    ],
+)
+
+编译的过程会涉及到 loss(损失函数), optimizer(优化器), metrics(指标)
+
+4. 训练及评估模型
+使用 fit 方法训练模型,并且指定回调函数
+比如:
+batch_size = 128
+epochs = 20
+
+callbacks = [
+  keras.callbacks.ModelCheckpoint(filepath="model_at_epoch_{epoch}.keras"),
+  keras.callbacks.EarlyStopping(monitor="val_loss", patience=2),
+]
+
+model.fit(
+  x_train,
+  y_train,
+  batch_size=batch_size,
+  epochs=epochs,
+  validation_split=0.15,    # 验证数据
+  callbacks=callbacks,
+)
+
+在 fit() 函数的中有 callbacks(回调函数做为参数)
+
+evaluate() 评估使用
+score = model.evaluate(x_test, y_test, verbose=0)
+
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+在训练过程中，我们在每个 epoch 结束时都会保存一个模型。您也可以像这样保存模型的最新状态：
+model.save("final_model.keras")
+
+然后像这样重新加载它：
+model = keras.saving.load_model("final_model.keras")
+##############################
+
+5. 预测
+使用 predict() 函数
+比如:
+predictions = model.predict(x_test)
+
+高级内容
+编写跨框架自定义组件
+Keras 允许您使用相同的代码库编写自定义层、模型、指标、损失和优化器，这些层、模型、指标、损失和优化器可在 TensorFlow、JAX 和 PyTorch 上运行。
+*. 我们先来了解一下自定义层。
+
+命名空间 keras.ops 包含：
+. NumPy API 的实现，例如 keras.ops.stack 或 keras.ops.matmul。
+. 一组 NumPy 中没有的神经网络特定操作，例如keras.ops.conv 或keras.ops.binary_crossentropy。
+ 
+1. 自定义层必须继承于 keras.layers.Layer 基类
+2. 必须定义 build() 成员函数,并在定义中给权重,也就是类成员变量赋值
+3. 必须定义 call() 成员函数,并在其中做一些创建层/指标等等的操作
+比如:
+让我们创建一个Dense适用于所有后端的自定义层：
+class MyDense(keras.layers.Layer):
+    def __init__(self, units, activation=None, name=None):
+        super().__init__(name=name)
+        self.units = units
+        self.activation = keras.activations.get(activation)
+
+    def build(self, input_shape):
+        input_dim = input_shape[-1]
+        self.w = self.add_weight(
+            shape=(input_dim, self.units),
+            initializer=keras.initializers.GlorotNormal(),
+            name="kernel",
+            trainable=True,
+        )
+
+        self.b = self.add_weight(
+            shape=(self.units,),
+            initializer=keras.initializers.Zeros(),
+            name="bias",
+            trainable=True,
+        )
+
+    def call(self, inputs):
+        # Use Keras ops to create backend-agnostic layers/metrics/etc.
+        x = keras.ops.matmul(inputs, self.w) + self.b
+        return self.activation(x)
+
+# 接下来，让我们创建一个Dropout依赖于keras.random 命名空间的自定义层：
+class MyDropout(keras.layers.Layer):
+  def __init__(self, rate, name=None):
+    super().__init__(name=name)
+    self.rate = rate
+    # 使用 seed_generator 管理 RNG 状态。
+    # 它是一个状态元素，其种子变量作为 `layer.variables` 的一部分进行跟踪。
+    self.seed_generator = keras.random.SeedGenerator(1337)
+
+  def call(self, inputs):
+    return keras.random.dropout(inputs, self.rate, seed=self.seed_generator)
+
+*. 自定义模型
+自定义模型必须继承于 keras.Model 基类,在模型中可以嵌套其他的模型,使用自定义层等等操作
+比如:
+
+# 接下来，让我们编写一个使用上述两个自定义层的自定义子类模型：
+class MyModel(keras.Model):
+  def __init__(self, num_classes):
+    super().__init__()
+    self.conv_base = keras.Sequential(
+      [
+        keras.layers.Conv2D(64, kernel_size=(3, 3), activation="relu"),
+        keras.layers.Conv2D(64, kernel_size=(3, 3), activation="relu"),
+        keras.layers.MaxPooling2D(pool_size=(2, 2)),
+        keras.layers.Conv2D(128, kernel_size=(3, 3), activation="relu"),
+        keras.layers.Conv2D(128, kernel_size=(3, 3), activation="relu"),
+        keras.layers.GlobalAveragePooling2D(),
+      ]
+    )
+    self.dp = MyDropout(0.5)
+    self.dense = MyDense(num_classes, activation="softmax")
+
+  def call(self, x):
+    x = self.conv_base(x)
+    x = self.dp(x)
+    return self.dense(x)
+
+# 让我们编译并训练
+model = MyModel(num_classes=10)
+model.compile(
+  loss=keras.losses.SparseCategoricalCrossentropy(),
+  optimizer=keras.optimizers.Adam(learning_rate=1e-3),
+  metrics=[
+    keras.metrics.SparseCategoricalAccuracy(name="acc"),
+  ],
+)
+
+model.fit(
+  x_train,
+  y_train,
+  batch_size=batch_size,
+  epochs=1,
+  validation_split=0.15,
+)
+
+在任意数据源上训练模型
+所有 Keras 模型均可基于各种数据源进行训练和评估，无论您使用的后端是什么。这些数据源包括：
+. NumPy 数组
+. Pandas 数据框
+. TensorFlowtf.data.Dataset对象
+. PyTorchDataLoader对象
+. KerasPyDataset对象
+
+比如使用 tensorflow 作为数据源
+
+# 使用 tensorflow 的 dataset 作为数据源
+import tensorflow as tf
+train_dataset = (
+  tf.data.Dataset.from_tensor_slices((x_train, y_train))
+  .batch(batch_size)
+  .prefetch(tf.data.AUTOTUNE)
+
+)
+
+test_dataset = (
+  tf.data.Dataset.from_tensor_slices((x_test, y_test))
+  .batch(batch_size)
+  .prefetch(tf.data.AUTOTUNE)
+)
+
+model = MyModel(num_classes=10)
+model.compile(
+  loss=keras.losses.SparseCategoricalCrossentropy(),
+  optimizer=keras.optimizers.Adam(learing_rate=1e-3),
+  metrics=[
+    keras.metrics.SparseCategoricalAccuracy(name="acc"),
+  ],
+)
+
+model.fit(train_dataset, epochs=1, validation_data=test_dataset)
+
+

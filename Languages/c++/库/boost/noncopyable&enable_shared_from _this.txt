@@ -1,0 +1,48 @@
+class myclass : public boost::noncopyable
+{
+	public:
+	myclass() {};
+	myclass(int i) {};
+};
+
+int main(int argc,char* argv[])
+{
+	myclass cl1();
+	myclass cl2(1);
+
+	//myclass cl3(cl1);          //error
+  //myclass cl4(cl2);					//error
+
+	return 0;
+}
+
+在通常情况下,类中的复制构造函数隐藏到private或者protected之中,有noncopyable了,只需要让类直接继承noncopyable.
+class noncopyable的基本思想是把构造函数和析构函数设置protected权限,这样子类可以调用,但是外边的类不能调用,关键的是把复制构造函数和复制赋值函数做成private.
+
+
+
+
+enable_shared_from_this模板类的作用是:用来做为一个基类,它允许从一个成员函数中获得一个当前对象的shared_ptr.
+
+class Test : public boost::enable_shared_from_this<Test> {
+	void func() { boost::shared_ptr<Test> pTest = shared_from_this(); }
+};
+
+int main(int argc,char* argv[]) 
+{
+	shared_ptr<Test> pTest(new Test());  //这里的执行顺序是:1.调用enable_shared_from_this构造函数 2.调用Test的构造函数 3.调用
+	pTest->func();			//正确            //shared_ptr的构造函数初始化weak_ptr weak_this_ 最后才能通过func()函数使用
+                                       //shared_from_this函数
+	Test test;
+	test.func();       //错误
+
+	Test pTest = new Test;
+	pTest->func();		//错误
+}
+
+注意:
+1.不能在对象的构造函数中使用shared_from_this()函数
+2.先需要调用enable_shared_from_this类的构造函数,接着调用对象的构造函数,最后需要调用shared_ptr类的构造函数初始化enable_shared_this的成员变量weak_this_.然后才能使用shared_from_this()函数.
+3.如何程序中使用了智能指针shared_ptr,则程序中统一使用智能指针,不能使用原始指针,以免出现错误.
+
+

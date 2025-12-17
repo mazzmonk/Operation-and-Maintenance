@@ -1,0 +1,73 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+struct student {
+  int id;
+  struct student *next;
+};
+
+struct student *front, *current, *x;
+
+void Insert(int d);
+void Display();
+
+int main(int argc, char *argv[]) {
+  front = (struct student*) malloc(sizeof(struct student));
+  front->next = NULL;
+
+  Insert(1);
+  Insert(2);
+  Delete();
+  Insert(3);
+  Insert(4);
+
+  Display();
+
+  return 0;
+}
+
+void Insert(int d) {
+  x = (struct student*) malloc(sizeof(struct student));
+  x->next = NULL;
+  x->id = d;
+
+  if (front->next == NULL)
+    front->next = x;
+  else {
+    current = front->next;             //这里是从头节点开始遍历整个节点的开始
+    while (current->next != NULL)      
+      current = current->next;
+    current->next = x;                 //把新节点添加到尾节点之后.
+  }
+}
+
+void Delete() {
+  current = front->next;
+  if (current == NULL)
+    printf("empty!");
+  else {
+    current = front->next;
+    front->next = current->next;
+    free(current);
+  }
+
+}
+
+
+void Display() {
+  struct student *p;
+
+  p = front->next;
+  while (p != NULL) {
+    printf("ID is %x\t\t", p->id);
+    printf("next is %x\n", p->next);
+    p = p->next;
+  }
+
+}
+
+队列是一种后进,前出的链表,这里有个技术问题,在外部插入的时候,必须从头结点开始遍历直到定位到尾节点,然后把新插入的节点链接到尾节点之后.
+因此复杂度是O(n),也是一种消耗时间的算法.但是删除操作的操作则很快,不论队列长度始终相同,因此是O(1).
+
+
+

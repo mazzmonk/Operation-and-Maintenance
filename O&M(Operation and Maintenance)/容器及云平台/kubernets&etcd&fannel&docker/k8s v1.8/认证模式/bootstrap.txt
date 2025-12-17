@@ -1,0 +1,42 @@
+
+kubelet 启动时向 kube-apiserver 发送 TLS bootstrapping 请求，需要先将 bootstrap token 文件中的 kubelet-bootstrap 用户赋予 system:node-bootstrapper 角色，然后 kubelet 才有权限创建认证请求(certificatesigningrequests)。
+
+理论上,按照上述的"设置客户端认证参数"去操作,这样,所有的node都需要此步骤,这里使用的是一个叫bootstrap的模式,在api server端有相应的配置,似乎是可以动态的认证.待查阅
+
+
+###################################
+
+另外1.8 版本中还需要为Node 请求创建一个RBAC 授权规则：
+
+kubectl create clusterrolebinding kubelet-bootstrap --clusterrole=system:node-bootstrapper --user=kubelet-bootstrap
+
+
+由于通过手动创建 CA 方式太过繁杂，只适合少量机器，因为每次签证时都需要绑定 Node IP，随机器增加会带来很多困扰，因此这边使用 TLS Bootstrapping 方式进行授权，由 apiserver 自动给符合条件的 Node 发送证书来授权加入集群。
+
+当集群开启了 TLS 认证后，每个节点的 kubelet 组件都要使用由 apiserver 使用的 CA 签发的有效证书才能与 apiserver 通讯；此时如果节点多起来，为每个节点单独签署证书将是一件非常繁琐的事情；TLS bootstrapping 功能就是让 kubelet 先使用一个预定的低权限用户连接到 apiserver，然后向 apiserver 申请证书，kubelet 的证书由 apiserver 动态签署；
+
+主要做法是 kubelet 启动时，向 kube-apiserver 传送 TLS Bootstrapping 请求，而 kube-apiserver 验证 kubelet 请求的 token 是否与设定的一样，若一样就自动产生 kubelet 证书与密钥。具体作法可以参考 TLS bootstrapping。
+
+首先建立一个变量来产生BOOTSTRAP_TOKEN，并建立 bootstrap.conf 的 kubeconfig 文件：
+
+kubectl config set-cluster kubernetes --certificate-authority=/home/blue/apps/kubernetes/certificate/ca.crt --embed-certs="true" --server=https://192.168.10.15:6443 --kubeconfig=bootstrap.kubeconfig
+#这里的set-cluster后的kubernetes是在controller端设置的cluster name
+
+
+kubectl config set-credentials kubelet-bootstrap --token="79b80c1f8df0ae6ac78cf771269c75f6" --kubeconfig=bootstrap.kubeconfig
+#这里的kubelet-bootstrap是在token文件里设置的user
+
+
+kubectl config set-context default --cluster=kubernetes --user=kubelet-bootstrap --kubeconfig=bootstrap.kubeconfig
+#这里的--cluster和--user同上,配置关联
+
+
+kubectl config use-context default --kubeconfig=bootstrap.kubeconfig
+#配置默认关联
+
+
+
+
+
+
+

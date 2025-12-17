@@ -1,0 +1,40 @@
+#!/bin/bash
+# author:jack
+# date:20171024
+# startup kubelet service
+# execute with ROOT user 
+# FILENAME:srv.kubelet
+###########################
+
+
+if [ -e GLOBAL-ENV ];then
+  source GLOBAL-ENV
+else
+  echo 'File GLOBAL-ENV does not exist.'
+  echo -1
+fi
+
+KUBERNETES=$HOME_PATH/apps/kubernetes
+
+$KUBERNETES/client/kubelet/bin/kubelet \
+--address=0.0.0.0 \
+--allow-privileged=true \
+--api-servers="http://$KUBE_MASTER_IP:8080"
+--cert-dir="$KUBERNETES/client/kubelet/var/run/kubernetes" \
+--cluster-dns="$KUBE_DNS" \
+--cluster-domain="$CLUSTER_DOMAIN" \
+--container-hints="$KUBERNETES/client/kubelet/etc/cadvisor/container_hints.json" \
+--container-runtime="docker" \
+--docker="unix://$HOME_PATH/apps/docker/var/run/socket" \
+--docker-endpoint="unix:///$HOME_PATH/apps/docker/var/run/socket" \
+--docker-root="$HOME_PATH/apps/docker/var/lib/docker" \
+--hostname-override="$LOCAL_IPADRESS" \
+--healthz-bind-address=0.0.0.0 \
+--kubeconfig="$KUBERNETES/client/kubelet/etc/kubeconfig" \
+--machine-id-file="$KUBERNETES/client/kubelet/etc/machine-id" \
+--network-plugin-dir="$KUBERNETES/client/kubelet/plugins"  \
+--pod-infra-container-image="kubernetes/pause" \
+--root-dir="$KUBERNETES/client/kubelet" \
+--seccomp-profile-root="$KUBERNETES/client/kubelet/seccomp" \
+--volume-plugin-dir="$KUBERNETES/client/kubelet/plugins/volume/exec"  \
+--v=0 --log-cadvisor-usage=true 

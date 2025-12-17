@@ -1,0 +1,11 @@
+#!/bin/bash
+
+HOME=/home/blue
+
+/usr/bin/dockerd \
+--exec-root="$HOME/apps/docker/var/run/docker" \
+--exec-opt native.cgroupdriver=systemd \
+-g "$HOME/apps/docker/var/lib/docker" \
+-p "$HOME/apps/docker/var/run/docker.pid" \
+--storage-opt dm.basesize=30G \
+-H "unix:///$HOME/apps/docker/var/run/socket"  >> $HOME/apps/docker/logs/docker.log 2>&1 &

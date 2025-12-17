@@ -1,0 +1,655 @@
+配置及启动
+相对于1.x版本，2.X的版本已经规范很多了，所有的配置和运行程序已经有单独的目录
+
+×××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××
+由于2.4.1的版本在使用libhdfs接口时候有如下的错误提示：
+java.io.IOException: Failed on local exception: com.google.protobuf.InvalidProtocolBufferException:
+总会提示protobuf的参数不匹配（估计是bug），因此回退1个版本
+
+上述的描述是错误的，和版本bug无关，真实的原因是端口，就是在调用hdfsConnect时候的tport参数是错误的
+一直使用的是namenode的http端口，这个端口是错误的。正确的方法是:
+1.在单点的情况的情况下查看core-site.xml中的
+ <property>
+    <name>fs.defaultFS</name>
+    <value>hdfs://xxx:xxx</value>
+  </property>
+的配置
+
+2.在集群的模式下，这个里写的都是nameseviece id，因此我们需要追踪一下端口
+如果没有修改端口的话，默认是8020，如果修改过，通过如下方式追踪
+
+ps -ef|grep java |grep Dproc_namenode
+得到进程ID
+
+netstat -np |grep 进程ID
+
+例子：
+tcp        0      0 172.16.20.98:59000          172.16.20.98:33620          ESTABLISHED 27759/java          
+tcp        0      0 172.16.20.98:59000          172.16.20.98:33382          ESTABLISHED 27759/java          
+unix  2      [ ]         STREAM     CONNECTED     23835142 27759/java          
+unix  2      [ ]         STREAM     CONNECTED     23835138 27759/java 
+
+如上，得到端口59000
+×××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××
+
+配置文件位于如下的目录
+hadoop/etc/hadoop
+
+运行的程序位于
+hadoop/bin,sbin
+
+环境
+ng00 namenode DFSZKFailoverController
+ng01 namenode DFSZKFailoverController JournalNode
+ng02 datanode JournalNode
+ng03 datanode JournalNode
+
+/etc/profile
+
+###### java env ######
+
+export JAVA_HOME=/usr/local/jdk1.7.0_45
+export PATH=$JAVA_HOME/bin:$PATH
+
+
+修改配置文件
+hadoop/etc/hadoop/下的
+hadoop-env.sh
+如下：
+export JAVA_HOME=/usr/local/jdk1.7.0_45
+export HADOOP_HOME=/home/blue/apps/hadoop
+export HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
+
+export HADOOP_SSH_OPTS="-p 9922" 
+修改
+hdfs-site.xml
+添加如下:
+  <property>
+    <name>dfs.namenode.name.dir</name>
+    <value>file:///home/blue/hadoopdata/hdfs/namenode</value>
+  </property>
+
+  <property>
+    <name>dfs.datanode.data.dir</name>
+    <value>file:///home/blue/hadoopdata/hdfs/datanode</value>
+  </property>
+
+修改
+mapred-site.xml
+添加如下：
+<property>
+    <name>mapreduce.framework.name</name>
+    <value>yarn</value>
+  </property>
+
+  <property>
+    <name>mapreduce.jobhistory.intermediate-done-dir</name>
+    <value>file:///home/blue/hadoopdata/mapreduce</value>
+  </property>
+
+  <property>
+    <name>mapreduce.jobhistory.done-dir</name>
+    <value>file:///home/blue/hadoopdata/mapreduce</value>
+  </property>
+
+修改slaves
+添加如下：
+ng02
+ng03
+
+修改yarn-env.sh
+export YARN_CONF_DIR="$HADOOP_HOME/etc/hadoop"
+
+修改yarn-site.xml
+添加如下：
+<property>
+    <name>yarn.log-aggregation.retain-seconds</name>
+    <value>-1</value>
+  </property>
+
+  <property>
+    <name>yarn.nodemanager.aux-services</name>
+    <value>mapreduce_shuffle</value>
+  </property>
+
+  <property>
+    <name>yarn.resourcemanager.hostname</name>
+    <value>ng01</value>
+  </property>
+
+
+启动服务
+启动服务都位于sbin下
+./start-dfs.sh
+./start-yarn.sh
+
+
+
+########### HADOOP HA ##############
+由于早期1.X/2.0的版本namenode本身是个单点，因此有隐患
+在新的2.2以后的版本里已经有了解决方案
+通过zookeeper这个框架来作为服务，hadoop来通过zookeeper提供的服务来，动态的切换namenode
+而zookeeper则会启动一个Quorum来作为zookeeper集群间节点的数据通信
+
+为了保证在active和standby namenode之间的状态同步(根据官方的文档，目前只能支持2个namenode),
+启动了一个叫做"JournalNodes" (JNs)的节点，JournalNodes的节点至少需要3个，而且必须是奇数，但是
+至少是3个，就是说只能是3,5,7这样的数字，而至少(n-1)/2的节点失败是不会有影响。
+
+zookeeper的安装配置
+zookeeper使用zookeeper-3.4.6.tar.gz版本
+conf/zoo.cfg文件
+
+添加如下内容
+
+tickTime=2000
+initLimit=5
+syncLimit=2
+dataDir=/home/blue/hadoopdata/zookeeper
+clientPort=2181
+
+#表示1，2,3,4号服务器，2888,3888表示与其他节点通讯的端口，有2个是为了冗余的目的
+server.1=172.16.8.115:2888:3888
+server.2=172.16.8.116:2888:3888
+server.3=172.16.8.117:2888:3888
+server.4=172.16.8.118:2888:3888
+
+需要注意的是
+/home/blue/hadoopdata/zookeeper这个目录里需要建一个文件myid
+填写服务器号，也就是上述对应的1,2,3,4号
+比如172.16.8.115里写1
+
+然后启动服务
+
+cd /home/blue/apps/zookeeper/bin && ./zkServer.sh start &
+
+下述的内容是在本文档开始部分后续添加部分
+
+如下在hdfs-site.xml中添加的部分
+
+<!--集群的ID-->
+
+ <property>
+    <name>dfs.nameservices</name>
+    <value>mycluster</value>
+  </property>
+  
+<!--包含的节点，也就是namenode-->
+
+  <property>
+    <name>dfs.ha.namenodes.mycluster</name>
+    <value>ng00,ng01</value>
+  </property>
+
+<!--集群间节点通讯端口-->
+ 
+  <property>
+    <name>dfs.namenode.rpc-address.mycluster.ng00</name>
+    <value>ng00:8020</value>
+  </property>
+
+  <property>
+    <name>dfs.namenode.rpc-address.mycluster.ng01</name>
+    <value>ng01:8020</value>
+  </property> 
+
+<!--http访问2个namenode地址及端口-->
+
+  <property>
+    <name>dfs.namenode.http-address.mycluster.ng00</name>
+    <value>ng00:50070</value>
+  </property>
+
+  <property>
+    <name>dfs.namenode.http-address.mycluster.ng01</name>
+    <value>ng01:50070</value>
+  </property>
+ 
+<!--3个journalnode之间的数据通讯-->
+
+  <property>
+    <name>dfs.namenode.shared.edits.dir</name>
+    <value>qjournal://ng01:8485;ng02:8485;ng03:8485/mycluster</value>
+  </property>
+  
+<!--根据管官方的说法，这里是一个java类，用于确定那个name是active，那个是standby-->
+  <property>
+    <name>dfs.client.failover.proxy.provider.mycluster</name>
+    <value>org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider</value>
+  </property>
+
+<!--用于ssh方式来保证namenode之间的通讯方式-->
+  <property>
+    <name>dfs.ha.fencing.methods</name>
+    <value>sshfence</value>
+  </property>  
+
+  <property>
+    <name>dfs.ha.fencing.ssh.connect-timeout</name>
+    <value>30000</value>
+  </property>
+  
+  <property>
+    <name>dfs.ha.fencing.ssh.private-key-files</name>
+    <value>/home/blue/.ssh/id_rsa</value>
+  </property>
+
+
+<!--开启ha的失败自动漂移功能-->
+
+ <property>
+   <name>dfs.ha.automatic-failover.enabled</name>
+   <value>true</value>
+ </property>
+
+<!--所有zookeeper节点之间通讯端口,不是每个namenode及datanode都需要，
+这里的jouralnode和其他的node之间没有任何关系-->
+
+ <property>
+   <name>ha.zookeeper.quorum</name>
+   <value>ng00:2181,ng01:2181,ng02:2181,ng03:2181</value>
+ </property>
+
+
+修改core-size.xml
+
+<!--所有的访问通过集群ID访问-->
+<property>
+    <name>fs.defaultFS</name>
+    <value>hdfs://mycluster</value>
+  </property>
+
+  <property>
+    <name>io.file.buffer.size</name>
+    <value>131072</value>
+  </property>
+
+<!--每个journalnode保存自己状态的路径-->
+  <property>
+    <name>dfs.journalnode.edits.dir</name>
+    <value>/home/blue/hadoopdata/journal/node/local/data</value>
+  </property>
+
+
+格式化整个集群
+$HADOOP_PREFIX/bin/hdfs namenode -format mycluster
+这个过程只需要在任一一个namenode上执行，执行完毕以后将namenode设置目录下的内容拷贝到
+另外一个namenode
+这个格式过程也会格式化journalnode
+
+初始化zookeeper
+$HADOOP_PREFIX/bin/hdfs zkfc -formatZK
+这个过程只需在任一一个namenode上执行
+
+启动整个hadoop
+在任意一个namenode上执行
+$HADOOP_PREFIX/sbin/start-dfs.sh
+
+
+yarn用于资源管理
+每种角色的配置不同，功能也不同，就是说namenode,datanode的配置方式不同
+
+同时使用zookeeper来检测2个namenode上的resourcemanager，和namenode一样，
+有1个active，1个standby，并且运行的机制也和namenode的zookeeper一样，当
+一个namenode down，另外一个转为active,如果down的namenode重新启用，它的角色
+为standby,直到另外一个namenode down掉
+
+datanodemanager和上述不同，不通过zookeeper,因为所有datanode没有active和
+standby的差别
+
+yarn-site.xml
+
+namenode配置，2个namenode只有
+  <property>
+    <name>yarn.resourcemanager.ha.id</name>
+    <value>rm1</value>
+  </property>
+
+上述这部分是不同的，ng00填入rm1，ng01填入rm2，以代表自己的角色
+
+
+ <property>
+    <name>yarn.log-aggregation.retain-seconds</name>
+    <value>-1</value>
+  </property>
+
+  <property>
+    <name>yarn.nodemanager.aux-services</name>
+    <value>mapreduce_shuffle</value>
+  </property>
+
+<!--HA Cluster-->
+
+<!--开启资源管理的HA模式-->
+  <property>
+    <name>yarn.resourcemanager.ha.enabled</name>
+    <value>true</value>
+  </property>
+
+<!--cluster-id-->
+  <property>
+    <name>yarn.resourcemanager.cluster-id</name>
+    <value>mycluster</value>
+  </property>
+
+<!--定义资源ID-->
+<property>
+    <name>yarn.resourcemanager.ha.rm-ids</name>
+    <value>rm1,rm2</value>
+  </property>
+
+<!--rm1对应的具体机器-->
+  <property>
+    <name>yarn.resourcemanager.hostname.rm1</name>
+    <value>ng00</value>
+  </property>
+
+  <property>
+    <name>yarn.resourcemanager.hostname.rm2</name>
+    <value>ng01</value>
+  </property>
+
+<!--与下边一个配合使用，开启recovery模式，恢复模式，
+  <property>
+    <name>yarn.resourcemanager.recovery.enabled</name>
+    <value>true</value>
+  </property>
+
+ <property>
+    <name>yarn.resourcemanager.store.class</name>
+    <value>org.apache.hadoop.yarn.server.resourcemanager.recovery.ZKRMStateStore</value>
+  </property>
+
+<!--通过zookeeper管理的节点，这里不一定需要把所有的节点都写进去，只填入ng00,ng01即可-->
+  <property>
+    <name>yarn.resourcemanager.zk-address</name>
+    <value>ng00:2181,ng01:2181,ng02:2181,ng03:2181</value>
+  </property>
+
+<!--本机的ID-->
+  <property>
+    <name>yarn.resourcemanager.ha.id</name>
+    <value>rm1</value>
+  </property>
+
+
+
+datanode配置
+
+上述内容剔除yarn.resourcemanager.ha.id这部分内容，然后添加如下
+内容，并且所有datanode都相同
+
+  <property>
+    <name>yarn.nodemanager.hostname</name>
+    <value>0.0.0.0</value>
+  </property>
+
+  <property>
+    <name>yarn.nodemanager.address</name>
+    <value>${yarn.nodemanager.hostname}:0</value>
+  </property>
+
+启动
+2个namenode都用
+sbin/start-yarn.sh来启动，但是active和standby的角色都是zookeeper来选择
+
+datanode不需要单独启动，当有一个namenode的上述脚本运行过，则datanode会自己启动
+
+关于下边值，除非需要单独的设置，否则，不用设置，用默认值就可以
+yarn.resourcemanager.address.rm1
+yarn.resourcemanager.scheduler.address.rm1
+yarn.resourcemanager.webapp.https.address.rm1
+yarn.resourcemanager.webapp.address.rm1
+yarn.resourcemanager.resource-tracker.address.rm1
+yarn.resourcemanager.admin.address.rm1
+yarn.resourcemanager.address.rm2
+
+
+报错
+Initialization failed for Block pool <registering> (Datanode Uuid unassigned)
+删除datanode目录中的内容， 原因是因为namenode做过重复格式化
+
+
+查看
+namenode http://x.x.x.x:50070      #每个namenode都可以通过这个url查看，只是在页面上会显示active和standby
+resource http://x.x.x.x:8088       #当standby的节点无法查看，只有active的节点可以查看
+datanode http://x.x.x.x:8042	   #所有启动了nodemanager的节点都可以查看
+
+
+WebHDFS REST API
+提供一个hdfs的http接口
+
+httpfs-env.sh
+保证有如下的部分
+
+export HTTPFS_LOG=/home/blue/hadoopdata/webhdfs/
+export HTTPFS_TEMP=/home/blue/hadoopdata/webhdfs/
+export HTTPFS_ADMIN_PORT=`expr ${HTTPFS_HTTP_PORT} + 1`
+export HTTPFS_HTTP_HOSTNAME=`hostname -f`
+
+core-site.html
+添加如下部分
+ <property>
+   <name>hadoop.http.staticuser.user</name>
+   <value>blue</value>
+ </property>
+
+这里一定注意，保证在使用相应的url方式提交类似新建文件目录等情况时候，新建文件或者目录的
+属主是这里设置的值。
+
+
+
+hdfs-site.xml
+添加如下部分
+ <property>
+   <name>dfs.webhdfs.enabled</name>
+   <value>true</value>
+ </property>
+
+ <property>
+  <name>dfs.permissions</name>
+  <value>false</value>
+ </property>
+
+关闭权限的检查
+
+同步到所有节点
+
+重启namenode
+启动./hdfs start
+
+使用接口的时候使用namenode的端口50070
+
+#######################
+
+编译libhdfs需要的头文件和库文件的设置
+
+在编译好64位的hadoop以后，在程序目录中，有如下的设置
+编译需要用的.so的等等库文件在
+hadoop/lib/native下
+头文件在
+hadoop/include下
+
+把include文件夹拷贝到/usr/include/下更名为hadoop
+
+在程序代码里如下写：
+
+#include "hadoop/xx.h"
+
+同时为了在编译的时候能链接到库文件，需要把native目录拷贝到
+/usr/lib下命名为hadoop，进入目录中
+做链接libhdfs.so.0.0.0到/usr/lib/下libhdfs.so和libhdfs.so.0.0.0
+同时做链接libhadoop.so.1.0.0到/usr/lib/下libhadoop.so和libhadoop.so.1.0.0
+
+因为在编译过程中会调用java的库文件和头文件
+所以设置/etc/profile
+export LD_LIBRARY_PATH=/usr/lib:/usr/lib64:/usr/java/jdk1.7.0_25/jre/lib/amd64/server
+
+具体的java路径根据实际设置
+
+编译选项
+gcc bb.c -I /usr/lib/hadoop -L /usr/lib/hadoop -lhdfs
+
+
+在/etc/profile里设置如下内容，保证在客户端使用libhdfs时候能够调用到hadoop本身的java库内容'
+这里的路径CLASSPATH可以通过执行得到
+
+$bin/hadoop classpath
+
+
+
+path="/home/jack/apps/hadoop/share/hadoop/common \
+/home/jack/apps/hadoop/share/hadoop/common/lib \
+/home/jack/apps/hadoop/share/hadoop/hdfs \
+/home/jack/apps/hadoop/share/hadoop/hdfs/lib \
+/home/jack/apps/hadoop/share/hadoop/httpfs/tomcat/lib \
+/home/jack/apps/hadoop/share/hadoop/httpfs/tomcat/webapps/webhdfs/WEB-INF/lib \
+/home/jack/apps/hadoop/share/hadoop/mapreduce \
+/home/jack/apps/hadoop/share/hadoop/mapreduce/lib \
+/home/jack/apps/hadoop/share/hadoop/tools/lib \
+/home/jack/apps/hadoop/share/hadoop/yarn \
+/home/jack/apps/hadoop/share/hadoop/yarn/lib"
+
+
+for i in $path
+do
+    for j in `ls $i/*`
+    do
+       export CLASSPATH=$CLASSPATH:$j
+    done
+done
+
+
+client端的设置，上述设置是环境设置
+如下部分设置在客户端连接hadoop，特别是单点和集群模式是不同的
+当上述的内容设置完毕，需要把服务段端的hadoop目录整个拷贝到本地
+
+×××××××××××××××××××××××××××
+单点的时候，修改如下文件
+hadoop-env.sh
+
+export JAVA_HOME=/usr/local/jdk1.7.0_45
+export HADOOP_HOME=/home/jack/apps/hadoop
+export HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
+
+core-site.xml
+只需要如下部分
+
+  <property>
+    <name>fs.defaultFS</name>
+    <value>hdfs://xxx:xxx</value>
+  </property>
+
+hdfs-site.xml
+保持和服务器相同
+
+mapred-site.xml
+只需要如下部分
+
+  <property>
+    <name>mapreduce.framework.name</name>
+    <value>yarn</value>
+  </property>
+
+yarn-site.xml
+只需要如下部分
+
+<property>
+    <name>yarn.nodemanager.aux-services</name>
+    <value>mapreduce_shuffle</value>
+  </property>
+
+
+ok设置完毕以后，在使用hdfsConnect函数时候，根据core-site.xml的fs.defaultFS来
+判断使用的hostname和port
+
+×××××××××××××××××××××××××××
+
+集群模式需要修改文件
+core-site.xml
+只需要的部分
+
+ <property>
+    <name>fs.defaultFS</name>
+    <value>hdfs://mycluster</value>
+  </property>
+
+这里的设置要和服务器保持一致，在联盟模式下这里的设置和上述不同
+
+hdfs-site.xml文件很重要，如下的部分是要和服务器一致的地方，同时只需要此部分
+第一部分是很重要的部分，主要作用是用于当客户连接时，判断那个namenode是active状态
+
+ <property>
+    <name>dfs.client.failover.proxy.provider.mycluster</name>
+    <value>org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider</value>
+  </property>
+ 
+   <property>
+    <name>dfs.nameservices</name>
+    <value>mycluster</value>
+  </property>
+
+  <property>
+    <name>dfs.ha.namenodes.mycluster</name>
+    <value>ng00,ng01</value>
+  </property>
+
+    <property>
+    <name>dfs.namenode.http-address.mycluster.ng00</name>
+    <value>ng00:50070</value>
+  </property>
+
+  <property>
+    <name>dfs.namenode.http-address.mycluster.ng01</name>
+    <value>ng01:50070</value>
+  </property>
+
+    <property>
+    <name>dfs.namenode.rpc-address.mycluster.ng00</name>
+    <value>ng00:8020</value>
+  </property>
+
+  <property>
+    <name>dfs.namenode.rpc-address.mycluster.ng01</name>
+    <value>ng01:8020</value>
+  </property>
+
+
+mapred-site.xml
+只需要部分
+
+  <property>
+    <name>mapreduce.framework.name</name>
+    <value>yarn</value>
+  </property>
+
+yarn-site.xml
+只需要部分
+
+  <property>
+    <name>yarn.nodemanager.aux-services</name>
+    <value>mapreduce_shuffle</value>
+  </property>
+  
+
+ok了，上述设置完毕以后，当使用hdfsConnect函数时，参数分别是
+mycluster,8020
+
+mycluster来之core-site.xml中的fs.DefaultFs
+8020端口来之本文档开始的追踪端口部分
+
+而以上的路径名，集群名称等等根据实际的设置，本质是根据服务器端配置修改
+
+×××××××××××××××××××××××××
+
+上述的设置是否成功，用如下方式测试：
+
+hadoop/bin/hdfs dfs /xxx
+
+在客户段执行hdfs的命令，查看是否能通过
+
+
+
+
+
+
+

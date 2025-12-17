@@ -1,0 +1,16 @@
+swapoff -a  关闭swap
+参数中的--kube-reserved这个保留资源,不要用storage,不能好好工作
+
+
+error: failed to run Kubelet: failed to create kubelet: mkdir /var/lib/dockershim: permission denied
+按照这里的说法,1.7以后版本,这似乎是一个bug
+https://www.mail-archive.com/ubuntu-bugs@lists.ubuntu.com/msg5183965.html
+
+添加一个隐藏参数覆盖
+--experimental-dockershim-root-directory="$HOME_PATH/apps/docker/var/lib/dockershim"
+
+当有此选项时,上述的TLS方式,无法通过,因为,首次与api server通讯的时候,用的匿名方式,这个参数,应当是在使用证书的双向认证方式才可用
+如果使用此参数,会有
+error: failed to run Kubelet: No authentication method configured
+的错误提示.
+--anonymous-auth="false" \

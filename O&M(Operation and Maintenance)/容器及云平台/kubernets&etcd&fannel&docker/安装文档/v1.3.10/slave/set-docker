@@ -1,0 +1,20 @@
+#!/bin/bash
+# author:jack
+# date:20171024
+# set Permission and Quick Links
+# execute with ROOT user 
+# FILENAME:set-docker
+####################################
+
+
+ln -s $HOME_PATH/apps/docker/var/run/socket /var/run/docker.sock
+ln -s $HOME_PATH/apps/docker/var/run/docker.pid /var/run/
+cd $HOME_PATH/apps/docker/var/run  && chown -R blue:blue *
+
+if [ -d "/run/docker/libcontainerd" ];then
+  ln -s $HOME_PATH/apps/docker/var/run/docker/libcontainerd/docker-containerd.pid /run/docker/libcontainerd/
+else
+  mkdir -p /run/docker/libcontainerd
+  ln -s $HOME_PATH/apps/docker/var/run/docker/libcontainerd/docker-containerd.pid /run/docker/libcontainerd/
+fi
+  

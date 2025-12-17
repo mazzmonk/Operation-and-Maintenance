@@ -1,0 +1,157 @@
+在C++11中，我们有可调用函数，如函数，函数对象和lambda函数。问题往往是：什么时候应该使用函数或lambda函数？这是两个简单的规则
+
+如果您的callable必须捕获局部变量或在本地范围内声明，则必须使用lambda函数。
+如果您的可调用应支持重载，请使用函数。
+
+现代C ++中的多线程
+
+C++11多线程功能由两个组件组成。这一方面是定义的内存模式，另一方面是标准化的线程界面。
+
+一个明确的内存模型
+定义的内存模型是必要的基础，因此多线程编程在C ++中是有意义的。因此，内存模型必须给出以下问题的答案。
+
+什么是原子操作？
+确保哪一个操作顺序？
+什么时候操作的记忆效应可见？
+1：原子操作是遵循数据库理论中着名的ACID成语的前三个字母的操作。原子操作是原子（A），从一个一致的（C）状态到下一个状态，并且被隔离执行（I）。这尤其意味着没有其他线程可以观察到原子操作的中间状态。增量atomVar ++  显示了原子操作的一致性和隔离度非常好。如果atomVar是原子变量，那么atomVar只能具有旧值或新值。变量atomVar的一致性是，它只从一个状态改变到另一个状态和隔离，另一个线程不能观察到任何中间值。
+
+2：将程序转换为汇编程序指令的编译器以及执行汇编程序指令的处理器都可以重新排列操作。这通常是出于性能原因。另外，各种各样的存储（缓存）层可能以延迟的方式提供操作的结果。
+
+3：由于一个线程很可能在一个变量的后面看到一个操作，所以线程必须遵守某些规则。
+
+标准化线程界面
+C ++ 11中的标准化线程接口由以下组件组成。
+
+主题
+任务
+线程本地数据
+条件变量
+1：线程是多线程编程的基本构建块。他们自己做自己的工作，通过参数进行参数化，并通过共享变量与其他线程进行交互。
+2：任务是一个相对现代的概念。任务由两个组件组成，通过通信通道连接。作为通道端点的一个组件产生结果，而另一个端点消耗它。生产者叫Promise，消费者Future。
+3：线程本地数据是数据 - 例如很容易从名称猜测 - 明确属于一个线程。
+4：条件变量使它能够实现生产者/消费者工作流程。消费者等待生产者的通知，以便他能继续工作。
+
+
+
+以下程序启动一个线程，显示其ID。
+
+// threadWithoutJoin.cpp
+
+ #include <iostream> 
+#include <thread>
+
+int main（）{
+
+  std :: thread t（[] {std :: cout << std :: this_thread :: get_id（）<< std :: endl;}）;
+
+}
+
+但程序运行会导致意想不到的结果。
+
+什么原因？
+
+加入和分离
+创建的线程t的生命周期以其可调用单元结束。创作者有两个选择。第一：它等待，直到它的孩子完成（t.join（））。第二：它脱离了它的孩子：t.detach（）。具有可调用单元的线程t（可以创建没有可调用单元的线程）可以连接，以防止没有t.join（）或t.detach调用线程。可连接的线程析构函数会抛出   std :: terminate   异常。因此，程序终止。这就是原因，实际运行意外终止。
+
+解决这个问题的方法很简单。通过调用t.join（），程序的行为应该是这样的。
+
+// threadWithJoin.cpp
+
+#include <iostream> 
+#include <thread>
+
+int main（）{
+
+  std :: thread t（[] {std :: cout << std :: this_thread :: get_id（）<< std :: endl;}）;
+
+  t.join（）; 
+
+}
+
+一个简短的旁注：分离的挑战
+当然，您可以在上面的程序中使用t.detach（）而不是t.join（）。线程t不再可加入，并且它的析构函数没有调用std :: terminate。似乎不好，因为现在程序行为是未定义的，因为对象std :: cout的生命周期不能保证。程序的执行有点奇怪。
+
+移动线程 
+直到现在，这很容易。但这不是永远的。
+
+复制线程是不可能的（复制语义），你只能移动（移动语义）它。如果一个线程被移动，那么以正确的方式处理它的生命周期要困难得多。
+
+// threadMoved.cpp
+
+#include <iostream> 
+#include <thread> 
+#include <utility>
+
+int main（）{
+
+  std :: thread t（[] {std :: cout << std :: this_thread :: get_id（）;}）;
+  std :: thread t2（[] {std :: cout << std :: this_thread :: get_id（）;}）;
+  
+  t = std :: move（t2）; 
+  t.join（）; 
+  t2.join（）; 
+
+}
+ 
+
+两个线程 - t1和t2都应该做一个简单的工作：打印它们的ID。除此之外，线程t2将被移动到t：t = std :: move（t2）。最后，主 线程照顾孩子并加入他们。可是等等。这远离我的期望：
+出了什么问题？我们有两个问题：
+
+1.通过移动（获取）线程t2，t得到一个新的可调用单元，并且它的析构函数将被调用。所以t的析构函数调用std :: terminate，因为它仍然可以连接。
+2.线程t2没有关联的可调用单元。在没有可调用单元的线程上调用连接会导致异常std :: system_error。
+我修复了两个错误。
+
+// threadMovedFixed.cpp
+
+#include <iostream> 
+#include <thread> 
+#include <utility>
+
+int main（）{
+
+  std :: thread t（[] {std :: cout << std :: this_thread :: get_id（）<< std :: endl;}）;
+  std :: thread t2（[] {std :: cout << std :: this_thread :: get_id（）<< std :: endl;}）;
+  
+  t.join（）;
+  t = std :: move（t2）; 
+  t.join（）; 
+  
+  std :: cout << “\ n” ;
+  std :: cout << std :: boolalpha << “t2.joinable（）：” << t2.joinable（）<< std :: endl;
+
+}
+
+结果，线程t2不再可连接。
+
+scoped_thread
+如果太麻烦了，您可以手工处理线程的生命周期，您可以将std::thread封装在自己的包装类中。这个类应该自动调用加入他的析构函数。
+
+安东尼·威廉姆斯创造了这样有价值的类 他称之为scoped_thread。在构造函数中，它检查线程是否可以连接，并最终在析构函数中加入。因为复制构造函数和复制赋值运算符被声明为delete，所以scoped_thread的对象不能被复制到或从中分配。
+
+// scoped_thread.cpp
+
+#include <iostream>
+#include <thread>
+#include <utility>
+
+
+class scoped_thread{
+  std::thread t;
+public:
+  explicit scoped_thread(std::thread t_): t(std::move(t_)){
+    if ( !t.joinable()) throw std::logic_error("No thread");
+  }
+  ~scoped_thread(){
+    t.join();
+  }
+  scoped_thread(scoped_thread&)= delete;
+  scoped_thread& operator=(scoped_thread const &)= delete;
+};
+
+int main(){
+
+  scoped_thread t(std::thread([]{std::cout << std::this_thread::get_id() << std::endl;}));
+
+}
+
+

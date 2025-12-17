@@ -1,0 +1,1476 @@
+索引:
+----------------------------------------------------------------------------------------------------------------
+第五部分(5/16)
+
+# 管理 Secrets
+
+## 使用 kubectl 管理 Secret
+使用 kubectl 命令行创建 Secret 对象.
+
+* 创建 Secret
+Secret 对象用来存储敏感数据,如 Pod 用于访问服务的凭据.例如,为访问数据库,你可能需要一个 Secret 来存储所需的用户名及密码.
+
+你可以通过在命令中传递原始数据,或将凭据存储文件中,然后再在命令行中创建 Secret.以下命令 将创建一个存储用户名 admin 和密码 S!B\*d$zDsb= 的 Secret.
+
+** 使用原始数据
+执行以下命令: 
+$ kubectl create secret generic db-user-pass \
+    --from-literal=username=admin \
+    --from-literal=password='S!B\*d$zDsb='
+
+你必须使用单引号 '' 转义字符串中的特殊字符,如 $、\、*、=和! .否则,你的 shell 将会解析这些字符.
+
+说明: 
+Secret 的 stringData 字段与服务端应用不兼容.
+
+** 使用源文件 - 重要,解释了为什么 echo 要使用 -n 参数
+1.将凭据保存到文件: 
+$ echo -n 'admin' > ./username.txt
+$ echo -n 'S!B\*d$zDsb=' > ./password.txt
+
+-n 标志用来确保生成文件的文末没有多余的换行符.这很重要,因为当 kubectl 读取文件并将内容编码为 base64 字符串时,额外的换行符也会被编码.你不需要对文件中包含的字符串中的特殊字符进行转义.
+
+2.在 kubectl 命令中传递文件路径: 
+$ kubectl create secret generic db-user-pass \
+    --from-file=./username.txt \
+    --from-file=./password.txt
+
+默认键名为文件名.你也可以通过 --from-file=[key=]source 设置键名,例如: 
+$ kubectl create secret generic db-user-pass \
+    --from-file=username=./username.txt \
+    --from-file=password=./password.txt
+
+无论使用哪种方法,输出都类似于: 
+secret/db-user-pass created
+
+* 验证 Secret
+检查 Secret 是否已创建: 
+$ kubectl get secrets
+
+输出类似于: 
+NAME              TYPE       DATA      AGE
+db-user-pass      Opaque     2         51s
+
+查看 Secret 的细节: 
+$ kubectl describe secret db-user-pass
+
+输出类似于: 
+Name:            db-user-pass
+Namespace:       default
+Labels:          <none>
+Annotations:     <none>
+
+Type:            Opaque
+
+Data
+====
+password:    12 bytes
+username:    5 bytes
+
+kubectl get 和 kubectl describe 命令默认不显示 Secret 的内容.这是为了防止 Secret 被意外暴露或存储在终端日志中.
+
+** 解码 Secret - 重要,解释了如何查看 secret 的解密以后的具体内容
+1.查看你所创建的 Secret 内容
+$ kubectl get secret db-user-pass -o jsonpath='{.data}'
+
+输出类似于: 
+{ "password": "UyFCXCpkJHpEc2I9","username": "YWRtaW4=" }
+
+2.解码 password 数据:
+$ echo 'UyFCXCpkJHpEc2I9' | base64 --decode
+
+输出类似于: 
+S!B\*d$zDsb=
+
+注意: 
+这是一个出于文档编制目的的示例.实际上,该方法可能会导致包含编码数据的命令存储在 Shell 的历史记录中.任何可以访问你的计算机的人都可以找到该命令并对 Secret 进行解码.更好的办法是将查看和解码命令一同使用.
+$ kubectl get secret db-user-pass -o jsonpath='{.data.password}' | base64 --decode
+
+* 你可以编辑一个现存的 Secret 对象,除非它是不可改变的.要想编辑一个 Secret,请执行以下命令: 
+$ kubectl edit secrets <secret-name>
+
+这将打开默认编辑器,并允许你更新 data 字段中的 base64 编码的 Secret 值,示例如下: 
+#请编辑下面的对象.以“#”开头的行将被忽略,
+#空文件将中止编辑.如果在保存此文件时发生错误,
+#则将重新打开该文件并显示相关的失败.
+apiVersion: v1
+data:
+  password: UyFCXCpkJHpEc2I9
+  username: YWRtaW4=
+kind: Secret
+metadata:
+  creationTimestamp: "2022-06-28T17:44:13Z"
+  name: db-user-pass
+  namespace: default
+  resourceVersion: "12708504"
+  uid: 91becd59-78fa-4c85-823f-6d44436242ac
+type: Opaque
+
+* 清理
+要想删除一个 Secret,请执行以下命令: 
+$ kubectl delete secret db-user-pass
+
+## 使用配置文件管理 Secret
+使用资源配置文件创建 Secret 对象.
+
+* 创建 Secret
+你可以先用 JSON 或 YAML 格式在一个清单文件中定义 Secret 对象,然后创建该对象.Secret 资源包含 2 个键值对: data 和 stringData.data 字段用来存储 base64 编码的任意数据.提供 stringData 字段是为了方便,它允许 Secret 使用未编码的字符串.data 和 stringData 的键必须由字母、数字、-、_ 或 .组成.
+
+以下示例使用 data 字段在 Secret 中存储两个字符串: 
+1.将这些字符串转换为 base64: 
+$ echo -n 'admin' | base64
+$ echo -n '1f2d1e2e67df' | base64
+
+说明: 
+Secret 数据的 JSON 和 YAML 序列化结果是以 base64 编码的.换行符在这些字符串中无效,必须省略.在 Darwin/macOS 上使用 base64 工具时,用户不应该使用 -b 选项分割长行.相反地,Linux 用户应该在 base64 地命令中添加 -w 0 选项,或者在 -w 选项不可用的情况下,输入 base64 | tr -d '\n'.
+
+输出类似于: 
+YWRtaW4=
+MWYyZDFlMmU2N2Rm
+
+2.创建清单: 
+----------------------------
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysecret
+type: Opaque
+data:
+  username: YWRtaW4=
+  password: MWYyZDFlMmU2N2Rm
+---------------------------------
+注意,Secret 对象的名称必须是有效的 DNS 子域名.
+
+3.使用 kubectl apply 创建 Secret: 
+$ kubectl apply -f ./secret.yaml
+
+输出类似于: 
+secret/mysecret created
+
+4.查看内容
+$ kubectl get secret -o yaml
+--------------------------------
+apiVersion: v1
+items:
+- apiVersion: v1
+  data:
+    password: MWYyZDFlMmU2N2Rm
+    username: YWRtaW4=
+  kind: Secret
+  metadata:
+    annotations:
+      kubectl.kubernetes.io/last-applied-configuration: |
+        {"apiVersion":"v1","data":{"password":"MWYyZDFlMmU2N2Rm","username":"YWRtaW4="},"kind":"Secret","metadata":{"annotations":{},"name":"mysecret","namespace":"default"},"type":"Opaque"}
+    creationTimestamp: "2024-09-23T09:28:52Z"
+    name: mysecret
+    namespace: default
+    resourceVersion: "165154"
+    uid: 4eb2265e-f945-46da-a547-4d8ed5bec5a6
+  type: Opaque
+kind: List
+metadata:
+  resourceVersion: ""
+----------------------------------------------------
+
+** 创建 Secret 时提供未编码的数据 - 重要,和使用 Data 字段加密数据有很大区别,需要特别注意,可以使用 | 来分割 key 和 value 作为其中一种有多层嵌套时用的
+对于某些场景,你可能希望使用 stringData 字段.这个字段可以将一个非 base64 编码的字符串直接放入 Secret 中,当创建或更新该 Secret 时,此字段将被编码.
+
+上述用例的实际场景可能是这样: 当你部署应用时,使用 Secret 存储配置文件,你希望在部署过程中,填入部分内容到该配置文件.
+
+例如,如果你的应用程序使用以下配置文件: 
+------------------------------------------
+apiUrl: "https://my.api.com/api/v1"
+username: "<user>"
+password: "<password>"
+------------------------------------------
+
+你可以使用以下定义将其存储在 Secret 中: 
+---------------------
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysecret
+type: Opaque
+stringData:
+  config.yaml: |
+    apiUrl: "https://my.api.com/api/v1"
+    username: <user>
+    password: <password>
+------------------------------------------
+说明: 
+Secret 的 stringData 字段不能很好地与服务器端应用配合使用.
+
+当你检索 Secret 数据时,此命令将返回编码的值,并不是你在 stringData 中提供的纯文本值.
+
+例如,如果你运行以下命令: 
+$ kubectl get secret mysecret -o yaml
+
+输出类似于: 
+apiVersion: v1
+data:       # 注意这里,将整个 config.yaml: | 后面的内容都加密成一个 字符串了
+  config.yaml: YXBpVXJsOiAiaHR0cHM6Ly9teS5hcGkuY29tL2FwaS92MSIKdXNlcm5hbWU6IHt7dXNlcm5hbWV9fQpwYXNzd29yZDoge3twYXNzd29yZH19
+kind: Secret
+metadata:
+  creationTimestamp: 2018-11-15T20:40:59Z
+  name: mysecret
+  namespace: default
+  resourceVersion: "7225"
+  uid: c280ad2e-e916-11e8-98f2-025000000001
+type:
+
+** 同时指定 data 和 stringData
+如果你在 data 和 stringData 中设置了同一个字段,则使用来自 stringData 中的值.
+
+例如,如果你定义以下 Secret: 
+----------------------------
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysecret
+type: Opaque
+data:
+  username: YWRtaW4=
+stringData:
+  username: administrator
+---------------------------------
+
+说明: 
+Secret 的 stringData 字段不能很好地与服务器端应用配合使用.
+
+所创建的 Secret 对象如下: 
+-------------------------------
+apiVersion: v1
+data:
+  username: YWRtaW5pc3RyYXRvcg==   # 这里被解析成如此样子,是因为 stringData 中的 username 覆盖了 data 中的 username
+kind: Secret
+metadata:
+  creationTimestamp: 2018-11-15T20:46:46Z
+  name: mysecret
+  namespace: default
+  resourceVersion: "7579"
+  uid: 91460ecb-e917-11e8-98f2-025000000001
+type: Opaque
+----------------------------------
+
+YWRtaW5pc3RyYXRvcg== 解码成 administrator.
+
+使用一个不同的例子
+-------------------
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysecret2
+type: Opaque
+data:
+  username: YWRtaW4=
+stringData:
+  user: administrator
+-------------------------
+
+输出显示
+-----------------------------------
+apiVersion: v1
+data:
+  user: YWRtaW5pc3RyYXRvcg==  # stringData 中的 user 
+  username: YWRtaW4=          # data 中的 username
+kind: Secret
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"v1","data":{"username":"YWRtaW4="},"kind":"Secret","metadata":{"annotations":{},"name":"mysecret2","namespace":"default"},"stringData":{"user":"administrator"},"type":"Opaque"}
+  creationTimestamp: "2024-09-23T09:41:25Z"
+  name: mysecret2
+  namespace: default
+  resourceVersion: "166208"
+  uid: db326604-6b3e-4032-8399-ea62fed24d2d
+type: Opaque
+---------------------------------------------------
+
+* 编辑 Secret
+要编辑使用清单创建的 Secret 中的数据,请修改清单中的 data 或 stringData 字段并将此清单文件应用到集群.你可以编辑现有的 Secret 对象,除非它是不可变的.
+
+例如,如果你想将上一个示例中的密码更改为 birdsarentreal,请执行以下操作: 
+1.编码新密码字符串: 
+$ echo -n 'birdsarentreal' | base64
+
+输出类似于: 
+YmlyZHNhcmVudHJlYWw=
+
+2.使用你的新密码字符串更新 data 字段: 
+-----------------------
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysecret
+type: Opaque
+data:
+  username: YWRtaW4=
+  password: YmlyZHNhcmVudHJlYWw=
+----------------------------------
+
+3. 将清单应用到你的集群: 
+$ kubectl apply -f ./secret.yaml
+
+输出类似于: 
+secret/mysecret configured
+
+Kubernetes 更新现有的 Secret 对象.具体而言,kubectl 工具发现存在一个同名的现有 Secret 对象.kubectl 获取现有对象,计划对其进行更改,并将更改后的 Secret 对象提交到你的集群控制平面.
+
+如果你指定了 kubectl apply --server-side,则 kubectl 使用服务器端应用(Server-Side Apply).
+
+^^^^^^^^^^^^^^^^^^^^
+# 服务器端应用(Server-Side Apply) - 注意,Kubernetes v1.22 正式特性,是 last-applied configuration 的一种升级版,解决是某些没有被 last-applied configuration 管理的字段的 update 类似的操作,是一个可选的机制,需要 ServerSideApply 特性门支持,而 last-applied configuration 则相对的被称为 Client-Side Apply,但是,这个特性根据如下的官方描述,管理的字段会描述是被何种对象修改,后续的测试中有描述,当使用了此特性以后,不在有 last-applied configuration 字段.使用此特性还需要进一步的测试了解起详细的过程.
+
+官方参考:
+https://kubernetes.io/zh-cn/docs/reference/using-api/server-side-apply/
+
+# 通过如下的命令可以查看当前的被 Server-Side Apply 支持的 managedFields 字段的详细信息
+# 默认不使用参数是无法查看的
+$ kubectl get cm kube-root-ca.crt -o yaml --show-managed-fields
+
+另外,通过 kubeadm 配置的 k8s v1.30 版本的集群中,有如下几个例子参考
+
+# 没有添加 --show-managed-fields 参数
+$ kubectl get daemonset.apps/kube-proxy -n kube-system -o yaml
+-------------------------------
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:           # 被管理
+  annotations:      # 被管理   
+    deprecated.daemonset.template.generation: "1"    # 被管理
+  creationTimestamp: "2024-08-26T09:02:51Z"
+  generation: 1
+  labels:                 # 被管理
+    k8s-app: kube-proxy   # 被管理
+  name: kube-proxy
+  namespace: kube-system
+  resourceVersion: "168300"
+  uid: e105826c-c16b-4321-a883-0e73432f0094
+spec:
+  revisionHistoryLimit: 10    # 被管理
+  selector:                   # 被管理
+    matchLabels:
+      k8s-app: kube-proxy
+  template:                   # 被管理
+    metadata:                 # 被管理
+      creationTimestamp: null
+      labels:                 # 被管理
+        k8s-app: kube-proxy   # 被管理
+    spec:                     # 被管理
+      containers:             # 被管理
+      - command:              # 整个段被管理
+        - /usr/local/bin/kube-proxy
+        - --config=/var/lib/kube-proxy/config.conf
+        - --hostname-override=$(NODE_NAME)
+        env:                  # 被管理
+        - name: NODE_NAME     # 被管理
+          valueFrom:          # 被管理
+            fieldRef:         # 整个段被管理
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        image: registry.k8s.io/kube-proxy:v1.30.0 # 被管理
+        imagePullPolicy: IfNotPresent             # 被管理
+        name: kube-proxy                          # 被管理
+        resources: {}                             # 被管理
+        securityContext:                          # 被管理
+          privileged: true                        # 被管理
+        terminationMessagePath: /dev/termination-log  # 被管理
+        terminationMessagePolicy: File                # 被管理
+        volumeMounts:                                 # 被管理
+        - mountPath: /var/lib/kube-proxy              # 被管理
+          name: kube-proxy                            # 被管理
+        - mountPath: /run/xtables.lock                # 被管理
+          name: xtables-lock                          # 被管理
+        - mountPath: /lib/modules                     # 被管理
+          name: lib-modules                           # 被管理
+          readOnly: true                              # 被管理
+      dnsPolicy: ClusterFirst                         # 被管理
+      hostNetwork: true                               # 被管理
+      nodeSelector:                                   # 整个段被管理
+        kubernetes.io/os: linux
+      priorityClassName: system-node-critical         # 被管理
+      restartPolicy: Always                           # 被管理
+      schedulerName: default-scheduler                # 被管理
+      securityContext: {}                             # 被管理
+      serviceAccount: kube-proxy                      # 被管理
+      serviceAccountName: kube-proxy                  # 被管理
+      terminationGracePeriodSeconds: 30               # 被管理
+      tolerations:                                    # 整个段被管理
+      - operator: Exists
+      volumes:                                        # 被管理
+      - configMap:                                    # 被管理
+          defaultMode: 420                            # 被管理
+          name: kube-proxy                            # 被管理
+        name: kube-proxy                              # 被管理
+      - hostPath:                                     # 被管理
+          path: /run/xtables.lock                     # 被管理
+          type: FileOrCreate                          # 被管理
+        name: xtables-lock                            # 被管理
+      - hostPath:                                     # 被管理
+          path: /lib/modules                          # 被管理
+          type: ""                                    # 被管理
+        name: lib-modules                             # 被管理
+  updateStrategy:                                     # 被管理
+    rollingUpdate:                                    # 被管理
+      maxSurge: 0                                     # 被管理
+      maxUnavailable: 1                               # 被管理
+    type: RollingUpdate                               # 被管理
+
+------------------------------------------
+
+# 添加了 --show-managed-fields 参数
+$ kubectl get daemonset.apps/kube-proxy -n kube-system -o yaml --show-managed-fields
+-----------------
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  annotations:
+    deprecated.daemonset.template.generation: "1"
+  creationTimestamp: "2024-08-26T09:02:51Z"
+  generation: 1
+  labels:
+    k8s-app: kube-proxy
+  managedFields:
+  - apiVersion: apps/v1
+    fieldsType: FieldsV1
+    fieldsV1:
+      f:metadata:
+        f:annotations:
+          .: {}
+          f:deprecated.daemonset.template.generation: {}
+        f:labels:
+          .: {}
+          f:k8s-app: {}
+      f:spec:
+        f:revisionHistoryLimit: {}
+        f:selector: {}
+        f:template:
+          f:metadata:
+            f:labels:
+              .: {}
+              f:k8s-app: {}
+          f:spec:
+            f:containers:
+              k:{"name":"kube-proxy"}:
+                .: {}
+                f:command: {}
+                f:env:
+                  .: {}
+                  k:{"name":"NODE_NAME"}:
+                    .: {}
+                    f:name: {}
+                    f:valueFrom:
+                      .: {}
+                      f:fieldRef: {}
+                f:image: {}
+                f:imagePullPolicy: {}
+                f:name: {}
+                f:resources: {}
+                f:securityContext:
+                  .: {}
+                  f:privileged: {}
+                f:terminationMessagePath: {}
+                f:terminationMessagePolicy: {}
+                f:volumeMounts:
+                  .: {}
+                  k:{"mountPath":"/lib/modules"}:
+                    .: {}
+                    f:mountPath: {}
+                    f:name: {}
+                    f:readOnly: {}
+                  k:{"mountPath":"/run/xtables.lock"}:
+                    .: {}
+                    f:mountPath: {}
+                    f:name: {}
+                  k:{"mountPath":"/var/lib/kube-proxy"}:
+                    .: {}
+                    f:mountPath: {}
+                    f:name: {}
+            f:dnsPolicy: {}
+            f:hostNetwork: {}
+            f:nodeSelector: {}
+            f:priorityClassName: {}
+            f:restartPolicy: {}
+            f:schedulerName: {}
+            f:securityContext: {}
+            f:serviceAccount: {}
+            f:serviceAccountName: {}
+            f:terminationGracePeriodSeconds: {}
+            f:tolerations: {}
+            f:volumes:
+              .: {}
+              k:{"name":"kube-proxy"}:
+                .: {}
+                f:configMap:
+                  .: {}
+                  f:defaultMode: {}
+                  f:name: {}
+                f:name: {}
+              k:{"name":"lib-modules"}:
+                .: {}
+                f:hostPath:
+                  .: {}
+                  f:path: {}
+                  f:type: {}
+                f:name: {}
+              k:{"name":"xtables-lock"}:
+                .: {}
+                f:hostPath:
+                  .: {}
+                  f:path: {}
+                  f:type: {}
+                f:name: {}
+        f:updateStrategy:
+          f:rollingUpdate:
+            .: {}
+            f:maxSurge: {}
+            f:maxUnavailable: {}
+          f:type: {}
+    manager: kubeadm
+    operation: Update
+    time: "2024-08-26T09:02:51Z"
+  - apiVersion: apps/v1
+    fieldsType: FieldsV1
+    fieldsV1:
+      f:status:
+        f:currentNumberScheduled: {}
+        f:desiredNumberScheduled: {}
+        f:numberAvailable: {}
+        f:numberReady: {}
+        f:observedGeneration: {}
+        f:updatedNumberScheduled: {}
+    manager: kube-controller-manager
+    operation: Update
+    subresource: status
+    time: "2024-09-24T07:55:59Z"
+  name: kube-proxy
+  namespace: kube-system
+  resourceVersion: "168300"
+  uid: e105826c-c16b-4321-a883-0e73432f0094
+spec:
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      k8s-app: kube-proxy
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        k8s-app: kube-proxy
+    spec:
+      containers:
+      - command:
+        - /usr/local/bin/kube-proxy
+        - --config=/var/lib/kube-proxy/config.conf
+        - --hostname-override=$(NODE_NAME)
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        image: registry.k8s.io/kube-proxy:v1.30.0
+        imagePullPolicy: IfNotPresent
+        name: kube-proxy
+        resources: {}
+        securityContext:
+          privileged: true
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /var/lib/kube-proxy
+          name: kube-proxy
+        - mountPath: /run/xtables.lock
+          name: xtables-lock
+        - mountPath: /lib/modules
+          name: lib-modules
+          readOnly: true
+      dnsPolicy: ClusterFirst
+      hostNetwork: true
+      nodeSelector:
+        kubernetes.io/os: linux
+      priorityClassName: system-node-critical
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      serviceAccount: kube-proxy
+      serviceAccountName: kube-proxy
+      terminationGracePeriodSeconds: 30
+      tolerations:
+      - operator: Exists
+      volumes:
+      - configMap:
+          defaultMode: 420
+          name: kube-proxy
+        name: kube-proxy
+      - hostPath:
+          path: /run/xtables.lock
+          type: FileOrCreate
+        name: xtables-lock
+      - hostPath:
+          path: /lib/modules
+          type: ""
+        name: lib-modules
+  updateStrategy:
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+    type: RollingUpdate
+
+--------------------------------------
+通过上述的两段的比较,kube-proxy 这个 daemonset 所有的字段都被 managedFields 字段管理.
+
+# 通过 pod 模式部署的 k8s v1.30 的 kube-apiserver 也同样所有的字段都被 managedFields 字段管理.
+$ kubectl get pod/kube-apiserver-k8s01 -o yaml -n kube-system
+------------------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  annotations:
+    kubeadm.kubernetes.io/kube-apiserver.advertise-address.endpoint: 192.168.1.11:6443
+    kubernetes.io/config.hash: 2e5dca63becc969d1091ea3599458b19
+    kubernetes.io/config.mirror: 2e5dca63becc969d1091ea3599458b19
+    kubernetes.io/config.seen: "2024-08-26T09:02:51.823943886Z"
+    kubernetes.io/config.source: file
+  creationTimestamp: "2024-08-26T09:02:52Z"
+  labels:
+    component: kube-apiserver
+    tier: control-plane
+  name: kube-apiserver-k8s01
+  namespace: kube-system
+  ownerReferences:
+  - apiVersion: v1
+    controller: true
+    kind: Node
+    name: k8s01
+    uid: 4e6c3696-9772-4b3c-aa49-ffc62dab1d0d
+  resourceVersion: "167527"
+  uid: 642a92a0-b57a-4c6a-b1f3-0410a870343e
+spec:
+  containers:
+  - command:
+    - kube-apiserver
+    - --advertise-address=192.168.1.11
+    - --allow-privileged=true
+    - --authorization-mode=Node,RBAC
+    - --client-ca-file=/etc/kubernetes/pki/ca.crt
+    - --enable-admission-plugins=NodeRestriction
+    - --enable-bootstrap-token-auth=true
+    - --etcd-cafile=/etc/kubernetes/pki/etcd/ca.crt
+    - --etcd-certfile=/etc/kubernetes/pki/apiserver-etcd-client.crt
+    - --etcd-keyfile=/etc/kubernetes/pki/apiserver-etcd-client.key
+    - --etcd-servers=https://127.0.0.1:2379
+    - --feature-gates=InPlacePodVerticalScaling=true,AnyVolumeDataSource=true
+    - --kubelet-client-certificate=/etc/kubernetes/pki/apiserver-kubelet-client.crt
+    - --kubelet-client-key=/etc/kubernetes/pki/apiserver-kubelet-client.key
+    - --kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname
+    - --proxy-client-cert-file=/etc/kubernetes/pki/front-proxy-client.crt
+    - --proxy-client-key-file=/etc/kubernetes/pki/front-proxy-client.key
+    - --requestheader-allowed-names=front-proxy-client
+    - --requestheader-client-ca-file=/etc/kubernetes/pki/front-proxy-ca.crt
+    - --requestheader-extra-headers-prefix=X-Remote-Extra-
+    - --requestheader-group-headers=X-Remote-Group
+    - --requestheader-username-headers=X-Remote-User
+    - --secure-port=6443
+    - --service-account-issuer=https://kubernetes.default.svc.cluster.local
+    - --service-account-key-file=/etc/kubernetes/pki/sa.pub
+    - --service-account-signing-key-file=/etc/kubernetes/pki/sa.key
+    - --service-cluster-ip-range=10.96.0.0/12
+    - --tls-cert-file=/etc/kubernetes/pki/apiserver.crt
+    - --tls-private-key-file=/etc/kubernetes/pki/apiserver.key
+    image: registry.k8s.io/kube-apiserver:v1.30.0
+    imagePullPolicy: IfNotPresent
+    livenessProbe:
+      failureThreshold: 8
+      httpGet:
+        host: 192.168.1.11
+        path: /livez
+        port: 6443
+        scheme: HTTPS
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      successThreshold: 1
+      timeoutSeconds: 15
+    name: kube-apiserver
+    readinessProbe:
+      failureThreshold: 3
+      httpGet:
+        host: 192.168.1.11
+        path: /readyz
+        port: 6443
+        scheme: HTTPS
+      periodSeconds: 1
+      successThreshold: 1
+      timeoutSeconds: 15
+    resizePolicy:
+    - resourceName: cpu
+      restartPolicy: NotRequired
+    resources:
+      requests:
+        cpu: 250m
+    startupProbe:
+      failureThreshold: 24
+      httpGet:
+        host: 192.168.1.11
+        path: /livez
+        port: 6443
+        scheme: HTTPS
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      successThreshold: 1
+      timeoutSeconds: 15
+    terminationMessagePath: /dev/termination-log
+    terminationMessagePolicy: File
+    volumeMounts:
+    - mountPath: /etc/ssl/certs
+      name: ca-certs
+      readOnly: true
+    - mountPath: /etc/ca-certificates
+      name: etc-ca-certificates
+      readOnly: true
+    - mountPath: /etc/pki
+      name: etc-pki
+      readOnly: true
+    - mountPath: /etc/kubernetes/pki
+      name: k8s-certs
+      readOnly: true
+    - mountPath: /usr/local/share/ca-certificates
+      name: usr-local-share-ca-certificates
+      readOnly: true
+    - mountPath: /usr/share/ca-certificates
+      name: usr-share-ca-certificates
+      readOnly: true
+  dnsPolicy: ClusterFirst
+  enableServiceLinks: true
+  hostNetwork: true
+  nodeName: k8s01
+  preemptionPolicy: PreemptLowerPriority
+  priority: 2000001000
+  priorityClassName: system-node-critical
+  restartPolicy: Always
+  schedulerName: default-scheduler
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  terminationGracePeriodSeconds: 30
+  tolerations:
+  - effect: NoExecute
+    operator: Exists
+  volumes:
+  - hostPath:
+      path: /etc/ssl/certs
+      type: DirectoryOrCreate
+    name: ca-certs
+  - hostPath:
+      path: /etc/ca-certificates
+      type: DirectoryOrCreate
+    name: etc-ca-certificates
+  - hostPath:
+      path: /etc/pki
+      type: DirectoryOrCreate
+    name: etc-pki
+  - hostPath:
+      path: /etc/kubernetes/pki
+      type: DirectoryOrCreate
+    name: k8s-certs
+  - hostPath:
+      path: /usr/local/share/ca-certificates
+      type: DirectoryOrCreate
+    name: usr-local-share-ca-certificates
+  - hostPath:
+      path: /usr/share/ca-certificates
+      type: DirectoryOrCreate
+    name: usr-share-ca-certifica
+------------------------------------
+
+$ kubectl get pod/kube-apiserver-k8s01 -o yaml -n kube-system --show-managed-fields
+-----------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  annotations:
+    kubeadm.kubernetes.io/kube-apiserver.advertise-address.endpoint: 192.168.1.11:6443
+    kubernetes.io/config.hash: 2e5dca63becc969d1091ea3599458b19
+    kubernetes.io/config.mirror: 2e5dca63becc969d1091ea3599458b19
+    kubernetes.io/config.seen: "2024-08-26T09:02:51.823943886Z"
+    kubernetes.io/config.source: file
+  creationTimestamp: "2024-08-26T09:02:52Z"
+  labels:
+    component: kube-apiserver
+    tier: control-plane
+  managedFields:
+  - apiVersion: v1
+    fieldsType: FieldsV1
+    fieldsV1:
+      f:metadata:
+        f:annotations:
+          .: {}
+          f:kubeadm.kubernetes.io/kube-apiserver.advertise-address.endpoint: {}
+          f:kubernetes.io/config.hash: {}
+          f:kubernetes.io/config.mirror: {}
+          f:kubernetes.io/config.seen: {}
+          f:kubernetes.io/config.source: {}
+        f:labels:
+          .: {}
+          f:component: {}
+          f:tier: {}
+        f:ownerReferences:
+          .: {}
+          k:{"uid":"4e6c3696-9772-4b3c-aa49-ffc62dab1d0d"}: {}
+      f:spec:
+        f:containers:
+          k:{"name":"kube-apiserver"}:
+            .: {}
+            f:command: {}
+            f:image: {}
+            f:imagePullPolicy: {}
+            f:livenessProbe:
+              .: {}
+              f:failureThreshold: {}
+              f:httpGet:
+                .: {}
+                f:host: {}
+                f:path: {}
+                f:port: {}
+                f:scheme: {}
+              f:initialDelaySeconds: {}
+              f:periodSeconds: {}
+              f:successThreshold: {}
+              f:timeoutSeconds: {}
+            f:name: {}
+            f:readinessProbe:
+              .: {}
+              f:failureThreshold: {}
+              f:httpGet:
+                .: {}
+                f:host: {}
+                f:path: {}
+                f:port: {}
+                f:scheme: {}
+              f:periodSeconds: {}
+              f:successThreshold: {}
+              f:timeoutSeconds: {}
+            f:resizePolicy: {}
+            f:resources:
+              .: {}
+              f:requests:
+                .: {}
+                f:cpu: {}
+            f:startupProbe:
+              .: {}
+              f:failureThreshold: {}
+              f:httpGet:
+                .: {}
+                f:host: {}
+                f:path: {}
+                f:port: {}
+                f:scheme: {}
+              f:initialDelaySeconds: {}
+              f:periodSeconds: {}
+              f:successThreshold: {}
+              f:timeoutSeconds: {}
+            f:terminationMessagePath: {}
+            f:terminationMessagePolicy: {}
+            f:volumeMounts:
+              .: {}
+              k:{"mountPath":"/etc/ca-certificates"}:
+                .: {}
+                f:mountPath: {}
+                f:name: {}
+                f:readOnly: {}
+              k:{"mountPath":"/etc/kubernetes/pki"}:
+                .: {}
+                f:mountPath: {}
+                f:name: {}
+                f:readOnly: {}
+              k:{"mountPath":"/etc/pki"}:
+                .: {}
+                f:mountPath: {}
+                f:name: {}
+                f:readOnly: {}
+              k:{"mountPath":"/etc/ssl/certs"}:
+                .: {}
+                f:mountPath: {}
+                f:name: {}
+                f:readOnly: {}
+              k:{"mountPath":"/usr/local/share/ca-certificates"}:
+                .: {}
+                f:mountPath: {}
+                f:name: {}
+                f:readOnly: {}
+              k:{"mountPath":"/usr/share/ca-certificates"}:
+                .: {}
+                f:mountPath: {}
+                f:name: {}
+                f:readOnly: {}
+        f:dnsPolicy: {}
+        f:enableServiceLinks: {}
+        f:hostNetwork: {}
+        f:nodeName: {}
+        f:priority: {}
+        f:priorityClassName: {}
+        f:restartPolicy: {}
+        f:schedulerName: {}
+        f:securityContext:
+          .: {}
+          f:seccompProfile:
+            .: {}
+            f:type: {}
+        f:terminationGracePeriodSeconds: {}
+        f:tolerations: {}
+        f:volumes:
+          .: {}
+          k:{"name":"ca-certs"}:
+            .: {}
+            f:hostPath:
+              .: {}
+              f:path: {}
+              f:type: {}
+            f:name: {}
+          k:{"name":"etc-ca-certificates"}:
+            .: {}
+            f:hostPath:
+              .: {}
+              f:path: {}
+              f:type: {}
+            f:name: {}
+          k:{"name":"etc-pki"}:
+            .: {}
+            f:hostPath:
+              .: {}
+              f:path: {}
+              f:type: {}
+            f:name: {}
+          k:{"name":"k8s-certs"}:
+            .: {}
+            f:hostPath:
+              .: {}
+              f:path: {}
+              f:type: {}
+            f:name: {}
+          k:{"name":"usr-local-share-ca-certificates"}:
+            .: {}
+            f:hostPath:
+              .: {}
+              f:path: {}
+              f:type: {}
+            f:name: {}
+          k:{"name":"usr-share-ca-certificates"}:
+            .: {}
+            f:hostPath:
+              .: {}
+              f:path: {}
+              f:type: {}
+            f:name: {}
+    manager: kubelet
+    operation: Update
+    time: "2024-08-26T09:02:52Z"
+  - apiVersion: v1
+    fieldsType: FieldsV1
+    fieldsV1:
+      f:status:
+        f:conditions:
+          .: {}
+          k:{"type":"ContainersReady"}:
+            .: {}
+            f:lastProbeTime: {}
+            f:lastTransitionTime: {}
+            f:status: {}
+            f:type: {}
+          k:{"type":"Initialized"}:
+            .: {}
+            f:lastProbeTime: {}
+            f:lastTransitionTime: {}
+            f:status: {}
+            f:type: {}
+          k:{"type":"PodReadyToStartContainers"}:
+            .: {}
+            f:lastProbeTime: {}
+            f:lastTransitionTime: {}
+            f:status: {}
+            f:type: {}
+          k:{"type":"PodScheduled"}:
+            .: {}
+            f:lastProbeTime: {}
+            f:lastTransitionTime: {}
+            f:status: {}
+            f:type: {}
+          k:{"type":"Ready"}:
+            .: {}
+            f:lastProbeTime: {}
+            f:lastTransitionTime: {}
+            f:status: {}
+            f:type: {}
+        f:containerStatuses: {}
+        f:hostIP: {}
+        f:hostIPs: {}
+        f:phase: {}
+        f:podIP: {}
+        f:podIPs:
+          .: {}
+          k:{"ip":"192.168.1.11"}:
+            .: {}
+            f:ip: {}
+        f:startTime: {}
+    manager: kubelet
+    operation: Update
+    subresource: status
+    time: "2024-09-24T07:50:25Z"
+  name: kube-apiserver-k8s01
+  namespace: kube-system
+  ownerReferences:
+  - apiVersion: v1
+    controller: true
+    kind: Node
+    name: k8s01
+    uid: 4e6c3696-9772-4b3c-aa49-ffc62dab1d0d
+  resourceVersion: "167527"
+  uid: 642a92a0-b57a-4c6a-b1f3-0410a870343e
+spec:
+  containers:
+  - command:
+    - kube-apiserver
+    - --advertise-address=192.168.1.11
+    - --allow-privileged=true
+    - --authorization-mode=Node,RBAC
+    - --client-ca-file=/etc/kubernetes/pki/ca.crt
+    - --enable-admission-plugins=NodeRestriction
+    - --enable-bootstrap-token-auth=true
+    - --etcd-cafile=/etc/kubernetes/pki/etcd/ca.crt
+    - --etcd-certfile=/etc/kubernetes/pki/apiserver-etcd-client.crt
+    - --etcd-keyfile=/etc/kubernetes/pki/apiserver-etcd-client.key
+    - --etcd-servers=https://127.0.0.1:2379
+    - --feature-gates=InPlacePodVerticalScaling=true,AnyVolumeDataSource=true
+    - --kubelet-client-certificate=/etc/kubernetes/pki/apiserver-kubelet-client.crt
+    - --kubelet-client-key=/etc/kubernetes/pki/apiserver-kubelet-client.key
+    - --kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname
+    - --proxy-client-cert-file=/etc/kubernetes/pki/front-proxy-client.crt
+    - --proxy-client-key-file=/etc/kubernetes/pki/front-proxy-client.key
+    - --requestheader-allowed-names=front-proxy-client
+    - --requestheader-client-ca-file=/etc/kubernetes/pki/front-proxy-ca.crt
+    - --requestheader-extra-headers-prefix=X-Remote-Extra-
+    - --requestheader-group-headers=X-Remote-Group
+    - --requestheader-username-headers=X-Remote-User
+    - --secure-port=6443
+    - --service-account-issuer=https://kubernetes.default.svc.cluster.local
+    - --service-account-key-file=/etc/kubernetes/pki/sa.pub
+    - --service-account-signing-key-file=/etc/kubernetes/pki/sa.key
+    - --service-cluster-ip-range=10.96.0.0/12
+    - --tls-cert-file=/etc/kubernetes/pki/apiserver.crt
+    - --tls-private-key-file=/etc/kubernetes/pki/apiserver.key
+    image: registry.k8s.io/kube-apiserver:v1.30.0
+    imagePullPolicy: IfNotPresent
+    livenessProbe:
+      failureThreshold: 8
+      httpGet:
+        host: 192.168.1.11
+        path: /livez
+        port: 6443
+        scheme: HTTPS
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      successThreshold: 1
+      timeoutSeconds: 15
+    name: kube-apiserver
+    readinessProbe:
+      failureThreshold: 3
+      httpGet:
+        host: 192.168.1.11
+        path: /readyz
+        port: 6443
+        scheme: HTTPS
+      periodSeconds: 1
+      successThreshold: 1
+      timeoutSeconds: 15
+    resizePolicy:
+    - resourceName: cpu
+      restartPolicy: NotRequired
+    resources:
+      requests:
+        cpu: 250m
+    startupProbe:
+      failureThreshold: 24
+      httpGet:
+        host: 192.168.1.11
+        path: /livez
+        port: 6443
+        scheme: HTTPS
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      successThreshold: 1
+      timeoutSeconds: 15
+    terminationMessagePath: /dev/termination-log
+    terminationMessagePolicy: File
+    volumeMounts:
+    - mountPath: /etc/ssl/certs
+      name: ca-certs
+      readOnly: true
+    - mountPath: /etc/ca-certificates
+      name: etc-ca-certificates
+      readOnly: true
+    - mountPath: /etc/pki
+      name: etc-pki
+      readOnly: true
+    - mountPath: /etc/kubernetes/pki
+      name: k8s-certs
+      readOnly: true
+    - mountPath: /usr/local/share/ca-certificates
+      name: usr-local-share-ca-certificates
+      readOnly: true
+    - mountPath: /usr/share/ca-certificates
+      name: usr-share-ca-certificates
+      readOnly: true
+  dnsPolicy: ClusterFirst
+  enableServiceLinks: true
+  hostNetwork: true
+  nodeName: k8s01
+  preemptionPolicy: PreemptLowerPriority
+  priority: 2000001000
+  priorityClassName: system-node-critical
+  restartPolicy: Always
+  schedulerName: default-scheduler
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  terminationGracePeriodSeconds: 30
+  tolerations:
+  - effect: NoExecute
+    operator: Exists
+  volumes:
+  - hostPath:
+      path: /etc/ssl/certs
+      type: DirectoryOrCreate
+    name: ca-certs
+  - hostPath:
+      path: /etc/ca-certificates
+      type: DirectoryOrCreate
+    name: etc-ca-certificates
+  - hostPath:
+      path: /etc/pki
+      type: DirectoryOrCreate
+    name: etc-pki
+  - hostPath:
+      path: /etc/kubernetes/pki
+      type: DirectoryOrCreate
+    name: k8s-certs
+  - hostPath:
+      path: /usr/local/share/ca-certificates
+      type: DirectoryOrCreate
+    name: usr-local-share-ca-certificates
+  - hostPath:
+      path: /usr/share/ca-certificates
+      type: DirectoryOrCreate
+    name: usr-share-ca-certificates
+-----------------------------
+
+# 通过自定义的 pod 配置,使用 --server-side 参数部署时候对比,发现通过 managedFields 管理方式,明显的会记录不同对象对字段的修改,这点在纯粹的 apply -f 中是没法表现的.
+$ kubectl apply -f pod-nginx.yaml --server-side
+
+pod-nginx.yaml
+-------------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx
+  labels:
+    env: test
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+    imagePullPolicy: Never
+--------------------------------
+
+$ kubectl get pod/nginx -o yaml
+-------------------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  annotations:
+    cni.projectcalico.org/containerID: 7472911bd56e5fa6954ad343cc02af27c744f2d172e29aeb1db1f697b3d190a0
+    cni.projectcalico.org/podIP: 10.244.235.140/32
+    cni.projectcalico.org/podIPs: 10.244.235.140/32
+  creationTimestamp: "2024-09-24T09:17:47Z"
+  labels:
+    env: test
+  name: nginx
+  namespace: default
+  resourceVersion: "175731"
+  uid: dcf582da-8355-43fa-ad77-58d5708eb43f
+spec:
+  containers:
+  - image: nginx
+    imagePullPolicy: Never
+    name: nginx
+    resources: {}
+    terminationMessagePath: /dev/termination-log
+    terminationMessagePolicy: File
+    volumeMounts:
+    - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+      name: kube-api-access-gwcnc
+      readOnly: true
+  dnsPolicy: ClusterFirst
+  enableServiceLinks: true
+  nodeName: k8s03
+  preemptionPolicy: PreemptLowerPriority
+  priority: 0
+  restartPolicy: Always
+  schedulerName: default-scheduler
+  securityContext: {}
+  serviceAccount: default
+  serviceAccountName: default
+  terminationGracePeriodSeconds: 30
+  tolerations:
+  - effect: NoExecute
+    key: node.kubernetes.io/not-ready
+    operator: Exists
+    tolerationSeconds: 300
+  - effect: NoExecute
+    key: node.kubernetes.io/unreachable
+    operator: Exists
+    tolerationSeconds: 300
+  volumes:
+  - name: kube-api-access-gwcnc
+    projected:
+      defaultMode: 420
+      sources:
+      - serviceAccountToken:
+          expirationSeconds: 3607
+          path: token
+      - configMap:
+          items:
+          - key: ca.crt
+            path: ca.crt
+          name: kube-root-ca.crt
+      - downwardAPI:
+          items:
+          - fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+            path: namespace
+-----------------------------------------
+
+$ kubectl get pod/nginx -o yaml  --show-managed-fields
+--------------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  annotations:
+    cni.projectcalico.org/containerID: 7472911bd56e5fa6954ad343cc02af27c744f2d172e29aeb1db1f697b3d190a0
+    cni.projectcalico.org/podIP: 10.244.235.140/32
+    cni.projectcalico.org/podIPs: 10.244.235.140/32
+  creationTimestamp: "2024-09-24T09:17:47Z"
+  labels:
+    env: test
+  managedFields:
+  - apiVersion: v1
+    fieldsType: FieldsV1
+    fieldsV1:
+      f:metadata:
+        f:labels:
+          f:env: {}
+      f:spec:
+        f:containers:
+          k:{"name":"nginx"}:
+            .: {}
+            f:image: {}
+            f:imagePullPolicy: {}
+            f:name: {}
+    manager: kubectl                  # 注意这里开始的 2 行
+    operation: Apply                  # 
+    time: "2024-09-24T09:17:47Z"
+  - apiVersion: v1
+    fieldsType: FieldsV1
+    fieldsV1:
+      f:metadata:
+        f:annotations:
+          .: {}
+          f:cni.projectcalico.org/containerID: {}
+          f:cni.projectcalico.org/podIP: {}
+          f:cni.projectcalico.org/podIPs: {}
+    manager: calico                  # 这里开始的 3 行
+    operation: Update                #
+    subresource: status              # 
+    time: "2024-09-24T09:17:48Z"
+  - apiVersion: v1
+    fieldsType: FieldsV1
+    fieldsV1:
+      f:status:
+        f:conditions:
+          k:{"type":"ContainersReady"}:
+            .: {}
+            f:lastProbeTime: {}
+            f:lastTransitionTime: {}
+            f:status: {}
+            f:type: {}
+          k:{"type":"Initialized"}:
+            .: {}
+            f:lastProbeTime: {}
+            f:lastTransitionTime: {}
+            f:status: {}
+            f:type: {}
+          k:{"type":"PodReadyToStartContainers"}:
+            .: {}
+            f:lastProbeTime: {}
+            f:lastTransitionTime: {}
+            f:status: {}
+            f:type: {}
+          k:{"type":"Ready"}:
+            .: {}
+            f:lastProbeTime: {}
+            f:lastTransitionTime: {}
+            f:status: {}
+            f:type: {}
+        f:containerStatuses: {}
+        f:hostIP: {}
+        f:hostIPs: {}
+        f:phase: {}
+        f:podIP: {}
+        f:podIPs:
+          .: {}
+          k:{"ip":"10.244.235.140"}:
+            .: {}
+            f:ip: {}
+        f:startTime: {}
+    manager: kubelet              # 这里开始的 3 行
+    operation: Update             # 
+    subresource: status           # 
+    time: "2024-09-24T09:17:48Z"
+  name: nginx
+  namespace: default
+  resourceVersion: "175731"
+  uid: dcf582da-8355-43fa-ad77-58d5708eb43f
+spec:
+  containers:
+  - image: nginx
+    imagePullPolicy: Never
+    name: nginx
+    resources: {}
+    terminationMessagePath: /dev/termination-log
+    terminationMessagePolicy: File
+    volumeMounts:
+    - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+      name: kube-api-access-gwcnc
+      readOnly: true
+  dnsPolicy: ClusterFirst
+  enableServiceLinks: true
+  nodeName: k8s03
+  preemptionPolicy: PreemptLowerPriority
+  priority: 0
+  restartPolicy: Always
+  schedulerName: default-scheduler
+  securityContext: {}
+  serviceAccount: default
+  serviceAccountName: default
+  terminationGracePeriodSeconds: 30
+  tolerations:
+  - effect: NoExecute
+    key: node.kubernetes.io/not-ready
+    operator: Exists
+    tolerationSeconds: 300
+  - effect: NoExecute
+    key: node.kubernetes.io/unreachable
+    operator: Exists
+    tolerationSeconds: 300
+  volumes:
+  - name: kube-api-access-gwcnc
+    projected:
+      defaultMode: 420
+      sources:
+      - serviceAccountToken:
+          expirationSeconds: 3607
+          path: token
+      - configMap:
+          items:
+          - key: ca.crt
+            path: ca.crt
+          name: kube-root-ca.crt
+      - downwardAPI:
+          items:
+          - fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+            path: namespace
+------------------------------
+
+vvvvvvvvvvvvvvvvvvvv
+
+* 清理
+删除你创建的 Secret: 
+$ kubectl delete secret mysecret
+
+## 使用 Kustomize 管理 Secret
+使用 kustomization.yaml 文件创建 Secret 对象.
+kubectl 支持使用 Kustomize 对象管理工具来管理 Secret 和 ConfigMap.你可以使用 Kustomize 创建资源生成器(Resource Generator),该生成器会生成一个 Secret,让你能够通过 kubectl 应用到 API 服务器.
+
+* 创建 Secret
+你可以在 kustomization.yaml 文件中定义 secreteGenerator 字段,并在定义中引用其它本地文件、.env 文件或文字值生成 Secret.例如: 下面的指令为用户名 admin 和密码 1f2d1e2e67df 创建 kustomization 文件.
+
+说明: 
+Secret 的 stringData 字段与服务端应用不兼容. - 指的是此字段不被 managedFields 管理
+
+** 创建 kustomization 文件
+*** 文字
+secretGenerator:
+- name: database-creds
+  literals:
+  - username=admin
+  - password=1f2d1e2e67df
+
+*** 文件
+1.将凭据存储在文件中.文件名是 Secret 的 key 值: 
+$ echo -n 'admin' > ./username.txt
+$ echo -n '1f2d1e2e67df' > ./password.txt
+
+-n 标志确保文件结尾处没有换行符.
+
+2.创建 kustomization.yaml 文件: 
+secretGenerator:
+- name: database-creds
+  files:
+  - username.txt
+  - password.txt
+
+*** .env 文件 - 本质上和从文件获取方式一样,只是用的是 .开头的文件
+你也可以使用 .env 文件在 kustomization.yaml 中定义 secretGenerator.例如下面的 kustomization.yaml 文件从 .env.secret 文件获取数据: 
+secretGenerator:
+- name: db-user-pass
+  envs:
+  - .env.secret
+
+在所有情况下,你都不需要对取值作 base64 编码.YAML 文件的名称必须是 kustomization.yaml 或 kustomization.yml.
+
+** 应用 kustomization 文件
+若要创建 Secret,应用包含 kustomization 文件的目录.
+$ kubectl apply -k <目录路径>
+
+输出类似于: 
+secret/database-creds-5hdh7hhgfk created
+
+生成 Secret 时,Secret 的名称最终是由 name 字段和数据的哈希值拼接而成.这将保证每次修改数据时生成一个新的 Secret.
+
+要验证 Secret 是否已创建并解码 Secret 数据,
+$ kubectl get -k <目录路径> -o jsonpath='{.data}' 
+
+输出类似于: 
+{ "password": "MWYyZDFlMmU2N2Rm","username": "YWRtaW4=" }
+
+$ echo 'MWYyZDFlMmU2N2Rm' | base64 --decode
+
+输出类似于: 
+1f2d1e2e67df
+
+* 编辑 Secret - 编辑一个已经生成的 Secret 文件,将会生成一个新的 secret 对象
+1.在 kustomization.yaml 文件中,修改诸如 password 等数据.
+2.应用包含 kustomization 文件的目录: 
+$ kubectl apply -k <目录路径>
+
+输出类似于: 
+secret/db-user-pass-6f24b56cc8 created
+
+编辑过的 Secret 被创建为一个新的 Secret 对象,而不是更新现有的 Secret 对象.你可能需要在 Pod 中更新对该 Secret 的引用.
+
+* 清理
+要删除 Secret,请使用 kubectl: 
+$ kubectl delete secret db-user-pass
+

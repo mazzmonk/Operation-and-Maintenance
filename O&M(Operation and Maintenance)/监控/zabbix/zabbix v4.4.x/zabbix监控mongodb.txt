@@ -1,0 +1,37 @@
+ 使用zabbix监控mongodb
+
+具体步骤：
+1. 数据库需要修改的部分
+db.updateUser('admin',{pwd: 'Q!M#DY7$qL',roles: [{role:"userAdminAnyDatabase",db:"admin"},{role:"dbAdmin",db:"local"},{role:"root",db:"admin"}]})
+
+2. 脚本及mongodb客户端工具
+脚本实际是调用mongodb客户端工具mongo来完成，因此需要拷贝mongo这个工具到/etc/zabbix/script/
+
+脚本的内容
+#!/bin/bash
+index=$(echo $@ | tr " " ".")
+status=$(echo "db.serverStatus().${index}" | /etc/zabbix/script/mongo --quiet\
+        --host 172.20.20.2 \
+        --port=27017  \
+        --username admin --password 'Q!M#DY7$qL' \
+        --authenticationDatabase admin)
+#check if the output contains "NumberLong"
+if [[ "$status" =~ "NumberLong" ]];then
+  echo $status|sed -n 's/NumberLong(//p'|sed -n 's/)//p'
+else
+  echo $status
+fi
+
+3. 这里必须注意的是，当使用mongo命令连接mongodb的时候产生的.dbshell文件，而此文件在$HOME目录下生成.dbshell文件，因为zabbix agentd是使用zabbix用户，因此脚本运行是通过zabbix用户，因此在/home/zabbix目录下会生成.dbshell文件，或者可以通过如下方式生成一个
+$/etc/zabbix/script/mongo
+
+原理就是当脚本执行的时候，调用mongo这个客户端工具，在执行脚本的用户目录下产生了.dbshell文件，此时必须保证zabbix这个用户可以acess到此文件
+
+同时必须设置/root/.dbshell权限
+
+#chmod 777 /root
+#chmod 666 /root/.dbshell
+#chmod 666 /root/.mongorc.js
+
+4. userparameter_mongodb.conf文件内容
+UserParameter=mongodb.status[*],/etc/zabbix/script/zabbix_mongo.sh $1 $2 $3 $4 $5

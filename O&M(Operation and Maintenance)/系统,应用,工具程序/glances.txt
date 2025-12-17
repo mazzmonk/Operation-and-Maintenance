@@ -1,0 +1,4 @@
+wget https://bootstrap.pypa.io/ez_setup.py -O - | python
+
+需要python2.7支持，因此先安装python2.7.12，然后
+安装pip-8.1.2，然后安装glances2.7.1

@@ -1,0 +1,18 @@
+[Unit]
+Description=Etcd Server
+After=network.target
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+EnvironmentFile=-/etc/etcd/etcd.conf
+WorkingDirectory=/var/lib/etcd/
+ExecStart=/usr/local/bin/etcd
+Restart=no-failure
+RestartSec=5
+User=k8s-admin
+Group=k8s-admin
+
+[Install]
+WantedBy=multi-user.target

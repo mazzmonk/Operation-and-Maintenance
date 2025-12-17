@@ -1,0 +1,280 @@
+1. ELK 安装配置
+软件版本:
+elasticsearch: 7.8.0
+logstash: 7.8.0
+kibana: 7.8.0
+
+上述的软件都是下载 .tar.gz 包解压,不需要单独的 JDK 环境
+
+环境:
+elk: 172.20.10.6
+k8s: 172.20.10.5
+filebeat: 172.20.10.5
+fluentd: 172.20.10.5
+
+所有的环境是单机环境,用于测试,因此没有配置 ssl,及用户密码方式访问 elasticsearch 
+
+2. 配置
+2.1 elasticsearch 
+编辑 conf/elasticsearch.yml,保持如下内容:
+
+node.name: node-1       # 自己定义
+network.host: 0.0.0.0
+http.port: 9200
+discovery.seed_hosts: ["172.20.10.6"]
+http.cors.enabled: true
+http.cors.allow-origin: "*"
+xpack.security.enabled: false
+node.data: true
+
+启动: 
+# cd /usr/local/elasticsearch-7.8.0 && gosu elk bin/elasticsearch -d
+
+2.2 logstash
+编辑 config/tomcat-test.conf  # 文件名,自定义,保证有如下的内容:
+
+input {     # 这里可以定义多个服务端口,接收不同类型的日志收集系统的日志
+  beats {
+     port => "5044"     # 用于 filebeat 推送的日志收集
+  }
+  tcp {
+     port => "4000"     # 用于其他日志的收集
+     #codec => "fluent"
+  }
+}
+
+output {
+   if[port] == "4000" {     # 这里和下面的 if 主要用于判断,上面的那个端口用于这里的索引
+     elasticsearch {
+       hosts => ["http://127.0.0.1:9200"]
+       index => "k8s-log-%{+YYYY.MM.dd}"        # 这里的名称,会显示在 kibana 的 Index Management 中,即索引名称
+     }
+   }
+
+   if[port] == "5044" {     # 这里的 if 用于判断 5044 端口的日志用于建立 filebeat 的索引
+     elasticsearch {
+     hosts => ["http://127.0.0.1:9200"]
+     index => "%{[@metadata][beat]}-%{[@metadata][version]}-%{+YYYY.MM.dd}"
+     }
+   }
+
+   stdout {
+      codec => json_lines
+   }
+}
+
+说明: 上述的 if 判断,可以用各种在 logstash 文件中出现的内容,比如上面是用的 port 的值来判断,或者在 filter 中出现的任一值
+
+启动:
+# cd /usr/local/logstash && bin/logstash -f config/tomcat-test.conf >> /dev/null  &
+
+2.3 kibana 
+编辑 config/kibana.yml 文件,保证如下内容:
+
+server.port: 5601
+
+server.host: "k.example.com"        # 注意在机器的 hosts 文件中绑定 172.20.10.6 的地址
+
+elasticsearch.hosts: ["http://localhost:9200"]
+
+i18n.locale: "en"
+elasticsearch.username: "elastic"           # 用于访问 kibana 时的用户
+elasticsearch.password: "123456"        # 用于访问 kibana 时的密码
+
+日志的推送流程是 logstash -> elasticsearch
+
+重要:
+a. 在 logstash 的配置文件中的 output 定义的 index 会被自动的推送的 elasticsearch 中,同时在 kibana 的  Stack Management -> Index Management 中看到的名称.
+b. logstash 中有多个 input 和 output 的时候,用 if 判断,可以使用任意的 k => v 的内容来进行判断
+
+2.4 在 kibana 中配置索引,以查看日志
+登陆 kibana 平台以后,选择左上角的菜单,选择 Management -> Stack Management -> Elasticsearch -> Index Management 
+在右侧的页面上能看见所有的索引,这里的索引是 logstash,fluentd 或者 其他日志搜集平台的已经建立好的索引,比如 2.2 中提到的 
+
+%{[@metadata][beat]}-%{[@metadata][version]}-%{+YYYY.MM.dd}
+
+会具体表现的名字为 filebeat-7.17.6-2022.09.13
+在 fluentd 中配置的索引名称为 logfluentd 这个值在 fluentd 的 k8s 配置文件中 FLUENT_ELASTICSEARCH_LOGSTASH_INDEX_NAME 这个环境变量设置的值
+
+在上述页面的地方选择 Kibana -> Index Patterns 在页面右边,选择 Create index pattern 按钮,在弹出的输入框中输入与在 Index Management 中看到的索引名称,下一步,都保持默认
+
+然后在左上角的菜单中选择 Kibana -> Discover 在左侧的索引的地方,选择,建立的索引,即可以看见日志
+
+
+3. filebeat 安装配置
+使用的 rpm 包的方式安装
+软件版本:
+filebeat-7.17.6-x86_64.rpm
+
+配置文件的路径 /etc/filebeat/
+filebeat.reference.yml       - 参考配置文件,包括全部的选项
+filebeat.yml                        - 服务使用的配置文件
+
+保证配置文件中至少有如下的内容:
+
+filebeat.inputs:
+
+- type: filestream
+
+  id: zypper-log
+
+  enabled: true 
+
+  paths:
+    - /var/log/zypper.log
+
+tags: ["zypper"]        # 这里注意,会在 elasticsearch 中看见这个 tags 的值
+
+output.logstash:
+  hosts: ["172.20.10.6:5044"]
+
+其他的保持默认
+
+重要:
+a. filebeat 推送日志的方式是先推送到 logstash 中
+b. 目前版本的 filebeat 用了一部分模块的方式配置,默认提供了大量的模块配置,可以直接使用,类似如下:
+# filebeat modules list
+Enabled: Disabled: activemq apache auditd aws awsfargate azure barracuda bluecoat cef checkpoint cisco coredns crowdstrike cyberark cyberarkpas cylance elasticsearch envoyproxy f5 fortinet gcp google_workspace googlecloud gsuite haproxy ibmmq icinga iis imperva infoblox iptables juniper kafka kibana logstash microsoft misp mongodb mssql mysql mysqlenterprise nats netflow netscout nginx o365 okta oracle osquery panw pensando postgresql proofpoint rabbitmq radware redis santa snort snyk sonicwall sophos squid suricata system threatintel tomcat traefik zeek zookeeper zoom zscaler
+
+如果需要开启某个模块,使用类似如下的方式,然后在配置文件中,配置相应的模块部分的内容
+# filebeat modules enable system
+c. 在配置文件中有模块的配置可能与 input 的配置有冲突的部分,这种情况下,如果模块已经有配置,优先使用,没有的就使用通用的 input 这部分内容
+
+4. fluentd 安装配置,推送日志到 elasticsearch
+fluentd 采用安装到 k8s 的模式,同时用语u采集 k8s 的日志,官方链接:
+https://docs.fluentd.org/container-deployment/kubernetes
+
+从 https://github.com/fluent/fluentd-kubernetes-daemonset 这里下载 daemonset 的配置文件
+
+流程是 serviceaccount.yaml -> clusterrole.yaml -> clusterrolebinding.yaml -> daemonset 文件
+
+serviceaccount.yaml
+###########################
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fluentd
+  namespace: kube-system
+###########################
+
+clusterrole.yaml
+###########################
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: fluentd
+  namespace: kube-system
+rules:
+- apiGroups: [""]
+  resources:
+  - pods
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
+###########################
+
+clusterrolebinding.yaml
+###########################
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: fluentd
+roleRef:
+  kind: ClusterRole
+  name: fluentd
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+- kind: ServiceAccount
+  name: fluentd
+  namespace: kube-system
+###########################
+
+daemonset-elastic.yaml
+###########################
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: fluent
+  namespace: kube-system
+  labels:
+    k8s-app: fluentd-logging
+    version: v1
+spec:
+  selector:
+    matchLabels:
+      name: fluentd-logging
+      version: v1
+  template:
+    metadata:
+      labels:
+        name: fluentd-logging
+        version: v1
+    spec:
+      serviceAccount: fluentd                 # 这里填写前面的 serviceaccount 里配置的内容
+      serviceAccountName: fluentd        # 这里填写前面的 serviceaccount 里配置的内容
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        effect: NoSchedule
+      containers:
+      - name: fluentd
+        image: fluent/fluentd-kubernetes-daemonset:v1.15.2-debian-elasticsearch7-amd64-1.0
+        env:        # 下面的内容是必须的,关于 elasticsearch 的设置,可以通过 kubectl 相关命令在容器中查看 fluentd 的配置文件中所有选项
+        - name:  FLUENT_ELASTICSEARCH_HOST
+          value: "172.20.10.6"
+        - name:  FLUENT_ELASTICSEARCH_PORT
+          value: "9200"
+        - name: FLUENT_ELASTICSEARCH_SCHEME
+          value: "http"
+        - name: FLUENT_ELASTICSEARCH_LOGSTASH_PREFIX
+          value: "logfluentd"
+        - name: FLUENT_ELASTICSEARCH_LOGSTASH_DATEFORMAT
+          value: '%Y.%m.%d'
+        - name: FLUENT_ELASTICSEARCH_LOGSTASH_FORMAT
+          value: "true"
+        - name: FLUENT_ELASTICSEARCH_LOGSTASH_INDEX_NAME    # 在 kibana 中 Index Management 的名称
+          value: "logfluentd"
+        - name: FLUENT_ELASTICSEARCH_LOGSTASH_TYPE_NAME
+          value: "fluentd"
+
+        # X-Pack Authentication     # 这里当 elasticsearch 的 ssl 和 安全方面的设置
+        # =====================
+        #- name: FLUENT_ELASTICSEARCH_USER
+        #  value: "elastic"
+        #- name: FLUENT_ELASTICSEARCH_PASSWORD
+        #  value: "123456"
+        resources:
+          limits:
+            memory: 200Mi
+          requests:
+            cpu: 100m
+            memory: 200Mi
+        volumeMounts:
+        - name: varlog
+          mountPath: /var/log
+        - name: varlibdockercontainers
+          mountPath: /var/lib/docker/containers   # 容器日志路径,具体按照实际情况
+          readOnly: true
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: varlog
+        hostPath:
+          path: /var/log
+      - name: varlibdockercontainers
+        hostPath:
+          path: /var/lib/docker/containers    # 容器日志路径,具体按照时间情况
+###########################
+
+上述的配置,是在 elasticsearch 没有配置 ssl 和 用户认证方面的内容,如果有这方面的内容,需要根据实际情况配置这个配置文件
+
+
+将 curl 返回的 json 日志格式化输出
+python -m json.tool
+
+
+
+
+

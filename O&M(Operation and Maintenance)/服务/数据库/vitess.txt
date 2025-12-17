@@ -1,0 +1,67 @@
+下载go二进制语言包，设置环境变量如下
+
+# go #
+export GOROOT=$HOME/apps/go
+export PATH=$PATH:$GOROOT/bin
+
+export GOPATH=$HOME/apps/vitess
+
+export VTTOP=$HOME/apps/vitess/src/github.com/youtube/vitess
+export VTROOT=$HOME/apps/vitess
+export VT_MYSQL_ROOT=$HOME/apps/vitess/dist/mysql
+
+
+安装完go以后
+
+yum -y install automake libtool flex bison memcached python-dev python-mysqldb libssl-dev g++ mercurial git
+
+#################################################################################
+vitess安装
+
+$cd apps
+$mkdir vitess
+$git clone https://github.com/youtube/vitess.git src/github.com/youtube/vitess
+$cd apps/vitess/src/github.com/youtube/vitess 
+$vim bootstrap.sh
+去掉关于mysql的安装部分
+$./bootstrap.sh
+go get code.google.com/p/opts-go
+$安装mysql到apps/vitess/dist目录下
+$安装ncurses到apps/vitess/dist目录下
+
+添加
+export VT_MYSQL_ROOT=$HOME/apps/vitess/dist/mysql
+到bootstrap.sh
+$./bootstrap.sh
+$. ./dev.env
+
+$make测试
+
+
+测试过程中有提示少.so文件
+添加如下内容到/etc/ld.so.conf中
+/home/blue/apps/vitess/dist/vt-zookeeper-3.3.5/lib
+/home/blue/apps/vitess/dist/mysql/lib
+
+
+go语言第三方包安装
+把下载的第三方包放在如下路径
+opts-go为例子，如下：
+/home/blue/apps/go/src/pkg/opts-go
+$go install opts-go
+
+
+
+vitess配置测试
+编辑如下脚本
+#!/bin/bash
+
+cd /home/blue/apps/vitess/bin && ./vtocc -db-config-app-charset="utf8" -db-config-app-dbname="test" -db-config-app-host="localho
+st"  -db-config-app-pass="8mnOJGZemn" -db-config-app-port=3306 -db-config-app-uname="root" -db-config-app-unixsocket="/home/blue
+/apps/mysql/tmp/mysql.sock" -port=6510 -log_dir="/home/blue/tmp/occ_log.log"
+
+vitess启动在6510端口
+
+其中具体参数见命令
+
+

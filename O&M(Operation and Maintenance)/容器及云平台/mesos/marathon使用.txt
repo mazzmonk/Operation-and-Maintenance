@@ -1,0 +1,64 @@
+
+1.提交本地的脚本等文件到marathon的库中。
+请求：
+curl -include -XPOST http://192.168.81.3:8888/v2/artifacts --form file=@a.sh
+
+将本地的a.sh文件提交到上述的url，从返回可以看出可以通过连接来访问到此文件
+这里的v2/artifacts内容必须是固定，前端的具体地址及端口，填写任意一个marathon都可以。本地文件a.sh上传以后也会在
+marathon的参数--artifact_store定义的路径下存放
+
+返回：
+HTTP/1.1 100 Continue
+
+HTTP/1.1 201 Created
+Date: Tue, 19 Apr 2016 03:26:52 GMT
+X-Marathon-Leader: http://BJ-YZ-103R-81-3:8888
+Cache-Control: no-cache, no-store, must-revalidate
+Pragma: no-cache
+Expires: 0
+Location: http://BJ-YZ-103R-81-3:8888/v2/artifacts/a.sh
+Content-Length: 0
+Server: Jetty(9.3.z-SNAPSHOT)
+
+2.在marathon中提交一个任务
+请求：
+curl -X POST http://192.168.81.91:8888/v2/apps -d @a.json -H "Content-type:application/json"
+
+这里提交一个任务到81.91上，任务的json文件为a.json，如此任务就会执行，在marathon的ui上可以查看此任务
+
+这里描述下a.json文件
+{
+  "id":"example",
+  "cmd":"/bin/bash b.sh",
+  "cpus":0.1,
+  "mem":10.0,
+  "instances":1,
+  "ports":[0],
+  "storeUrls":["http://BJ-YZ-103R-81-3:8888/v2/artifacts/a.sh"]
+}
+
+这里的id是在平台上显示为name，特别注意的是cmd这里必须按照上述的格式（也可以把脚本执行的内容写入），否则无法执行，
+最后storeUrls这个部分写第一个例子中返回的Location字段内容。
+
+执行a.sh脚本的节点会到上述url中下载此脚本，然后在执行。
+
+
+3.每个slave执行一个任务
+{
+  "id":"sleep-unique",
+  "cmd":"/bin/bash b.sh",
+  "cpus":0.1,
+  "mem":10.0,
+  "instances":5,
+  "constraines":[["hostname","UNIQUE"]],
+  "ports":[0],
+  "storeUrls":["http://BJ-YZ-103R-81-3:8888/v2/artifacts/b.sh"]
+}
+
+关键是instances和constraines，如果有5个slave，为了保证每一个slave执行一个任务，配置成5，constraines保证每一个slave执行一个任务
+
+
+
+
+
+

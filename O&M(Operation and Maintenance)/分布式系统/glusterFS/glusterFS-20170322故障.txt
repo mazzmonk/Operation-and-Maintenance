@@ -1,0 +1,51 @@
+由于掉电故障，原来在容器中的glusterFS死掉了，因此重新在81.122/81.4上重建glusterFS
+
+在81.4/81.122上的/home/blue/www/static加入了gv3
+
+
+gluster volume create gv0 replica 2 192.168.81.4:/home/blue/www/mysql 192.168.81.122:/home/blue/www/mysql force
+gluster volume create gv1 replica 2 192.168.81.4:/home/blue/www/mysqlslave 192.168.81.122:/home/blue/www/mysqlslave force
+gluster volume create gv2 replica 2 192.168.81.4:/home/blue/www/redis 192.168.81.122:/home/blue/www/redis force
+
+ 
+新的挂载
+mount.glusterfs 192.168.81.122:/gv3  /home/blue/share/static
+
+mount -t glusterfs 192.168.81.122:/gv0 /home/blue/tmp/
+
+
+
+/home/blue/apps/docker/var/lib/docker/overlay/fde54e2685d57ce46e6bc21b1e10e6249d56a76572d91b880a4e98ef9af1d970/upper/home/blue/share/subversion_repositories
+
+ echo "*/5 * * * * /home/blue/bin/watchdog.sh" > /home/blue/src/scheduledTasks
+/usr/bin/crontab -u blue /home/blue/src/scheduledTasks
+
+ apt-get -y update
+ apt-get install software-properties-common
+ apt-get -y update
+ add-apt-repository ppa:gluster/glusterfs-3.8
+ apt-get -y update
+ apt install glusterfs-client
+
+
+
+这里尝试在dockerfile文件中做一些mysql初始化用户的命令，然后在启动的时候挂载外部glusterfs，然后启动mysql进程，理论上是没法操作的，因为在初始话的时候用的是本地磁盘生成的数据库文件等等信息，当启动的时候挂载glusterFS，glusterFS上没有数据，启动mysql的时候应当是必然报错．
+
+但是这里出现一个诡异的现象是，启动的时候挂载glusterFs没有问题，而且有数据，其实是glusterFS已经挂载过，同时做过初始化操作，因此在启动的时候挂载实际上是原来的数据库内容已经存在．通俗的说就是数据已经存在了．
+
+注意：一定要设定mysql的data目录为777，否则不可写，同时上述的过程不是一个完整的解决方案．
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,32 @@
+#include <stdio.h>
+void swap_by_address(int*, int*);
+void swap_by_value(int, int);
+
+int main()
+{
+	int x=100,y=200;
+	swap_by_value(x, y);           //这里值传参数,交换x,y内容,最后没成功.
+
+	x=100;y=200;
+	swap_by_address(&x, &y);       //这里传地址参数,交换x,y内容,成功.
+
+	return 0;
+}
+
+void swap_by_value(int a, int b) {
+	int temp;
+	temp = a;
+	a = b;
+	b = temp;
+}
+
+void swap_by_address(int* a, int* b) {
+	int temp;
+	temp = *a;
+	*a = *b;
+	*b = temp;
+}
+
+上述2个函数,第一个函数参数传值,没成功,第二个函数参数传指针,成功.
+
+

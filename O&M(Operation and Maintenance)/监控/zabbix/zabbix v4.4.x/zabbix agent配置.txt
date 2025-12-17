@@ -1,0 +1,107 @@
+zabbix监控相应服务有一种方式叫zabbix agentd模式，原理就是在一台非server的机器上安装zabbix agentd这个组件，配置此组件，调用相应的脚本，程序等等监控对应的服务
+此组件有些时候安装在监控对象相应的服务器上
+
+软件版本:
+zabbix server    4.4.6
+zabbix agentd  4.0.x
+
+正常情况下，上述版本需要匹配
+
+zabbix agent安装
+下载链接:
+https://www.zabbix.com/download_agents  
+
+因为用的ubuntu，因此使用对应的版本，如果使用linux的4.4.6似乎不行
+下载地址：
+ https://www.zabbix.com/downloads/4.0.0/zabbix_agent-4.0.0-ubuntu-18-amd64-gnutls.tar.gz
+
+1. 创建zabbix用户和组
+#groupadd zabbix
+#useradd -g zabbix zabbix    # 新建zabbix用户并将其加入到zabbix组，因为配置redis的需要，这里需要允许zabbix用户具有home目录
+
+2. 解压zabbix预编译包
+# tar -zxvf zabbix-x.x.x.tar.gz
+解压之后，出现下面三个目录：
+bin conf sbin
+
+3. 我们进入到bin目下，拷贝zabbix_sender  zabbix_get到/usr/bin/目录
+#cp zabbix_sender  zabbix_get /usr/bin/
+
+4. 进入sbin目录,拷贝zabbix_agentd到/usr/sbin/
+#cp zabbix_agentd /usr/sbin/
+
+5. 进入到conf目录，复制zabbix_agentd.conf到/usr/local/etc/目录下
+#cp zabbix_agentd.conf /usr/local/etc/
+
+编辑zabbix_agentd.conf文件,修改如下内容
+
+LogFile=/tmp/zabbix_agentd.log 
+DebugLevel=5
+
+Server=172.17.0.7,127.0.0.1	#zabbix server的地址,如果zabbix server是用容器启动,则有2种情况,格式如左
+			#1. zabbix agentd安装到启动了zabbix server的机器上,则这里的地址填写zabbix server容器中的ip地址
+			#2. zabbix agentd没有安装到启动zabbix server的机器上,则填写zabbix server那台机器的物理ip地址
+
+ServerActive=172.17.0.7	#具体的内容填写同上
+
+Hostname=172.20.20.2	#填写安装zabbix agentd的机器的物理ip地址
+
+Include=/usr/local/etc/zabbix_agentd.conf.d/*.conf
+
+保存退出
+
+6. 添加log文件
+#touch /tmp/zabbix_agentd.log
+#chmod 666 /tmp/zabbix_agentd.log
+#chown zabbix:zabbix /tmp/zabbix_agentd.log
+
+7. 修改zabbix agentd的监控端口
+# vim /etc/services
+
+添加如下内容:
+zabbix_agent 10050/tcp
+zabbix_agent 10050/udp
+
+保存退出
+
+8. 拷贝执行文件
+#cp /usr/sbin/zabbix_agentd /etc/init.d/
+#chmod +x /etc/init.d/zabbix_agentd
+
+9. 建立目录及快速链接
+#mkdir -p /usr/local/etc/zabbix_agentd.conf.d
+#mkdir -p /etc/zabbix/script
+#cd /etc/zabbix/
+#ln -s /usr/local/etc/zabbix_agentd.conf .
+#ln -s /usr/local/etc/zabbix_agentd.conf.d zabbix_agentd.d
+
+10. 启动zabbix agentd
+#/etc/init.d/zabbix_agentd
+
+11. 添加监控项
+登录到zabbix以后,选择配置 -> 主机
+注意"agent代理程序的接口"这个地方,IP地址填写,安装zabbix agentd机器的ip地址
+
+在主机旁边的"模板"选项里,填写Template OS Linux by Zabbix agent
+
+点击"添加"按钮就可以了
+
+12. 通过zabbix agent来监控第三方服务
+基本原理通过脚本或者程序采集数据，通过zabbix agent来启动脚本功能，同时在web ui端，添加监控，监控端则触发脚本，并且传递参数到脚本端，同时agent端将脚本执行完的数据传送给server端
+步骤:
+1. 编写脚本，脚本的输出内容必须是纯粹的数据，不能有其他任何的内容，包括错误输出，提示等等
+2. 编写userparameter文件，一般来说名字是userparameter_activemq.conf(不一定是这个名字，可以任意取，取决于Include这个参数内容，如后)，放在/usr/local/etc/zabbix_agentd.conf.d/目录下，具体是根据zabbix_agentd.conf文件中
+Include=/usr/local/etc/zabbix_agentd.conf.d/*.conf
+定义的
+3. userparameter文件内容，例子如下 
+UserParameter=activemq.mointer[*],python /etc/zabbix/script/zabbix_activemq.py $1
+
+# 格式为key[*],scripts,其中key为在UI端采集用的关键字，也是展示的的关键字(关键字可能是一组)，对应展示的数据
+# [*]表示存储的所有key的数组
+#这里的$1来自UI端传送过来，和[*]要对应
+
+4. 日志，日志必须设置为zabbix用户和组，同时将zabbix_agentd.conf文件中的DebugLevel设置为5，用于查看脚本执行及采集到的数据
+
+
+
+

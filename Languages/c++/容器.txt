@@ -1,0 +1,4 @@
+序列式容器：vector,deque,list
+追加的方式对一个群集置入6个元素，他们的排列次序和置入次序一致
+关联式容器：set,multiset,map,multimap
+他们的位置取决于元素值，和插入次序无关

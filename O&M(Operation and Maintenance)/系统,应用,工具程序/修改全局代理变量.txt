@@ -1,0 +1,4 @@
+修改/etc/environment 
+http_proxy="http://proxy.bmcc.com.cn:8080"
+https_proxy="http://proxy.bmcc.com.cn:8080"
+

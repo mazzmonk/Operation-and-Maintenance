@@ -1,0 +1,73 @@
+
+这里使用flannel的目的是因为在每个安装docker容器的机器上都会启动一个docker0的网桥，所有的容器都通过此网桥通讯
+但是因为不同的服务器启动的dock网桥都有自己的网段，将导致不同服务器的容器不能通讯，因此出现了这个技术，主要是在安装docker的服务器上启动了一个单独的网络设备（姑且这么理解）flannel0,，然后所有的docker网桥连接到这个flannel0设备，然后互相通讯。具体的原理需要继续研究
+
+
+流程
+etcd->flannel->docker
+
+1.etcd是用来存储flannel设置的ip段，子网等等信息。可以是一个集群。
+2.flannel就是这个神器,把flannel的地址覆盖到docker0
+3.重启docker，然后可用
+
+
+1.安装
+docker在前期已经安装成功了，版本号：Docker version 1.7.1, build 786b29d
+
+etcd安装见其他文档
+
+flannel版本：flannel-0.5.5-linux-amd64.tar.gz
+这是个二进制版本
+
+解压以后把文件拷贝到如下的路径
+/home/blue/apps/kubernetes/flannel/bin/{flanneld  mk-docker-opts.sh}
+
+配置的步骤是
+1.通过etcd设置网络信息
+在任意一个etcd端执行
+etcdctl set /coreos.com/network/config '{ "Network": "172.17.0.0/16" }'
+如此就设置了网络信息
+
+2.启动flannel以后，会生成flannel0设备，并从etcd取出网络配置信息
+/home/blue/apps/kubernetes/flannel/bin/flanneld -etcd-endpoints="http://192.168.81.4:4001,http://192.168.81.5:4001,http://192.168.81.6:4001" &
+
+此时会得到类似如下的信息：
+flannel0  Link encap:UNSPEC  HWaddr 00-00-00-00-00-00-00-00-00-00-00-00-00-00-00-00  
+          inet addr:172.17.6.0  P-t-P:172.17.6.0  Mask:255.255.0.0
+          UP POINTOPOINT RUNNING NOARP MULTICAST  MTU:1472  Metric:1
+          RX packets:9 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:14 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:500 
+          RX bytes:756 (756.0 b)  TX bytes:1176 (1.1 KiB)
+
+3.给docker0赋值flannel的网段
+
+/home/blue/apps/kubernetes/flannel/bin/mk-docker-opts.sh -i
+source /run/flannel/subnet.env
+ifconfig docker0 ${FLANNEL_SUBNET}
+
+此时会得到类似如下的信息：
+docker0   Link encap:Ethernet  HWaddr 56:84:7A:FE:97:99  
+          inet addr:172.17.6.1  Bcast:172.17.6.255  Mask:255.255.255.0
+          UP BROADCAST MULTICAST  MTU:1500  Metric:1
+          RX packets:144 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:24 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:0 
+          RX bytes:5208 (5.0 KiB)  TX bytes:2184 (2.1 KiB)
+
+
+4.重启docker
+目前使用的参数，这里特别需要提示的是不用设置网络就是不需要“-b”参数，此时启动docker以后就有docker0设备
+
+other_args="--exec-root=/home/blue/apps/docker/var/run/docker --graph=/home/blue/apps/docker/var/lib/docker --pidfile=/home/blue/apps/docker/var/run/docker.pid -s=devicemapper --storage-opt dm.basesize=30G --host=unix:///home/blue/apps/docker/var/run/socket"
+
+注意：
+1.这里有个细节就是必须docker先已经启动，此时才有docker0设备，然后进行后续的覆盖操作
+2.容器启动以后会得到一个和docker0同段的地址，此时在多台安装docker服务器下的容器可以互相ping通。
+
+
+
+
+
+
+

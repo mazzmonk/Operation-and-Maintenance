@@ -1,0 +1,26 @@
+#!/bin/bash
+# author:jack
+# date:20171024
+# startup kubelet service
+# execute with ROOT user 
+# FILENAME:srv.kube-proxy
+###########################
+
+
+if [ -e GLOBAL-ENV ];then
+  source GLOBAL-ENV
+else
+  echo 'File GLOBAL-ENV does not exist.'
+  echo -1
+fi
+
+
+KUBERNETES=$HOME_PATH/apps/kubernetes
+
+$KUBERNETES/client/kube-proxy/bin/kube-proxy \
+--bind-address=0.0.0.0 \
+--healthz-bind-address=0.0.0.0 \
+--master="http://$KUBE_MASTER_IP:8080"  \
+--hostname-override="$LOCAL_IPADRESS" \
+--kubeconfig="$KUBERNETES/client/kube-proxy/etc/kubeconfig" \
+--v=0 >> $KUBERNETES/client/kube-proxy/logs/kube-proxy.log  2>&1 &

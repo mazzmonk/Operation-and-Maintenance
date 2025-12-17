@@ -1,0 +1,498 @@
+链接地址:
+https://www.yoyoask.com/?p=4381
+
+RBAC的三个基本概念:
+* Role: 角色,它定义了一组规则,定义了一组对Kubernetes API对象的操作权限
+* Subject: 被作用者,既可以是"人",也可以是机器,当然也可以是我们K8s中定义的用户(ServiceAccount主要负责kubernetes内置用户)
+* RoleBinding: 定义了"被作用者"和"角色"的绑定关系
+
+
+角色分为两种 :
+* 一种是Role,负责命名空间(namespace)内的权限
+* 一种是ClusterRole,负责整个Kubernetes集群范围内的权限
+
+
+使用方式:
+1.用户使用:如果是用户需求权限,则将 Role/ ClusterRole 与 User(或Group)绑定(这需要创建User/Group).
+2.程序使用:如果是程序需求权限,将 Role/ClusterRole 与 ServiceAccount 指定(这需要创建 ServiceAccount 并且在 deployment 中指定 ServiceAccount).
+
+
+RBAC API对象
+Kubernetes有一个很基本的特性就是它的所有资源都是模型化的API对象,允许执行CRUD(Create、Read、Update、Delete)操作.资源如下
+
+Pods
+ConfigMaps
+Deployments
+Nodes
+Secrets
+Namespaces
+
+
+资源对象可能存在的操作有如下:
+create
+get
+delete
+list
+update
+edit
+watch
+exec
+
+这些资源和 API Group 进行关联,比如 Pods 属于 Core API Group,而 Deployment 属于 apps API Group,要在 kubernetes 中进行 RBAC 授权
+
+用户和 service account 有一点区别
+用户的定义可以在 rolebinding 和 clusterrolebinding 中定义,并且没有属于某个 namespace 的情况
+service account 的定义必须先单独定义并且必须属于某个特定的 namespace(比如要操作集群范围的 sa,属于 kube-system 命名空间),然后在 rolebinding 或者 clusterrolebinding 中绑定
+
+
+# 用户使用
+1.Role 和 Rolebinding
+
+Role (可以理解为设定权限)它本身就是一个 Kubernetes 的 API 对象,定义文件如下:
+
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  namespace: mynamespace
+  name: example-role
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "watch", "list"]
+
+解释:
+    首先, Role 对象指定了它能产生作用的 Namespace(mynamespace).Namespace 是 kubernetes 项目中的一个逻辑管理单位.不同 Namespace 的 API 对象,在通过 kubectl 命令进行操作的时候,是互相隔离的.
+   namespace 并不会提供任何实际的隔离或者多租户能力,如果没有设置 namespace 默认则是 default.
+   rules 字段定义它的是权限规则,这条规则的含义就是允许"被作用者",对 namespace下面 pod (resources中定义)有哪些权限.
+
+用户的权限对应的API资源对象已经创建了,但是还没有绑定.也就是只有一个规则没有规定哪些用户使用这个权限
+
+这里进行 Rolebinding 介绍 :(绑定设定好的权限给某个用户)
+
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: example-rolebinding
+  namespace: mynamespace
+subjects:
+- kind: User
+  name: example-user                      #绑定给某个用户
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: example-role                       #设定好的权限
+  apiGroup: rbac.authorization.k8s.io
+
+解析:
+    在 Rolebinding 中定义了一个 subject 字段,即"被作用者".它的类型是 User,即 Kubernetes 里的用户,被作用的用户名称为: example-user
+
+在 kubernetes 里的 User,也就是用户,只是一个授权系统里的逻辑概念.它需要通过外部认证服务,比如 Keystone,来提供.或者直接给 APIServer 指定一个用户名、密码文件.那么 kubernetes 的授权系统就能够从这个文件里找到对象的用户
+
+Rolebinding 对象通过 roleRef 字段可以直接通过名字,来引用前面定义的 Role(权限)对象(example-role),从而定义了"被作用者(Subject)"和"角色(Role)"之间的绑定关系
+
+Role 和RoleBinding 他们的权限限制规则仅仅在他们自己的 namespace 内有效,roleRef 也只能引用当前 namespace 里的 Role 对象
+
+2.ClusterRole 和 ClusterRoleBinding
+  对于某一个role(角色)想要作用于所有 namespace 的时候,就必须需要使用 ClusterRole 和 ClusterRoleBinding 两个组合.这两个API 对象的用法跟 Role 和Rolebinding 完全一样.
+
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: example-clusterrole
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "watch", "list"]
+
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: example-clusterrolebinding
+subjects:
+- kind: User
+  name: example-user
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: example-clusterrole
+  apiGroup: rbac.authorization.k8s.io
+
+在上面的例子中,ClusterRole 和 ClusterRoleBinding 的组合,意味着名叫 example-user 的用户,拥有对所有 namespace 里的 Pod 进行 Get、Watch、List 操作的权限.
+
+类似的,Role 对象的 rules 字段也可以进一步细化,可以只针对某一个具体权限对象进行设置
+
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  resourceNames: ["my-config"]
+  verbs: ["get"]
+
+上面的例子表示,这条规则的"被作用者",只对 my-config 的 configmap 对象有权限进行 get 操作.
+
+在 Kubernetes 中已经内置了很多个位系统保留的 ClusterRole,它们的名字都是以 system: 开头.一般来说,这些内置的 ClusterRole,是绑定给 Kubernetes 系统组件对应 ServiceAccount 使用.
+
+通过命令获取: kubectl get clusterroles
+
+此外,Kubernetes 还提供了四个预先定义好的 ClusterRole 来提供用户直接使用
+
+cluster-admin
+admin
+edit
+view
+
+其中 cluster-admin 角色,对应的是整个 Kubernetes 项目中最高权限(verbs=*)
+
+我们可以通过下面的命令查看 clusterrole 的权限
+
+ kubectl describe clusterrole cluster-admin -n kube-system
+
+我们使用的 dashboard 需要对所有资源都有权限,所以他的 ClusterRoleBinding 里绑定的权限就是 cluster-admin  
+
+
+# 程序使用
+
+ServiceAccount
+
+前面所介绍的大多数时候都不怎么使用,ServiceAccount 主要负责 kubernetes 内置用户,下面简单定义一个 ServiceAccount
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  namespace: mynamespace
+  name: example-sa
+
+我们定义的这个 serverAccount 对象,只需要 name 以及 namespace 最基础字段就可以.然后通过编写 rolebinding 的 yaml 文件,来为这个 serviceAccount 分配权限 .
+
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: example-rolebinding
+  namespace: mynamespace
+subjects:
+- kind: ServiceAccount
+  name: example-sa                #被作用的对象ServiceAccount的名称
+  namespace: mynamespace
+roleRef:
+  kind: Role
+  name: example-role             #最上头定义的那个角色权限
+  apiGroup: rbac.authorization.k8s.io
+
+在这个 Rolebinding 对象里,subject 字段的类型(kind),不在是一个 User,而是一个名叫 example-sa 的 ServerAccount.而 roleRef 引用的 Role对象,依然是前头定义的名叫 example-role 的角色权限
+
+********* 创建并演示: **********
+
+创建 pod: pod-sa.yaml
+
+apiVersion: v1
+kind: Pod
+metadata:
+  namespace: mynamespace
+  name: sa-token-test
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.7.9
+  serviceAccountName: example-sa
+
+创建权限: role.yaml
+
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  namespace: mynamespace
+  name: example-role
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "watch", "list"]
+
+
+创建绑定作用规则:r ole-binding.yaml
+
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: example-rolebinding
+  namespace: mynamespace
+subjects:
+- kind: ServiceAccount
+  name: example-sa
+  namespace: mynamespace
+roleRef:
+  kind: Role
+  name: example-role
+  apiGroup: rbac.authorization.k8s.io
+
+
+#接下来我们创建命名空间
+kubectl create namespace mynamespace
+namespace/mynamespace created
+
+#应用当前目录下所有yaml
+kubectl apply -f .
+rolebinding.rbac.authorization.k8s.io/example-rolebinding created
+role.rbac.authorization.k8s.io/example-role created
+serviceaccount/example-sa created
+
+#查看 SeviceAccount
+kubectl get sa  -n mynamespace
+NAME         SECRETS   AGE
+default      1         26s
+example-sa   1         22s
+
+#查看详细
+kubectl get sa -n mynamespace example-sa -o yaml
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"v1","kind":"ServiceAccount","metadata":{"annotations":{},"name":"example-sa","namespace":"mynamespace"}}
+  creationTimestamp: "2019-11-28T08:01:22Z"
+  name: example-sa
+  namespace: mynamespace
+  resourceVersion: "14579937"
+  selfLink: /api/v1/namespaces/mynamespace/serviceaccounts/example-sa
+  uid: 4481a40f-11b5-11ea-a57e-525400d7b284
+secrets:
+- name: example-sa-token-wms94
+
+K8s 会为 ServiceAccount 自动创建一个 Secret 对象,即 ServiceAccount 定义最下面的 secrets 字段.其中,这里的 secret 就是 ServiceAccount 对应来跟APIServer 进行交互的授权文档,一般为 Token,保存证书和密码等,它以一个 Secret 对象保存在 ETCD 中
+
+这时候我们就可以直接在 pod 中引用这个 serviceAccount 了
+
+apiVersion: v1
+kind: Pod
+metadata:
+  namespace: mynamespace
+  name: sa-token-test
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+  serviceAccountName: example-sa
+
+#在最下面一行我们定义了一个名为 example-sa
+
+接下来我们可以通过 describe 查看 pod 状态
+
+kubectl describe pod -n mynamespace sa-token-test
+Name:               sa-token-test
+Namespace:          mynamespace
+...
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from example-sa-token-wms94 (ro)
+...
+
+可以看到:ServiceAccount 的 token 也就是 secret 对象是被 Kubernetes 自动挂载到了容器 /var/run/secrets/kubernetes.io/serviceaccount 目录下
+
+我们可以到 Pod 目录进行查看
+
+kubectl exec -it sa-token-test -n mynamespace -- /bin/bash
+
+ls /var/run/secrets/kubernetes.io/serviceaccount
+ca.crt namespace  token
+
+在 Kubernetes 集群访问主要是通过 ca.crt 来访问 Apiserver,更重要的是此时它只可以做 GET、WATCH 和 LIST 操作.因为 example-sa 这个 ServiceAccount的权限已经被我们绑定了 role 限制.
+
+如果一个 Pod 没有声明 ServiceAccount,Kubernetes 会自动在它的 namespace 创建一个名称为 default 的默认 ServiceAccount,然后分配给 Pod.但是这种情况下默认 ServiceAccount 没有关联任何 Role.也就是说它有 APIServer 的绝大多数权限 .
+
+# 用户组概念
+User 和 Group
+
+Kubernetes 除了有用户(User),还拥有用户组(Group)概念,如果我们 Kubernetes 配置了外部认证服务的话,这个用户组的概念就由外部认证服务提供
+
+一个 ServiceAccount 在 Kubernetes 对应的用户的名字是
+
+system:serviceaccount:<ServiceAccount名字> 例如上面的那个 sa 对应的就是
+system:serviceaccount:example-sa
+ 
+而对应的用户组则是
+
+system:serviceaccounts:<Namespace名字>     例如上面的那个 sa 对应的就是
+system:serviceaccount:mynamespace
+
+比如,我们可以在RoleBinding中定义如下subjects
+
+subjects:
+- kind: Group
+  name: system:serviceaccounts:mynamespace
+  apiGroup: rbac.authorization.k8s.io
+
+这就意味着 role 的规则权限,作用于 mynamespace (这个命名空间里 -n mynamespace)里的所有 ServiceAccount,这就用到了用户组的概念
+
+subjects:
+- kind: Group
+  name: system:serviceaccounts
+  apiGroup: rbac.authorization.k8s.io
+
+如果这样写,这个 role 的规则权限,则作用于整个系统里 ServiceAccount
+
+在 Kubernetes 中已经内置了很多歌为系统保留的 ClusterRole,它们的名字都以 system: 开头,可以使用 kubectl get clusterroles 查找到
+
+现在我们可以理解,所谓的角色(Role),其实就是一组规则权限列表,而我们分配这些权限的方式,就是通过创建 RoleBinding 对象,将被用者(subject)和权限列表绑定.
+
+而对应的 ClusterRole 和 ClusterRoleBinding,则是 Kubernetes 集群级别的 Role 和 RoleBinding,它们不受 namespace 限制
+
+********* 实践: *********
+
+1. 创建一个只能访问某个 namespace 的 ServiceAccount
+
+当我们创建一个 sa 之后,会自动帮我们创建一个 secrets
+
+kubectl create sa shooter-sa -n kube-system
+
+接下来可以查看一下 sa
+
+kubectl get sa -n kube-system shooter-sa -o yaml
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  creationTimestamp: "2020-11-18T08:03:08Z"
+  name: shooter-sa
+  namespace: kube-system
+  resourceVersion: "2509182"
+  selfLink: /api/v1/namespaces/kube-system/serviceaccounts/shooter-sa
+  uid: 691b2a95-c8cb-45a7-8b70-e34ebcfd5b21
+secrets:
+- name: shooter-sa-token-vjwdc
+ 
+也可以通过 get secret 查看
+
+kubectl get secrets -n kube-system |grep shooter-sa-token
+
+shooter-sa-token-vjwdc   kubernetes.io/service-account-token   3      97s
+
+我们需要创建一个role (角色)对象与 sa 进行关联
+
+yaml文件如下:
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sa-role
+  namespace: kube-system
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list"]
+- apiGroups: ["apps", "extensions"]
+  resources: ["pods", "deployment", "replicasets"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+这里我们创建的 role 设置的权限是对 pod 有 get 和 list 权限,对 deployment 有下面其他权限
+
+执行文件 yaml
+
+[root@k8s-master01 sa]# kubectl apply -f sa-role.yaml 
+role.rbac.authorization.k8s.io/sa-role created
+
+检查状态
+
+kubectl get role -n kube-system
+
+我们刚刚在 kube-sytem下创建一个名称为 sa-role 的role(角色权限)
+
+角色创建完成之后我们就需要创建一个 RoleBinding
+
+yaml文件如下
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sa-rolebinding
+  namespace: kube-system
+subjects:
+- kind: ServiceAccount
+  name: shooter-sa                 #绑定serviceAccount
+  namespace: kube-system
+roleRef:
+  kind: Role
+  name: sa-role                   #绑定角色权限
+  apiGroup: rbac.authorization.k8s.io
+
+#执行
+[root@k8s-master01 sa]# kubectl apply -f sa-rolebinding.yaml 
+rolebinding.rbac.authorization.k8s.io/sa-rolebinding created
+
+查看
+
+kubectl get rolebinding -n kube-system|grep sa
+
+这时候我们创建的 ServerAccount 已经和我们 role(角色权限)进行绑定了,通过 rolebinding 进行绑定.下面可以进行测试
+
+测试:
+
+首先我们复制我们创建 sa 中 secret 里面的 token
+
+kubectl -n kube-system get secret | grep shooter-sa
+
+#然后查看 secret 当中的 token
+kubectl describe secret shooter-sa-token-vjwdc -n  kube-system
+
+
+2. 创建一个可以访问所有namespace的ServiceAccount
+
+上面创建单个 namespace 访问权限主要是用了role和 rolebinding,接下来我们使用 clusterRole 和 ClusterRoleBinding进行演示.使用 role 和 rolebinding 只会绑定特定的 namespace下,clusterRole 会绑定到集群下
+
+首先创建一个ServiceAccount对象
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: root-sa
+  namespace: kube-system
+
+再创建一个ClusterRoleBinding
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: root-clusterrolebinding   #clusterrolebinding 的名称
+subjects:                 #被作用者
+- kind: ServiceAccount    #类型
+  name: root-sa      #serviceAccount名称
+  namespace: kube-system  #sa命名空间
+roleRef:     #角色引用
+  kind: ClusterRole   #类型为clusterRole
+  name: cluster-admin   #clust-admin为rbac系统最大权限
+  apiGroup: rbac.authorization.k8s.io
+
+接下来开始创建
+
+[root@k8s-master01 sa]# kubectl apply -f sa-root.yaml 
+serviceaccount/root-sa created
+[root@k8s-master01 sa]# kubectl apply -f root-clusterroleBinding.yaml 
+clusterrolebinding.rbac.authorization.k8s.io/root-clusterrolebinding created
+
+查看secret中root-sa的token
+
+kubectl -n kube-system get secret | grep root-sa
+
+#然后查看secret 当中的 token
+kubectl describe secret root-sa-token-99tkh -n  kube-system
+
+使用此token再次登录dashboard
+
+访问进来就没有error报错,也就是现在serviceAccount已经绑定到最高权限的root-sa.可以访问所有资源对象,并且增删改查权限都有
+
+# 查看所有命名空间中包含的 role,用于特定的 namespace,在显示的内容中,会有 namespace 这一列
+kubectl get role  -A
+
+# 查看集群范围的 clusterrole,用于所有的 namespace,只有 name 这列
+kubectl get clusterrole  -A
+
+# 查看所有命名空间中包含的 rolebinding,用于特定的 namespace,在显示的内容中,会有 namespace 及 role 列
+kubectl get rolebinding -A
+
+# 查看集群范围的 clusterrole,用于所有的 namespace,只有 name 及 role 列
+kubectl get clusterrolebinding -A
+
+# 查看 service acount,注意 namespace 这一列,sa 必须属于某个 namespace
+kubectl get sa -A
+
+# 查看 secret
+kubectl get secrets -A
+

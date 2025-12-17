@@ -1,0 +1,20 @@
+#!/bin/bash
+# author:jack
+# date:20171024
+# startup kube-controller-manager service
+# execute with ROOT user
+# FILENAME:srv.kube-controller-manager
+###########################
+
+if [ -e GLOBAL-ENV ];then
+  source GLOBAL-ENV
+else
+  echo 'File GLOBAL-ENV does not exist.'
+  echo -1
+fi
+
+KUBERNETES=$HOME_PATH/apps/kubernetes
+
+$KUBERNETES/server/bin/kube-controller-manager \
+--v=0 \
+--master=127.0.0.1:8080  >> $KUBERNETES/server/logs/kube-controller-manager.log  2>&1 &

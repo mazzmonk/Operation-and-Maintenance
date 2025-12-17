@@ -1,0 +1,185 @@
+1.创建用户的过程，首先需要确定表空间，然后在添加用户在那些表空间上使用，最后给予相应的权限。
+
+表空间存放位置
+select name from v$datafile;
+
+
+创建一个表空间，名字为notifydb大小10G
+
+这里需要注意的一个地方，就是建立表空间及对应的名字的时候，一定要对应，否则，建立的名字与空间名字不对应，将导致无法得知表空间名字，那将是悲剧。
+create tablespace jack datafile '/home/oracle/u01/app/oracle/oradata/ora10g/jack.dbf'size 10G autoextend on extent management local segment space management auto;
+
+创建一个用户jack，密码jack123_#$，并且默认的表空间是jack
+create user  jack identified by jack123_#$ default tablespace jack;
+
+给予jack用户create session，resource权限
+grant create session,resource to jack;
+
+注意：表空间和用户没有任何关系，它们之间的唯一联系就是，必须指明某个账户在某个表空间具有多少空间可以使用。
+
+
+2.账户管理
+
+修改scott密码
+alter user scott identified by "111111"
+
+
+账户jack密码过期
+alter user jack password expire;
+
+
+要使得原来密码过期的账户重新生效，只能重置密码
+alter user jack identified by "jack123_#$";
+
+锁定账户
+alter user jack  account lock;
+
+解锁账户
+alter user jack account unlock;
+
+解锁账户同时密码过期
+alter user jack account unlock password expire;
+
+
+
+3.删除表空间
+
+删除表空间notifydb
+drop tablespace notifydb including contents and datafiles;
+
+增减users表空间
+alter tablespace users add datafile '/home/oracle/u01/app/oracle/oradata/ora10g/users02.dbf' size 10G;
+
+
+注意：1.删除表空间的时候，似乎是把表空间notifydb全部删除了
+      2.比如users表空间有多个，users01,users02,users03等等文件，要删除某个单独的表空间文件似乎不行
+      3.增加某个表空间的大小不是修改原来表空间文件的大小，而是增加一个文件，如上
+
+
+冷备份
+
+确认数据文件和控制文件所在路径及名称。
+
+SQL> select name from v$datafile;
+
+NAME
+--------------------------------------------------------------------------------
+/home/oracle/u01/app/oracle/oradata/ora10g/system01.dbf
+/home/oracle/u01/app/oracle/oradata/ora10g/undotbs01.dbf
+/home/oracle/u01/app/oracle/oradata/ora10g/sysaux01.dbf
+/home/oracle/u01/app/oracle/oradata/ora10g/users01.dbf
+/home/oracle/u01/app/oracle/oradata/ora10g/example01.dbf
+/home/oracle/u01/app/oracle/oradata/ora10g/users02.dbf
+
+6 rows selected.
+
+SQL> select name from v$controlfile;
+
+NAME
+--------------------------------------------------------------------------------
+/home/oracle/u01/app/oracle/oradata/ora10g/control01.ctl
+/home/oracle/u01/app/oracle/oradata/ora10g/control02.ctl
+/home/oracle/u01/app/oracle/oradata/ora10g/control03.ctl
+
+SQL>shutdown immediate;
+
+[oracle@db01 ora10g]$cp $ORACLE_BASE/oradata/ora10g/*.dbf  /u02/backup/
+
+[oracle@db01 ora10g]$cp $ORACLE_BASE/oradata/ora10g/*.ctl  /u02/backup/
+
+
+热备份
+
+修改数据库为归档模式
+
+SQL> shutdown immediate;
+Database closed.
+Database dismounted.
+ORACLE instance shut down.
+SQL> startup mount;
+ORACLE instance started.
+
+Total System Global Area 2147483648 bytes
+Fixed Size                  2022144 bytes
+Variable Size             503317760 bytes
+Database Buffers         1627389952 bytes
+Redo Buffers               14753792 bytes
+Database mounted.
+SQL> alter database archivelog;
+
+Database altered.
+
+SQL> alter database open;
+
+Database altered.
+
+SQL> archive log list;
+Database log mode              Archive Mode
+Automatic archival             Enabled
+Archive destination            USE_DB_RECOVERY_FILE_DEST
+Oldest online log sequence     2
+Next log sequence to archive   4
+Current log sequence           4
+SQL> 
+
+把归档日志放在/home/oracle/backup/hot_backup目录下
+SQL> alter system set log_archive_dest_1='location=/home/oracle/backup/hot_backup';
+
+System altered.
+SQL> alter system set log_archive_dest_1='location=/home/oracle/backup/hot_backup';
+
+System altered.
+
+
+联机日志文件
+
+查看联机日志文件的状态
+SQL>select * from v$log;
+
+
+SQL>alter database backup controlfile o trace;
+在$ORACLE_BASE/admin/dbname/udump下生成当前时间的一个*.trc文件，就是数据库控制文件，可以用文本编辑器查看，包括一些数据库创建时的一些参数，包括redo logfiel的最大数。
+
+
+Start the database in the UPGRADE mode:
+SQL> STARTUP UPGRADE
+Set the system to spool results to a log file for later analysis:
+SQL> SPOOL upgrade_info.log 
+Run the Pre-Upgrade Information Tool:
+SQL> @?/rdbms/admin/utlu102i.sql
+Turn off the spooling of script results to the log file:
+SQL> SPOOL OFF
+
+
+Use SQL*Plus to log in to the database as the SYS user with SYSDBA privileges:
+$ sqlplus /nolog 
+SQL> CONNECT SYS AS SYSDBA
+Enter password: SYS_password
+SQL> STARTUP NOMOUNT
+Set the CLUSTER_DATABASE initialization parameter to FALSE:
+SQL> ALTER SYSTEM SET CLUSTER_DATABASE=FALSE SCOPE=spfile; 
+Shut down the database:
+SQL> SHUTDOWN
+Enter the following SQL*Plus commands:
+SQL> STARTUP UPGRADE
+SQL> SPOOL patch.log
+SQL> @?/rdbms/admin/catupgrd.sql
+SQL> SPOOL OFF
+
+
+Restart the database:
+SQL> SHUTDOWN IMMEDIATE
+SQL> STARTUP
+Run the utlrp.sql script to recompile all invalid PL/SQL packages now instead of when the packages are accessed for the first time. This step is optional but recommended.
+SQL> @?/rdbms/admin/utlrp.sql
+
+
+
+
+
+
+
+
+
+
+

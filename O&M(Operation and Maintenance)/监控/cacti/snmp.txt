@@ -1,0 +1,1 @@
+snmpwalk -v 3  -X admin456 -A admin456 -u internalUser -l authPriv 172.20.20.2

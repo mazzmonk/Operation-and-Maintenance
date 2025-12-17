@@ -1,0 +1,87 @@
+版本:apache-activemq-5.15.2-bin.zip
+
+ActiveMQ默认端口61616
+
+* 监视
+http://localhost:8161/admin
+默认用户名和密码admin/admin
+可以在conf/jetty-real.properties文件中配置它
+
+* 启动及关闭
+nohup bin/activemq > /tmp/smlog 2>&1 &
+bin/activemq stop
+
+* 用不同的配置文件启动
+要使用examples/conf/activemq-demo.xml其中包括网络演示,如下:
+
+bin/activemq console xbean:examples/conf/activemq-demo.xml
+
+在控制台模式下启动Active并加载examples/conf/activemq-demo.xml文件.你需要的xbean:前缀.
+
+要启动后台进程,可以执行以下操作:
+
+bin/activemq start xbean:examples/conf/activemq-demo.xml
+
+* NIO运输
+与TCP传输相同，只是使用新的I / O（NIO）包，可以提供更好的性能。Java NIO软件包不应与IBM的AIO4J软件包混淆。
+
+要从TCP切换到NIO，只需更改URI的方案部分。以下是在代理的XML配置文件中定义的示例。
+
+<broker><font></font>
+  ...<font></font>
+  <transportConnectors><font></font>
+    <transportConnector name="nio" uri="nio://0.0.0.0:61616"/>  <font></font>
+  </<transportConnectors><font></font>
+  ...<font></font>
+</broker><font></font>
+试图在客户端使用nio传输url将实例化常规的TCP传输。有关更多信息，请参阅NIO传输参考
+
+
+* 故障转移
+http://activemq.apache.org/failover-transport-reference.html
+
+
+多种集群模式
+
+*
+http://activemq.apache.org/failover-transport-reference.html
+The Failover Transport
+
+failover:(tcp://localhost:61616,tcp://remotehost:61616)?initialReconnectDelay=100
+
+
+*
+http://activemq.apache.org/discovery-transport-reference.html
+The Discovery Transport
+
+<transportConnector uri="tcp://localhost:0" discoveryUri="multicast://default"/><font></font>
+
+*
+http://activemq.apache.org/fanout-transport-reference.html
+The Fanout Transport
+
+fanout:(multicast://default)
+fanout:(static:(tcp://localhost:61629,tcp://localhost:61639,tcp://localhost:61649))
+fanout:(multicast://default)?minAckCount=1
+
+*
+http://activemq.apache.org/zeroconf-transport-reference.html
+The ZeroConf Transport
+
+<transportConnector name="openwire" uri="tcp://0.0.0.0:61616" discoveryUri="zeroconf:_activemq_development. />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

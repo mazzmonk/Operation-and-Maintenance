@@ -1,0 +1,170 @@
+change master to  master_host='172.16.20.15',master_port=3306,master_user='root', master_password='8mnOJGZemn', master_log_file='mysql-bin.000074', master_log_pos=805039000;
+
+select * from dg_ee   limit 16195625,5; 从16195625开始的后5条数据
+
+修改mysql账户密码
+1. 使用phpmyadmin，这是最简单的了，修改mysql库的user表,不过别忘了使用PASSWORD函数。 
+2. 使用mysqladmin， mysqladmin -u root -p password mypasswd 
+3. mysql> REPLACE INTO mysql.user (Host,User,Password) VALUES('%','username',PASSWORD('password')); 
+mysql> FLUSH PRIVILEGES 
+4. mysql> SET PASSWORD FOR root@'localhost' = PASSWORD('bjtxj_*0987');
+这里的username是要修改的用户名称。 
+5. mysql> GRANT USAGE ON *.* TO username@"%" IDENTIFIED BY 'password'; 
+这里的username是要修改的用户名称
+
+添加用户命令
+grant all privileges on *.* to blue@'211.157.145.163' identified by 'CY^aIy$%p2Unf%LZa[OA';
+grant Select_priv on blueshangdb.* to guest@'172.16.20.%' identified by 'admin$%^';
+grant all privileges on *.* to cacti@'172.16.20.4' identified by 'cacti456';
+insert into mysql.user (Host,User,Password) values("lv01","blue",password("CY^aIy$%p2Unf%LZa[OA"));
+
+update user set  Select_priv='Y',Insert_priv='Y',Update_priv='Y',Delete_priv='Y',Create_priv='Y',Drop_priv='Y',Reload_priv='Y',Shutdown_priv='Y',Process_priv='Y',File_priv='Y'，Index_priv='Y',Alter_priv='Y',Create_tmp_table_priv='Y',Lock_tables_priv='Y', where User="zentaopms";
+
+
+
+grant all privileges on *.* to root@'localhost' identified by 'bjtxj_*0987';
+grant all privileges on *.* to root@'127.0.0.1' identified by 'bjtxj_*0987';
+grant all privileges on *.* to root@'%' identified by 'bjtxj_*0987';
+
+grant all privileges on *.* to blue@'localhost' identified by 'bjtxj_*0987';
+grant all privileges on *.* to blue@'127.0.0.1' identified by 'bjtxj_*0987';
+grant all privileges on *.* to blue@'%' identified by 'bjtxj_*0987';
+
+grant all privileges on *.* to blue@'192.168.81.%' identified by 'bjtxj_*0987';
+
+
+grant all privileges on zentaopms.* to zentaopms@'localhost' identified by 'bjtxj_*0987';
+给与zentaopms用户所有zentaopms的权限，并设置密码
+
+grant all privileges on *.* to singularity@'192.168.81.%' identified by 'bjtxj_*0987';
+
+
+
+#####
+my.cnf  #在从数据库同步时候跳过错误
+slave_skip_errors = all
+
+show status like 'Table%';
++-----------------------+----------+
+| Variable_name         | Value    |
++-----------------------+----------+
+| Table_locks_immediate | 13014496 | 
+| Table_locks_waited    | 7651     | 
++-----------------------+----------+
+
+Table_locks_immediate表示立即释放表锁数
+Table_locks_waited表示需要等待的表锁数
+
+set global query_cache_size=1024*1024*6;
+show status like '%key%';
+
+#############################################################################################
+
+
+/usr/lib64/mysql/libmysqlclient.so.16文件来源于下边的包
+mysql-libs
+
+主从不同步
+
+今天发现Mysql的主从数据库没有同步
+ 
+先上Master库：
+ 
+mysql>show processlist;   查看下进程是否Sleep太多。发现很正常。
+show master status; 也正常。
+ 
+mysql> show master status;
++-------------------+----------+--------------+-------------------------------+
+| File              | Position | Binlog_Do_DB | Binlog_Ignore_DB              |
++-------------------+----------+--------------+-------------------------------+
+| mysqld-bin.000001 |     3260 |              | mysql,test,information_schema |
++-------------------+----------+--------------+-------------------------------+
+1 row in set (0.00 sec)
+ 
+再到Slave上查看
+ 
+mysql> show slave status\G                                                
+ 
+Slave_IO_Running: Yes
+Slave_SQL_Running: No
+ 
+可见是Slave不同步
+ 
+下面介绍两种解决方法：
+  
+方法一：忽略错误后，继续同步
+该方法适用于主从库数据相差不大，或者要求数据可以不完全统一的情况，数据要求不严格的情况
+ 
+解决： 
+stop slave;
+ 
+#表示跳过一步错误，后面的数字可变
+set global sql_slave_skip_counter =1;
+start slave;
+ 
+之后再用mysql> show slave status\G  查看：
+ 
+Slave_IO_Running: Yes
+Slave_SQL_Running: Yes
+ 
+ok，现在主从同步状态正常了。。。
+ 
+方式二：重新做主从，完全同步
+该方法适用于主从库数据相差较大，或者要求数据完全统一的情况
+ 
+解决步骤如下：
+ 
+1.先进入主库，进行锁表，防止数据写入
+使用命令：
+ 
+mysql> flush tables with read lock;
+ 
+注意：该处是锁定为只读状态，语句不区分大小写
+ 
+2.进行数据备份 
+ 
+#把数据备份到mysql.bak.sql文件
+[root@server01 mysql]#mysqldump -uroot -p -hlocalhost > mysql.bak.sql
+这里注意一点：数据库备份一定要定期进行，可以用shell脚本或者python脚本，都比较方便，确保数据万无一失
+
+3.查看master 状态
+ mysql> show master status;
++-------------------+----------+--------------+-------------------------------+
+| File              | Position | Binlog_Do_DB | Binlog_Ignore_DB              |
++-------------------+----------+--------------+-------------------------------+
+| mysqld-bin.000001 |     3260 |              | mysql,test,information_schema |
++-------------------+----------+--------------+-------------------------------+
+1 row in set (0.00 sec)
+ 
+4.把mysql备份文件传到从库机器，进行数据恢复
+#使用scp命令
+[root@server01 mysql]# scp mysql.bak.sql root@192.168.128.101:/tmp/
+ 
+5.停止从库的状态
+mysql> stop slave;
+  
+6.然后到从库执行mysql命令，导入数据备份
+mysql> source /tmp/mysql.bak.sql
+ 
+7.设置从库同步，注意该处的同步点，就是主库show master status信息里的| File| Position两项
+change master to master_host = '192.168.128.100', master_user = 'rsync', master_port=3306, master_password='', master_log_file = 'mysqld-bin.000001', master_log_pos=3260;
+ 
+8.重新开启从同步
+mysql> start slave;
+ 
+9.查看同步状态
+mysql> show slave status\G  查看：
+ 
+Slave_IO_Running: Yes
+Slave_SQL_Running: Yes
+ 
+好了，同步完成啦。
+
+max_allowed_packet影响主从数据同步速度
+
+进入mysql server
+在mysql 命令行中运行
+set global max_allowed_packet = 2*1024*1024*10
+然后关闭掉这此mysql server链接，再进入。
+show VARIABLES like '%max_allowed_packet%';
+查看下max_allowed_packet是否编辑成功

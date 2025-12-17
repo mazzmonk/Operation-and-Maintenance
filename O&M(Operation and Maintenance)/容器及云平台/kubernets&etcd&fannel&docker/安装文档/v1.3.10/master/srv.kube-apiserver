@@ -1,0 +1,30 @@
+#!/bin/bash
+# author:jack
+# date:20171024
+# startup kube-apiserver service
+# execute with ROOT user
+# FILENAME:srv.kube-apiserver
+###########################
+
+if [ -e GLOBAL-ENV ];then
+  source GLOBAL-ENV
+else
+  echo 'File GLOBAL-ENV does not exist.'
+  echo -1
+fi
+
+KUBERNETES=$HOME_PATH/apps/kubernetes
+
+
+$KUBERNETES/server/bin/kube-apiserver \
+--allow-privileged=true \
+--insecure-bind-address=0.0.0.0 \
+--insecure-port=8080 \
+--v=0 \
+--service-cluster-ip-range=10.0.0.0/16 \
+--etcd-servers="http://$ETCD_NODE01_IPADDRESS:4001,http://$ETCD_NODE02_IPADDRESS:4001,http://$ETCD_NODE03_IPADDRESS:4001" \
+--cert-dir="$KUBERNETES/server/var/run/kubernetes"  >> $KUBERNETES/server/logs/kube-apiserver.log  2>&1 &
+
+
+
+

@@ -1,0 +1,209 @@
+1.安装
+下载：https://developers.google.com/protocol-buffers/docs/downloads
+
+目前用的2.6.1版本
+tar zxvf protobuf-2.6.1.tar.gz
+cd protobuf-2.6.1
+./configure --prefix=/usr
+make 
+make check
+make install
+
+2.配置运行
+
+建立文件tutorial.Person.proto，文件名规则为packagename.messagename.proto
+内容如下：
+
+package tutorial;
+
+message Person {
+  required string name = 1;
+  required int32 id = 2;
+  optional string email = 3;
+
+  enum PhoneType {
+    MOBILE = 0;
+    HOME = 1;
+    WORK = 2;
+  }
+
+  message PhoneNumber {
+    required string number = 1;
+    optional PhoneType type = 2 [default = HOME];
+  }
+
+  repeated PhoneNumber phone = 4;
+}
+
+message AddressBook {
+  repeated Person person = 1;
+}
+
+当前目录/home/jack/workspace/gprotobuf
+根据proto建立.cc及.h文件
+/usr/bin/protoc -I=/home/jack/workspace/gprotobuf --cpp_out=/home/jack/workspace/gprotobuf /home/jack/workspace/gprotobuf/tutorial.Person.proto
+
+生成tutorial.Person.pb.cc及tutorial.Person.pb.h
+
+建立main.cc文件，用于写message，编译时添加lib的protobuf
+
+#include <iostream>
+#include <fstream>
+#include <string>
+#include "tutorial.Person.pb.h"
+
+void PromptForAddress(tutorial::Person* person) {
+  std::cout << "Enter person ID number: ";
+  int id;
+  std::cin >> id;
+  person->set_id(id);
+  std::cin.ignore(256, '\n');
+
+  std::cout << "Enter name: ";
+  std::getline(std::cin, *person->mutable_name());
+
+  std::cout << "Enter email address (blank for none): ";
+  std::string email;
+  std::getline(std::cin, email);
+  if (!email.empty()) {
+    person->set_email(email);
+  }
+
+  while (true) {
+    std::cout << "Enter a phone number (or leave blank to finish): ";
+    std::string number;
+    std::getline(std::cin, number);
+
+    if (number.empty()) {
+      break;
+    }
+
+    tutorial::Person::PhoneNumber* phone_number = person->add_phone();
+    phone_number->set_number(number);
+
+    std::cout << "Is this a mobile,home, or work phone?";
+    std::string type;
+    std::getline(std::cin, type);
+
+    if (type == "mobile") {
+      phone_number->set_type(tutorial::Person::MOBILE);
+    } else if (type == "home") {
+      phone_number->set_type(tutorial::Person::HOME);
+    } else if (type == "work") {
+      phone_number->set_type(tutorial::Person::WORK);
+    } else {
+      std::cout << "Unknown phone type. Using default." << std::endl;
+    }
+  }
+}
+
+int main(int argc, char* argv[]) {
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  if (argc != 2) {
+    std::cerr << "Usage: " << argv[0] << " ADDRESS_BOOK_FILE" << std::endl;
+    return -1;
+  }
+
+  tutorial::AddressBook address_book;
+
+  {
+    std::fstream input(argv[1],std::ios::in | std::ios::binary);
+
+    if(!input) {
+      std::cout << argv[1] << ": File not found. Creating a new file." << std::endl;
+    } else if (!address_book.ParseFromIstream(&input)) {
+      std::cerr << "Failed to parse address book." << std::endl;
+      return -1;
+    }
+  }
+
+  PromptForAddress(address_book.add_person());
+
+  {
+    std::fstream output(argv[1],std::ios::out|std::ios::trunc|std::ios::binary);
+    if (!address_book.SerializeToOstream(&output)) {
+      std::cerr << "Failed to write address book." << std::endl;
+      return -1;
+    }
+  }
+
+  google::protobuf::ShutdownProtobufLibrary();
+
+  return 0;
+}
+
+执行的时候./gprotobuf example.txt，填入相关信息，生成文件，同时把相应的信息填入example.txt文件中
+
+
+又建立main.cc文件，用于读message，编译时添加lib的protobuf，注意把
+tutorial.Person.proto
+tutorial.Person.pb.cc
+tutorial.Person.pb.h
+example.txt
+文件放在同级目录
+
+#include <iostream>
+#include <fstream>
+#include <string>
+#include "tutorial.Person.pb.h"
+
+void ListPeople(const tutorial::AddressBook& address_book) {
+  for (int i = 0; i < address_book.person_size(); i++) {
+    const tutorial::Person& person = address_book.person(i);
+
+    std::cout << "Person ID: " << person.id() << std::endl;
+    std::cout << " Name: " << person.name() << std::endl;
+
+    if (person.has_email()) {
+      std::cout << " E-mail address: " << person.email() << std::endl;
+    }
+
+    for (int j = 0; j < person.phone_size(); j++) {
+      const tutorial::Person::PhoneNumber& phone_number = person.phone(j);
+
+      switch (phone_number.type()) {
+        case tutorial::Person::MOBILE:
+          std::cout << " Mobile phone#: ";
+          break;
+        case tutorial::Person::HOME:
+          std::cout << " Home phone #: ";
+          break;
+        case tutorial::Person::WORK:
+          std::cout << " work phone #: ";
+          break;
+      }
+      std::cout << phone_number.number() << std::endl;
+    }
+  }
+}
+
+int main(int argc, char* argv[]) {
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  if (argc != 2) {
+    std::cerr << "Usage: " << argv[0] << " ADDRESS_BOOK_FILE" << std::endl;
+    return -1;
+  }
+
+  tutorial::AddressBook address_book;
+
+  {
+    std::fstream input(argv[1],std::ios::in|std::ios::binary);
+    if (!address_book.ParseFromIstream(&input)) {
+      std::cerr << "Failed to parse address book." << std::endl;
+      return -1;
+    }
+  }
+
+  ListPeople(address_book);
+
+  google::protobuf::ShutdownProtobufLibrary();
+
+  return 0;
+}
+
+执行时./gprotobuf_client example.txt，读取文件中的相关信息。
+
+
+

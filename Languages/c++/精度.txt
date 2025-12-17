@@ -1,0 +1,25 @@
+stringstream,iostream等等流输出带有小数点的数据时候，通常有精度问题。默认情况下只输出总共6位
+
+在limits头文件中有如下的函数
+
+numeric_limits<float>::digits 
+numeric_limits<double>::digits
+numeric_limits<long double>::digits 
+numeric_limits<int>::digits
+
+函数返回各种类型能表示的最长位数，是一个固定数值，但是，当使用流输出或者转换的时候，如果数值位数过多，很可能导致精度错误。
+
+stringstream,iostream等流对象有如下方法
+stringstream ss;
+double a = 233.3434;
+ss.precision(numeric_limits<float>::digits);
+ss << a;
+
+这里把ss流的精度设置为float能表示的最大位数，但是，这里可以肯定的是，最后流表示出来的数值和原数值a的值不同。
+
+因为精度的问题，设置过大，会导致把原始的数据强制转换成要求的精度，就是ss.precision(numeric_limits<float>::digits)表示的数值，将导致原始数据的精度丢失。
+
+具体的精度数据，需要不断的测试，以找到平衡点。
+
+比如在我的机器上，设置的ss.precision(12)这里设置的12位，表示时候精度不会丢失。
+

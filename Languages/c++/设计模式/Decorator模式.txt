@@ -1,0 +1,87 @@
+#include <iostream>
+
+class Component {
+ public:
+  virtual ~Component() {
+  }
+  virtual void Operation() {
+  }
+
+ protected:
+  Component() {}
+};
+
+class ConcreteComponent : public Component {
+ public:
+  ConcreteComponent() {
+  }
+  ~ConcreteComponent() {
+  }
+  void Operation() {                  //在基类中是虚函数,因此在这里重新定义
+    std::cout << "ConcreteComponent operation..." << std::endl;
+  }
+};
+
+class Decorator : public Component {         //这里的类提供不是实体功能,只是作为一个中间层过渡使用.
+ public:
+  Decorator(Component* com) {
+    this->_com = com;
+  }
+  virtual ~Decorator() {
+    delete _com;
+  }
+  void Operation() {               //在基类中是虚函数,因此在这里重新定义
+  }
+
+ protected:
+  Component* _com; 
+};
+
+class ConcreteDecorator : public Decorator {
+ public:
+  ConcreteDecorator(Component* com)
+      : Decorator(com) {
+  }
+  ~ConcreteDecorator() {
+  }
+  void Operation() {                //这里拼合功能,Operation()的功能来之Component的另外一条分支的子类即concreteComponent
+    _com->Operation();              //同时有个现象,_com->Operation()可能指向Component继承下的任意一个子类,实际指向那一个,
+    this->AddedBehavior();          //看main函数的建立的对象,实际上这是很重要的一个地方,一定保证通过基类指针建立的是另一个分支的
+  }                                 //子类.这里可以理解为实际运行和设计分离.
+  void AddedBehavior() {
+    std::cout << "ConcreteDecorator::AddedBehacior..." << std::endl;
+  }
+};
+
+
+#include "decorator.h"
+
+int main(int argc, char* argv[]) {
+  Component* com = new ConcreteComponent();
+  Decorator* dec = new ConcreteDecorator(com);
+  dec->Operation();
+  delete dec;
+  return 0;
+}
+
+
+这种模式通过一种拼合功能的方式来完成最终的功能,每个单独的类有单独的功能,通过继承共同基类来拼合操作.
+
+				             Component
+					^                          ^
+					|                          |
+ConcreteComponent                Decorator
+																		 ^ 
+																		 |
+																 concreteDecotor		
+
+
+
+
+
+
+
+
+
+
+

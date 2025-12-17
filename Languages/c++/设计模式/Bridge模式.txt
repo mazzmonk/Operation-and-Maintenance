@@ -1,0 +1,120 @@
+/* Abstraction.h */
+
+class AbstractionImp;
+
+class Abstraction {
+ public:
+  virtual ~Abstraction() {
+  }
+  virtual void Operation() = 0;
+
+ protected:
+  Abstraction() {
+  }
+};
+
+class RefinedAbstraction : public Abstraction {
+ public:
+  RefinedAbstraction(AbstractionImp* imp);
+  ~RefinedAbstraction() {
+  }
+  void Operation();
+ private:
+  AbstractionImp* _imp;
+};
+
+/* Abstraction.cc */
+
+#include "Abstraction.h"
+#include "AbstractionImp.h"
+
+RefinedAbstraction::RefinedAbstraction(AbstractionImp* imp) {
+  _imp = imp;
+}
+
+void RefinedAbstraction::Operation() {
+  _imp->Operation();
+}
+
+/* AbstractionImp.h */
+
+class AbstractionImp {
+ public:
+  virtual ~AbstractionImp() {
+  }
+  virtual void Operation() = 0;
+ protected:
+  AbstractionImp() {
+  }
+};
+
+class ConcreteAbstractionImpA : public AbstractionImp {
+ public:
+  ConcreteAbstractionImpA() {
+  }
+  ~ConcreteAbstractionImpA() {
+  }
+  virtual void Operation();
+};
+
+class ConcreteAbstractionImpB : public AbstractionImp {
+ public:
+  ConcreteAbstractionImpB() {
+  }
+  ~ConcreteAbstractionImpB() {
+  }
+  virtual void Operation();
+};
+
+/* AbstractionImp.cc */
+
+#include "AbstractionImp.h"
+#include <iostream>
+
+void AbstractionImp::Operation() {
+  std::cout << "AbstractionImp... imp..." << std::endl;
+}
+
+void ConcreteAbstractionImpA::Operation() {
+  std::cout << "ConcreteAbstractionImpA..." << std::endl;
+}
+
+void ConcreteAbstractionImpB::Operation() {
+  std::cout << "ConcreteAbstractionImpB..." << std::endl;
+}
+
+#include "Abstraction.h"
+#include "AbstractionImp.h"
+#include <iostream>
+
+int main(int argc, char* argv[]) {
+  AbstractionImp *imp = new ConcreteAbstractionImpA();
+  Abstraction *abs = new RefinedAbstraction(imp);
+  abs->Operation();
+
+  return 0;
+}
+
+
+       Abstraction                                                  AbstractionImp
+       operation()(virtual) = 0                                     operation()(virtual) = 0
+           ^                                                ^                                       ^
+           |                                                |                                       |
+	RefinedAbstraction(AbstractionImp *imp)         ConcreteAbstractionImpA               ConcreteAbstractionImpB
+  opertion()                                      operation()(virtual)                  operation()(virtual)    
+
+具体的操作源于AbstractionImp类及子类,用Abstraction来包裹AbstractionImp.
+
+
+
+
+
+
+
+
+
+
+
+
+
+

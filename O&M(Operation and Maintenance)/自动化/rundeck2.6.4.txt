@@ -1,0 +1,9 @@
+#[root@test02 rundeck]#sed -i '$a RDECK_BASE="/apps/rundeck"' /etc/profile
+# [root@test02 rundeck]# sed -i '$a export RDECK_BASE' /etc/profile
+
+
+
+# sed -i 's#localhost#192.168.4.115#g' /opt/rundeck/etc/framework.properties 
+# sed -i 's#localhost#192.168.5.115#g' /opt/rundeck/server/config/rundeck-config.properties
+
+修改机器名，保证使用ip能访问

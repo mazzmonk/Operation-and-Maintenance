@@ -1,0 +1,1274 @@
+stackstorm是一个流程管理平台,用于连接外部事件或者搜寻外部事件或者外部事件发送到平台,然后触发一个或者一连串的操作,使用python开发
+
+用stackstorm的上的逻辑描述如下:
+
+sensor -> trigger -> rule -> action
+
+sensor处理事件,trigger用于触发,rule匹配规则,action对应动作
+
+
+容器中的stackstorm的目录结构中的包目录/opt/stackstorm/packs
+
+
+stackstorm的一个流程,都是以包的形式发布,就是pack,pack对应一个目录,目录结构如下:
+
+mymonitor
+├── actions
+│   ├── service_start.py
+│   ├── service_start.yaml
+├── config.schema.yaml
+├── pack.yaml
+├── rules
+│   └── service_rule.yaml
+└── sensors
+    ├── check_mysql_sensor.py
+    ├── check_mysql_sensor.pyc
+    └── check_mysql_sensor.yaml
+
+
+下面就mymonitor这个包来说明,这个包完成的功能.
+
+从外部mysql数据库中取出一条数据,根据取出的数据来匹配规则,然后触发一个对应操作(启动vsftp),对应的数据库及数据如下:
+
+MariaDB [(none)]> select * from test.monitor;
++----+---------------+--------------+--------------+-------+----------------------+
+| id | ipaddress     | service_name | operation_id | state | operation_command    |
++----+---------------+--------------+--------------+-------+----------------------+
+|  1 | 192.168.10.15 | ftp          |            1 |     2 | service vsftpd start |
+|  2 | 192.168.10.15 | nginx        |            2 |     4 | service nginx start  |
+|  3 | 192.168.10.15 | httpd        |            3 |     0 | service httpd start  |
++----+---------------+--------------+--------------+-------+----------------------+
+
+
+具体的操作步骤就是从数据库中读取一条记录,匹配ipaddress这个字段,如果是192.168.10.15就触发远程到192.168.10.15这台机器上执行"service vsftpd start"的操作
+
+
+在说明stackstorm的具体组件之前,必须定义2个文件,config.schema.yaml,pack.yaml
+
+config.schema.yaml可以理解为定义了全局变量,pack里的任何代码都可以通过方法
+
+self._config.get('object')
+
+来读取文件中的内容,具体的如何取出内容,见后续的代码解释
+
+内容如下: 这里定义了连接数据库的相关信息
+config.schema.yaml
+#######################################################
+---
+mysql_accounts:
+  description: "MYSQL accounts"
+  type: "object"								#这里可能是array等等
+  required: true
+  properties:
+    hosts:
+      description: "mysql server ipaddress."
+      type: "string"
+      required: true
+      default: "192.168.10.15"
+    username:
+      description: "mysql server username."
+      type: "string"
+      required: true
+      default: "admin"
+    password:
+      description: "mysql server password."
+      type: "string"
+      required: true
+      default: "123456"
+    database:
+      description: "mysql server database."
+      type: "string"
+      required: true
+      default: "test"
+#######################################################
+
+
+pack.yaml 是一个关于pack的描述
+内容如下: 这里定义了包的信息
+pack.yaml
+#######################################################
+---
+ref: mymonitor								# 可以理解为一个别名
+name: mymonitor								# pack名字
+description: automatic monitoring Actions/Sensors for StackStorm
+keywords:									# 目前未知有什么用处
+  - test01
+  - test02
+  - test03
+version: 0.1.0								# 这里必须是0.0.0这个格式,必须是3位
+author: jack blue
+email: abc@stackstorm.com
+#######################################################
+
+下面开始详细介绍组件
+
+1.sensor用于搜索外部事件或者等待外部事件,对应与代码中是2种sensor:
+Sensor 这类是一个基类,来之于st2reactor.sensor.base,处理等待事件,和普通事件
+代码:
+from st2reactor.sensor.base import Sensor
+
+自定义的sensor类必须继承于Sensor,详细的代码后续解释
+
+PollingSensor 这类是一个基类,来之于st2reactor.sensor.base,处理轮询事件
+代码:
+from st2reactor.sensor.base import PollingSensor
+
+自定义的sensor类必须继承于PollingSensor
+
+2.trigger用于采集从sensor传递过来的内容,并填充自己的数据结构payload,此数据结构必须在yaml文件中事先定义好(此yaml文件一般来之于sensor的yaml文件定义),payload的作用很重要,后续的rule实际就是判断在trigger中填充的payload内容,然后匹配规则
+
+trigger实际官方提供不少,可以直接使用,这里采用自己定义的方式
+
+把sensor和trigger放在一起说明,是因为sensor的yaml文件中定义了trigger
+
+check_mysql_sensor.yaml
+#######################################################
+---
+class_name: "check_mysql_sensor"			# 自定义sensor类的名称,必须继承于Sensor或者PollingSensor基类
+entry_point: "check_mysql_sensor.py"		# sensor代码文件
+description: "check mysql table"			# 描述功能
+poll_interval: 20							# 使用了PollingSensor(轮询sensor),轮询的时间间隔
+trigger_types:								# 这里开始定义trigger
+  -
+    name: "service_trigger"					# 名称
+    description: "startup ftp service"
+    payload_info:							# 开始定义payload结构,这里结构中的值是对应到数据库中的字段
+        - "id"								# 在后续的代码中,会根据这个结构向这几个字段中填充内容
+        - "hosts"
+        - "service_name"
+        - "operation_id"  
+		- "state"
+        - "operation_command"
+#######################################################
+
+
+下面就sensor的代码说明:
+##############################################################
+import MySQLdb
+import sys
+
+from st2reactor.sensor.base import PollingSensor	# 导入基类的需要的包
+
+
+class check_mysql_sensor(PollingSensor):	# 类名必须和yaml中的对应,继承于PollingSensor基类		
+	
+	# 初始化成员变量或者其他变量,__init__是python自带内置函数,
+	# sensor_service,config,poll_interval应该是从基类继承下来的
+	def __init__(self, sensor_service, config = None, poll_interval = None):	
+		
+		# super是python自带内置函数
+		super(check_mysql_sensor, self).__init__(sensor_service = sensor_service,
+                    			config = config,		# 读取config.schema.yaml的内容
+					poll_interval = poll_interval)		# 从config.schema.yaml中读取poll_interval值
+		
+		self._logger = self._sensor_service.get_logger(__name__)
+		
+	# 设置数据库连接,以"_"开头的变量,表示类的成员变量,可以理解为私有,全类可以访问
+	# 设置多个成员变量,self._host,self._username,self._password,self._database
+	def setup(self):
+		# self._config.get('')方法,继承于基类,"mysql_accounts"对应到config.schema.yaml文件
+		# "mysql_accounts"是一个object类型,get方法对应为object的方法
+		self._mysql_accounts = self._config.get('mysql_accounts')		
+		if self._mysql_accounts is None:
+            		raise ValueError('"mysql_accounts" config value is required to connect mysql.')
+        	if len(self._mysql_accounts) == 0:
+            		raise ValueError('at least one account is required to connect mysql.')
+		
+		self._host = self._mysql_accounts.get('hosts')	
+		if self._host is None:
+			raise ValueError('"mysql hosts" config value is required to connect mysql.')
+
+		self._username = self._mysql_accounts.get('username')	
+		if self._username is None:
+			raise ValueError('"mysql username" config value is required to connect mysql.')
+
+		self._password = self._mysql_accounts.get('password')	
+		if self._password is None:
+			raise ValueError('"mysql password" config value is required to connect mysql.')
+
+		self._database = self._mysql_accounts.get('database')	
+		if self._database is None:
+			raise ValueError('"mysql database" config value is required to connect mysql.')
+		
+	# 主体,如果是轮询的sensor,使用poll,否则用run
+	# 定义具体的sensor功能
+	def poll(self):	
+
+		# 数据库连接
+		database_handle = MySQLdb.connect(self._host,self._username,self._password,self._database)
+		cursor = database_handle.cursor()
+		cursor.execute("select * from monitor")
+		try:
+			# 读取第一条数据
+			data_set = cursor.fetchone()
+
+			# 这里是重点,填充payload结构,这个结构是在sensor的yaml中定义对应
+			# 这个结构将传递给后续的rule
+			# 数据传递传递主要使用这个方法
+			payload = {
+        		'id' : row[0],
+        		'hosts' : row[1],
+        		'service_name' : row[2], 
+        		'operation_id' : row[3],
+        		'state' : row[4],
+        		'operation_command' : row[5]
+      		}
+
+			
+			# 定义trigger变量,trigger的值是在check_mysql_sensor.yaml中定义的
+			trigger = 'mymonitor.service_trigger'
+
+			# dispatch方法主要用于捆绑trigger和payload结构,传递到rule
+			self._sensor_service.dispatch(trigger = trigger, payload = payload)
+		except:
+		    print "Error: unable to fetch data"
+		    database_handle.close()
+		
+
+	def cleanup(self):
+		pass
+	
+	def add_trigger(self, trigger):
+		pass
+
+	def update_trigger(self, trigger):
+		pass
+
+	def remove_trigger(self, trigger):
+		pass
+
+#############################################################################################
+
+
+3.rule是连接trigger,criteria,action的纽带,使用那个trigger,在文件中定义匹配规则,给action传入参数
+但是criteria部分不是必须的
+
+service_rule.yaml
+########################################
+---
+  name: "service_rule"
+  pack: "mymonitor"
+  description: "rule with mysql check"
+  enabled: true
+
+  trigger:
+    type: "mymonitor.service_trigger"
+    parameters: {}
+
+  criteria:									# 这里是重点,匹配规则,在payload中的hosts值等于192.168.10.15
+    trigger.hosts:							# 对应payload中的hosts,可以理解为抽象化自定义的trigger,name为trigger的某个属性
+      type: "equals"						# 等于,这个type的内容,可以查看官方文档,有不等于,大于等等很多值
+      pattern: "192.168.10.15"				# 具体匹配的值
+
+  action:									# 需要的操作,结合后边的action一起说明
+    ref: "mymonitor.service_start"
+    parameters:
+      hosts: "{{ trigger.hosts }}|use_none"	# 这个值是上述criteria中的trigger.hosts,但是,可以不在criteria中出现,直接使用
+      username: 'root'
+      password: '123456'
+########################################
+
+
+4.action,详细的操作,可以自定义,也可以包裹stackstorm默认提供的,如果需要包裹默认的操作,可以通过
+
+st2 runner list
+
+查看.默认提供的runner有很多,比如:python-script,remote-shell-cmd,remote-shell-script等等.
+特别的,这些runner本身都带有很多参数,可以直接使用,对应的如果在action的yaml文件中定义了参数
+比如:在开始的测试过程中,定义了如下的action的yaml文件
+其中有参数hosts,username,password,command,这几个参数中前3个会覆盖remote-shell-script这个runner的同名参数,最后一个参数,则是多出来的参数.
+########################################
+---
+  name: "service_start"
+  pack: "mymonitor"
+  runner_type: "remote-shell-script"
+  description: "start ftp service"
+  enabled: true
+  entry_point: "service_start.py"
+  parameters:
+    hosts:
+      type: "string"
+      description: "from mysql table"
+      required: true
+    username:
+      type: "string"
+      description: "ssh username"
+      required: true
+    password:
+      type: "string"
+      description: "ssh password"
+      required: true
+    command:
+      type: "string"
+      description: "remote command"
+      required: true
+
+########################################
+
+
+实际action文件如下:
+service_start.yaml
+########################################
+---
+  name: "service_start"
+  pack: "mymonitor"
+  runner_type: "remote-shell-script"
+  description: "start ftp service"
+  enabled: true
+  entry_point: "service_start.py"
+
+########################################
+
+没有任何参数,就是说这里我们可以使用remote-shell-script的自带参数hosts,username,password
+而这几个参数的值则是从rule中的action部分采集到.
+remote-shell-script这个runner作用是远程执行脚本,默认具有很多参数
+
+因此service_start.py中定义远程需要执行的脚本
+
+另外:action定义的脚本和yaml文件中的参数这个选项之间有一个内在关系,就是在yaml文件中定义的参数,如果不是remote-shell-script
+带有的参数,则在脚本中就必须处理这个参数.
+
+比如:在yaml文件中定义了一个test的参数,在脚本的编写的时候就必须有类似如下的内容,就是说,test这个参数是脚本运行时除了remote-shell-script带有的参数外的一个参数.
+
+脚本里处理的方式可能如下:
+
+'test': sys.argv[1],
+
+简单的说就是这个脚本,比如叫service_start.py,除了带有remote-shell-script这个runner的所有参数以外,还有多一个参数test
+
+对应的yaml文件可能是如下
+
+########################################
+---
+  name: "service_start"
+  pack: "mymonitor"
+  runner_type: "remote-shell-script"
+  description: "start ftp service"
+  enabled: true
+  entry_point: "service_start.py"
+  parameters:
+    test:
+      type: "string"
+      description: "test"
+      required: true
+
+########################################
+
+这个参数必须在脚本中处理,比如上面的描述
+
+
+service_start.py
+########################################
+
+#!/usr/bin/env python
+
+import sys
+import os
+
+# 这里表示如果有额外参数,默认runner的参数不用在脚本中描述和处理
+#'test': sys.argv[1],
+
+commands = "service vsftpd start"
+os.system(commands)
+########################################
+
+
+Datastore的K/V功能及动态传输参数,在sensor,active,rule之间共享变量
+在整个st2中,如果需要给sensors,active,rule传输参数时候,st2使用了datastore功能,通过K/V的方式来设置
+需求来之于,当从sensor采集的数据,其中包含一些参数,需要传输给rule,active,此时就需要用到datastore的功能
+这个功能模块可以用st2的命令行模式,也可以用python client的方式
+
+演示: 设置k/v对,update值
+
+>>> from st2client.models import KeyValuePair
+>>> from st2client.client import Client
+>>> client = Client(base_url='http://localhost')
+>>> client.keys.update(KeyValuePair(name='HOSTNAME', value='12.12.12.12'))
+<KeyValuePair name=HOSTNAME,value=12.12.12.12>
+>>> hs = client.keys.get_by_name(name='HOSTNAME')
+>>> hs.value
+u'12.12.12.12'
+>>> hs = client.keys.get_by_name(name='HOSTNAME')
+>>> hs.value = '13.13.13.13'
+>>> client.keys.update(hs)
+<KeyValuePair name=HOSTNAME,value=13.13.13.13>
+>>> st2 key list
++-------------------+-------------------+--------+-----------+--------------+------+------------------+
+| name              | value             | secret | encrypted | scope        | user | expire_timestamp |
++-------------------+-------------------+--------+-----------+--------------+------+------------------+
+| HOSTNAME          | "192.168.10.15"   | False  | False     | st2kv.system |      |                  |
+| OPERATIONCOMMAND  | "service vsftpd   | False  | False     | st2kv.system |      |                  |
+
+
+后续将添加,更新sensor及rule,action等等文件
+
+
+如下是程序中的部分
+###################################################
+def setup(self):
+				//在setup部分添加如下的内容,和后续的部分配合一起完成在python中使用st2的datastore功能
+    			self._client = Client(base_url='http://localhost')
+                self._client.keys.update(KeyValuePair(name='HOSTNAME', value='127.0.0.1'))
+                self._client.keys.update(KeyValuePair(name='OPERATIONCOMMAND', value='ls /tmp'))
+
+def poll(self):
+                database_handle = MySQLdb.connect(self._host,self._username,self._password,self._database)
+                cursor = database_handle.cursor()
+                cursor.execute("select * from monitor")
+                try:
+                        data_set = cursor.fetchone()
+                        id_from_db = data_set[0]
+                        ipaddress_from_db = data_set[1]
+                        service_name_from_db = data_set[2]
+                        operation_id_from_db = data_set[3]
+                        state_from_db = data_set[4]
+                        operation_command_from_db = data_set[5]
+
+                        payload = {
+                                'id' : id_from_db,
+                                'hosts' : ipaddress_from_db,
+                                'service_name' : service_name_from_db,
+                                'operation_id' : operation_id_from_db,
+                                'state' : state_from_db,
+                                'operation_command' : operation_command_from_db
+                        }
+
+						//这里开始设置datastore
+						//这里碰到一个序列化的问题,在使用datastore的功能设置K/V对的时候,值是python的
+						//"str"类型,而在rule中用于过滤的时候用设置的K/V对的时候用的python的jinja模块,此模块需要json类型
+						//的"string",此时就会出现rule中无法匹配datastore设置的K/V
+						//json.dumps()作用是将普通的值序列化成json类型的数据,但是这里不用如此使用
+                        hostname = self._client.keys.get_by_name(name='HOSTNAME')
+                        #hostname.value = json.dumps(ipaddress_from_db)
+                        hostname.value = ipaddress_from_db
+
+                        operation_command = self._client.keys.get_by_name(name='OPERATIONCOMMAND')
+                        #operation_command.value = json.dumps(operation_command_from_db)
+                        operation_command.value = operation_command_from_db
+
+                        self._client.keys.update(hostname)
+                        self._client.keys.update(operation_command)
+
+ 
+                        trigger = 'mymonitor.service_trigger'
+                        self._sensor_service.dispatch(trigger = trigger, payload = payload)
+                except:
+                        print "Error: unable to fetch data"
+                        database_handle.close()
+
+
+###################################################
+
+使用st2的datastore功能来设置rule中的动态匹配
+###################################################
+---
+  name: "service_rule"
+  pack: "mymonitor"
+  description: "rule with mysql check"
+  enabled: true
+
+  trigger:
+    type: "mymonitor.service_trigger"
+    parameters: {}
+
+  criteria:
+    trigger.hosts:
+      type: "equals"
+      pattern: "{{st2kv.system.HOSTNAME|string}}"
+
+
+  action:
+    ref: "mymonitor.service_start"
+    parameters:
+      hosts: "{{st2kv.system.HOSTNAME|use_none}}"   #这里可以写{{trigger.hosts|use_none}}
+      username: 'root'
+      password: '123456'
+
+###################################################
+
+这里有几个重点:
+st2kv.system.HOSTNAME				--	在sensor已经定义了,上述程序中有描述
+
+如此做的目的就是当criteria部分匹配规则的时候,匹配的值不是一个固定的字符串或者数字时候,需要用一个动态值,st2提供了一个datastore的功能,
+即是设置一个K/V对,可以用于sensor,rule,action部分做为通用参数,可以理解为在不同部分传递参数.
+
+匹配过滤这部分功能是来自python的jinja模块,jinja模块则需要json类型的字符串,而在sensor中设置的是python类型的字符串.
+这里有个奇怪的地方,就是在sensor中就是用json序列化这个K/V对,在rule的criteria中直接使用st2kv.system.HOSTNAME仍然不能识别,并且有报错:
+  raise TypeError(repr(o) + " is not JSON serializable")
+TypeError: <st2common.services.keyvalues.KeyValueLookup object at 0x7f8992369f10> is not JSON serializable
+.....
+
+在action部分中使用st2kv.system.HOSTNAME也有类似报错,在官方的说明中,当action中使用{{st2kv.system.HOSTNAME|use_none}}就可以识别到st2kv.system.HOSTNAME这个键对应的值,官方的关于use_none的解释很奇怪 https://docs.stackstorm.com/rules.html
+这里有时候不用也能用,但是不确定,因此必须用
+
+
+
+而在criteria中的use_none不管用,尝试用官方https://docs.stackstorm.com/reference/jinja.html提供的from_json_string,to_json_string等等值都没有起作用
+
+根据上述的官方文档中描述中,有提示
+
+StackStorm supports Jinja variable templating in Rules, Action Chains, and Actions etc. Jinja templates support filters to allow some advanced capabilities in working with variables.
+
+这里提示jinja的文档中有支持的操作,http://jinja.pocoo.org/docs/dev/templates/#variables这里是jinja提供的文档,其中
+List of Builtin Filters部分描述了可以过滤器支持的值,尝试过tojson,format,string等等值,最终,只有string这个值解决问题
+
+
+在action中有些值可以直接使用,即是在payload中定义的内容,通过trigger.xxx的方式用
+
+action:
+    ref: "mymonitor.service_start"
+    parameters:
+      hosts: "{{trigger.hosts}}"   
+      username: "{{trigger.username}}"
+      password: "{{trigger.password}}"
+
+这里的trigger.hosts,trigger.username,trigger.password这几个值的"."后的部分是在payload中必须有定义,trigger.hosts这几个值不用在
+criteria中出现.
+
+
+
+st2中的workflow包括2种方式来实现,ActionChain和Mistral
+
+官方描述:
+ActionChain 
+它提供了一个简单的语法来定义一系列操作,一个接一个地运行它们,将数据从一个操作传递到另一个操作,直到成功或失败.
+当你想要速度和简单时使用ActionChain。
+
+Mistral是一个专门的工作流服务,起源于OpenStack,集成并与StackStorm捆绑在一起.借助Mistral,您可以定义复杂的工作流程逻辑,其中包含嵌套的工作流程,分支,连接以及错误处理,重试和延迟策略.
+
+当你需要强力和韧性功能时使用Mistral
+
+
+这里建立一个新的例子myactionchain,主要逻辑就是使用myactionchain.service_check这个action来检测vsftpd这个服务是否在运行,如果没有就
+运行myactionchain.service_start这个action来启动,否则就运行core.local这个action来输出一行内容
+
+用于检测服务是否运行的action中的具体命令是:telnet 192.168.10.15 21,既是在myactionchain.service_check中对应的python的主要内容
+
+myactionchain
+|-- actions
+|   |-- chains
+|   |   |-- myactionchain.yaml
+|   |-- myactionchain.meta.yaml
+|   |-- service_check.py
+|   |-- service_check.yaml
+|   |-- service_start.py
+|   `-- service_start.yaml
+|-- config.schema.yaml
+|-- pack.yaml
+|-- rules
+|   |-- service_rule.yaml
+`-- sensors
+    |-- myactionchain_sensor.py
+    |-- myactionchain_sensor.pyc
+    `-- myactionchain_sensor.yaml
+
+
+config.schema.yaml文件的内容和数据库及表的内容与mymonitor的相同
+
+pack.yaml内容如下: 
+###################################################
+---
+ref: myactionchain
+name: myactionchain
+description: test actionchain 
+keywords:
+  - test01
+  - test02
+  - test03
+version: 0.1.0
+author: jack blue
+email: abc@stackstorm.com
+###################################################
+
+
+
+myactionchain.meta.yaml内容,这是actionchain的注册用配置文件
+###################################################
+---
+  name: "myactionchain"
+  description: "actions chain"
+  runner_type: "action-chain"
+  entry_point: "chains/myactionchain.yaml"
+
+  enabled: true
+###################################################
+
+使用st2 action create myactionchain.meta.yaml方式来注册到系统中
+
+需要注意的地方就是meta文件必须在action目录中,具体的入口用的配置文件必须在chain目录中
+此例子中就是myactionchain.meta.yaml必须在action目录中,myactionchain.yaml必须在action/chain目录中
+
+
+myactionchain.yaml内容
+###################################################
+---
+  vars:
+    HOSTS: '192.168.10.15'						#这里定义的三个变量的内容局限于此文件中用,定义变量不是必须的
+    USERNAME: 'root'
+    PASSWORD: '123456'
+
+  chain:
+    - 
+      name: "c1"
+      ref: "myactionchain.service_check"		
+      parameters:
+        hosts: "{{ HOSTS }}"
+        username: "{{ USERNAME }}"
+        password: "{{ PASSWORD }}"
+      on-success: "c3"							#这里比较奇怪,检查动作成功了会跳到c3,而正常情况下应该是检查动作失败执行
+      on-failure: "c2"
+    -
+      name: "c2"
+      ref: "core.local"
+      parameters:
+        cmd: "echo \"c2: parent exec is {{action_context.parent.execution_id}}.\""
+    -
+      name: "c3"
+      ref: "myactionchain.service_start"
+      parameters:
+        hosts: "{{ HOSTS }}"
+        username: "{{ USERNAME }}"
+        password: "{{ PASSWORD }}"
+  default: "c1"								#这里指的是整个chain的开始点,如果不写,就会从第一个开始
+
+###################################################
+
+
+service_check.yaml内容
+###################################################
+---
+  name: "service_check"
+  pack: "myactionchain"
+  runner_type: "remote-shell-script"
+  description: "check ftp service"
+  enabled: true
+  entry_point: "service_check.py"
+
+###################################################
+
+
+service_check.py内容
+###################################################
+#!/usr/bin/env python
+
+import sys
+import os
+
+commands = "telnet 192.168.10.15 21" 
+os.system(commands)
+
+###################################################
+
+
+service_start.yaml内容
+###################################################
+---
+  name: "service_start"
+  pack: "myactionchain"
+  runner_type: "remote-shell-script"
+  description: "start ftp service"
+  enabled: true
+  entry_point: "service_start.py"
+###################################################
+
+
+service_start.py内容
+###################################################  
+#!/usr/bin/env python
+
+import sys
+import os
+
+arg = "service vsftpd start"
+
+commands = arg
+os.system(commands)
+################################################### 
+
+service_rule.yaml内容
+###################################################
+---
+  name: "service_rule"
+  pack: "myactionchain"
+  description: "rule with mysql check"
+  enabled: true
+
+  trigger:
+    type: "myactionchain.service_trigger"
+    parameters: {}
+
+  criteria:
+    trigger.hosts:
+      type: "equals"
+      pattern: "{{ st2kv.system.ipaddress|string }}"
+
+  action:
+    ref: "myactionchain.myactionchain"
+###################################################
+
+
+myactionchain_sensor.yaml内容
+###################################################
+---
+  class_name: "myactionchain_sensor"
+  entry_point: "myactionchain_sensor.py"
+  description: "check mysql table and etc.."
+  poll_interval: 20
+  trigger_types:
+    -
+      name: "service_trigger"
+      description: "trigger service related actions"
+      payload_info:
+        - "id"
+        - "hosts"
+        - "service_name"
+        - "operation_id"
+        - "state"
+        - "operation_command"  
+###################################################
+
+
+myactionchain_sensor.py内容
+这里必须注意的一个关于datastore的地方,就是每个pack中定义的K/V值只能在本pack的命名空间中使用,无法互相窜用.
+###################################################
+import MySQLdb
+import sys
+
+from st2reactor.sensor.base import PollingSensor
+from st2client.models import KeyValuePair
+from st2client.client import Client
+
+
+class myactionchain_sensor(PollingSensor):
+  def __init__(self, sensor_service, config = None, poll_interval = None):
+    super(myactionchain_sensor, self).__init__(sensor_service = sensor_service,
+                                              config = config,
+                                              poll_interval = poll_interval)
+
+    self._logger = self._sensor_service.get_logger(__name__)
+
+  def setup(self):
+    self._mysql_accounts = self._config.get('mysql_accounts')
+    if self._mysql_accounts is None:
+      raise ValueError('mysql_accounts config value is required to connect mysql.')
+
+    if len(self._mysql_accounts) == 0:
+      raise ValueError('at least one account is required to connect mysql.')
+
+    self._host = self._mysql_accounts.get('hosts')	
+    print self._host
+    if self._host is None:
+      raise ValueError('mysql hosts config value is required to connect mysql.')
+
+    self._username = self._mysql_accounts.get('username')	
+    print self._username
+    if self._username is None:
+      raise ValueError('mysql username config value is required to connect mysql.')
+
+    self._password = self._mysql_accounts.get('password')	
+    print self._password
+    if self._password is None:
+      raise ValueError('mysql password config value is required to connect mysql.')
+
+    self._database = self._mysql_accounts.get('database')	
+    print self._database
+    if self._database is None:
+      raise ValueError('mysql database config value is required to connect mysql.')
+    
+    self._client = Client(base_url='http://localhost')
+    self._client.keys.update(KeyValuePair(name='ipaddress', value='127.0.0.1')) 
+    self._client.keys.update(KeyValuePair(name='ops', value='ls /tmp')) 
+
+
+  def poll(self):	
+    print 'I in one'
+    database_handle = MySQLdb.connect(self._host,self._username,self._password,self._database)
+    try:
+      print 'I in two'
+      cursor = database_handle.cursor()
+      print 'I in three'
+      cursor.execute("select * from monitor")
+
+      row = cursor.fetchone()
+      #data_from_mysql = cursor.fetchall()
+      #for row in data_from_mysql:
+      payload = {
+        'id' : row[0],
+        'hosts' : row[1],
+        'service_name' : row[2], 
+        'operation_id' : row[3],
+        'state' : row[4],
+        'operation_command' : row[5]
+      }
+
+      hostname = self._client.keys.get_by_name(name='ipaddress')
+      hostname.value = row[1]
+      operation_command = self._client.keys.get_by_name(name='ops')
+      operation_command.value = row[5]
+      self._client.keys.update(hostname)
+      self._client.keys.update(operation_command)
+
+      trigger = 'myactionchain.service_trigger'
+      self._sensor_service.dispatch(trigger = trigger, payload = payload)
+    except:
+      print "Error: unable to fetch data"
+      database_handle.close()
+
+  def cleanup(self):
+    pass
+
+  def add_trigger(self, trigger):
+    pass
+
+  def update_trigger(self, trigger):
+    pass
+
+  def remove_trigger(self, trigger):
+    pass
+
+###################################################
+
+
+
+最后附上mymonitor中的所有文件的详细内容
+
+
+FAQ:
+1.用容器启动st2的时候,有时候会提示连接到本地的127.0.0.1:27017端口失败
+连接mongodb失败,修改/etc/st2/st2.conf文件中的内容为实际的情况
+
+2.在执行单独的sensor也会有这种提示
+使用环境变量方式来设置
+
+export mongo=172.19.0.5
+export postgres=172.19.0.4
+export redis=172.19.0.6
+export rabbitmq=172.19.0.2
+
+export MONGO_HOST=172.19.0.5
+export REDIS_HOST=172.19.0.6
+export RABBITMQ_HOST=172.19.0.2
+export POSTGRES_HOST=172.19.0.4
+
+
+
+3.在安装mysql的python模块以后,执行sensor时候调用mysql模块的时候会提示找不到mysql模块
+同样用环境变量的方式来设置
+
+export PYTHONPATH=/usr/local/lib/python2.7/dist-packages
+
+
+
+4.访问UI WEB时候无法进入,而且有报错
+Unable to retrieve execution "5ad5977f4002a100f8dead57".See details in developer tools console
+
+连接到mongodb上,删除action_execution_d_b这个集合中的这条数据
+>show dbs
+>use st2
+>show collections
+>db.action_execution_d_b.remove({"_id" : ObjectId("5ad5977f4002a100f8dead57")})
+
+
+5.当使用python的client来完成datastore时候,如果有关于
+requests.exceptions.HTTPError: 401 Client Error: Unauthorized
+MESSAGE: Unauthorized - One of Token or API key required. for url: http://localhost:9101/v1/keys/?name=os_keystone_endpoint
+的报错
+
+因为在本地配置文件中的token其他的地方读取不到,因此设置如下,token值来之~/.st2/token-st2admin文件
+export ST2_AUTH_TOKEN=c70ec4bec6ca4860ac99fcab3407d814
+
+
+如果仍然不生效
+重置token值,用户密码来之上面的文件,如此token值改变
+st2 login st2admin --password 'DedAMuSe' --write-password
+
+重新执行
+export ST2_AUTH_TOKEN=dkfdjfd
+
+
+
+
+x.debug具体的实例和相关的trigger
+
+st2 trigger-instance list --trigger=mymonitor.service_trigger
+
+st2 trigger-instance list -a "id" "occurence_type" "payload" -y --trigger=mymonitor.service_trigger -n 5
+
+id: 5ae5a1904002a10719f96724
+    payload:
+        id: 1
+        ipaddress: 192.168.10.15
+        operation_id: 1
+        service_name: ftp
+-   id: 5ae5a1a44002a10719f96732
+    payload:
+        id: 1
+        ipaddress: 192.168.10.15
+        operation_id: 1
+        service_name: ftp
+-   id: 5ae5a1b84002a10719f96740
+    payload:
+        id: 1
+        ipaddress: 192.168.10.15
+        operation_id: 1
+        service_name: ftp
+-   id: 5ae5a1cc4002a10719f9674e
+    payload:
+        id: 1
+        ipaddress: 192.168.10.15
+        operation_id: 1
+        service_name: ftp
+-   id: 5ae5a1e04002a10719f9675c
+    payload:
+        id: 1
+        ipaddress: 192.168.10.15
+        operation_id: 1
+        service_name: ftp
+
+
+st2 rule-enforcement list --rule=mymonitor.service_rule
++--------------------------+---------------------+---------------------+---------------------+---------------------+
+| id                       | rule.ref            | trigger_instance_id | execution_id        | enforced_at         |
++--------------------------+---------------------+---------------------+---------------------+---------------------+
+| 5ae5a2314002a10719f96798 | mymonitor.service_r | 5ae5a2304002a10719f | 5ae5a2304002a10719f | 2018-04-29T10:45:04 |
+|                          | ule                 | 96794               | 96797               | .844646Z            |
+| 5ae5a21d4002a10719f9678a | mymonitor.service_r | 5ae5a21c4002a10719f | 5ae5a21c4002a10719f | 2018-04-29T10:44:44 |
+|                          | ule                 | 96786               | 96789               | .838339Z            |
+| 5ae5a2094002a10719f9677c | mymonitor.service_r | 5ae5a2084002a10719f | 5ae5a2084002a10719f | 2018-04-29T10:44:24 |
+|                          | ule                 | 96778               | 9677b               | .841234Z            |
+| 5ae5a1f54002a10719f9676e | mymonitor.service_r | 5ae5a1f44002a10719f | 5ae5a1f44002a10719f | 2018-04-29T10:44:04 |
+|                          | ule                 | 9676a               | 9676d               | .822802Z 
+
+
+st2 rule-enforcement list --rule=mymonitor.service_rule -y
+-   enforced_at: '2018-04-29T10:47:04.970247Z'
+    execution_id: 5ae5a2a94002a10719f967eb
+    id: 5ae5a2a94002a10719f967ec
+    rule:
+        ref: mymonitor.service_rule
+    trigger_instance_id: 5ae5a2a84002a10719f967e8
+-   enforced_at: '2018-04-29T10:47:24.997714Z'
+    execution_id: 5ae5a2bd4002a10719f967f9
+    id: 5ae5a2bd4002a10719f967fa
+    rule:
+        ref: mymonitor.service_rule
+    trigger_instance_id: 5ae5a2bc4002a10719f967f6
+
+
+
+st2-rule-tester --config-dir /etc/st2/ --trigger-instance-id=5ae69c494002a12ef8ee0bc2 --rule-ref=mymonitor.service_rule
+
+
+注册pack,sensor,trigger,action
+st2ctl reload --register-all
+
+Start services:
+sudo st2ctl start
+
+Register sensors, rules and actions:
+sudo st2ctl reload
+
+st2 action create my_action_metadata.yaml
+st2ctl reload --register-actions
+
+更新rule,action
+st2 rule update mymonitor.service_rule service_rule.yaml
+st2 action update mymonitor.service_start service_start.yaml
+
+
+st2 run core.remote hosts='192.168.10.15' username='root' password='123456' cmd='service vsftpd start'
+
+debug sensor,很有用处
+
+/opt/stackstorm/st2/bin/st2sensorcontainer --config-file=/etc/st2/st2.conf --sensor-ref=mymonitor.check_mysql_sensor
+
+
+st2 run packs.setup_virtualenv packs=myactionchain
+
+
+在pack建立完成以后,最好的方式先测试action的部分,一般来说action匹配rule的部分问题最多
+
+
+通过ps的命令,可以看见所有运行中的sensor以python脚本形式运行,如下例子:
+
+########################################
+
+st2      12108  0.1  1.1 119044 43316 ?        S    Apr29   0:32 /opt/stackstorm/virtualenvs/examples/bin/python /opt/stackstorm/st2/local/lib/python2.7/site-packages/st2reactor/container/sensor_wrapper.py --pack=examples --file-path=/opt/stackstorm/packs/examples/sensors/sample_polling_sensor.py --class-name=SamplePollingSensor --trigger-type-refs=examples.polling_event --parent-args=["--config-file", "/etc/st2/st2.conf"] --poll-interval=10
+st2      12113  0.1  1.1 121776 44104 ?        S    Apr29   0:32 /opt/stackstorm/st2/bin/python /opt/stackstorm/st2/local/lib/python2.7/site-packages/st2reactor/container/sensor_wrapper.py --pack=linux --file-path=/opt/stackstorm/packs/linux/sensors/file_watch_sensor.py --class-name=FileWatchSensor --trigger-type-refs=linux.file_watch.line --parent-args=["--config-file", "/etc/st2/st2.conf"]
+st2      12115  0.1  1.3 135636 50872 ?        S    Apr29   0:32 /opt/stackstorm/virtualenvs/email/bin/python /opt/stackstorm/st2/local/lib/python2.7/site-packages/st2reactor/container/sensor_wrapper.py --pack=email --file-path=/opt/stackstorm/packs/email/sensors/imap_sensor.py --class-name=IMAPSensor --trigger-type-refs=email.imap.message --parent-args=["--config-file", "/etc/st2/st2.conf"]
+st2      12130  0.1  1.3 135640 50836 ?        S    Apr29   0:33 /opt/stackstorm/virtualenvs/email/bin/python /opt/stackstorm/st2/local/lib/python2.7/site-packages/st2reactor/container/sensor_wrapper.py --pack=email --file-path=/opt/stackstorm/packs/email/sensors/smtp_sensor.py --class-name=SMTPSensor --trigger-type-refs=email.smtp.message --parent-args=["--config-file", "/etc/st2/st2.conf"]
+
+########################################
+
+安装python的mysql模块
+apt-get install python-mysqldb
+pip install mysql-python
+
+
+mymonitor详细内容:
+*********************************************************************************************************************
+config.schema.yaml
+#######################
+---
+mysql_accounts:
+  description: "MYSQL accounts"
+  type: "object"
+  required: true
+  properties:
+    hosts:
+      description: "mysql server ipaddress."
+      type: "string"
+      required: true
+      default: "192.168.10.15"
+    username:
+      description: "mysql server username."
+      type: "string"
+      required: true
+      default: "admin"
+    password:
+      description: "mysql server password."
+      type: "string"
+      required: true
+      default: "123456"
+    database:
+      description: "mysql server database."
+      type: "string"
+      required: true
+      default: "test"
+
+#######################
+
+
+pack.yaml
+#######################
+---
+ref: mymonitor
+name: mymonitor
+description: automatic monitoring Actions/Sensors for StackStorm
+keywords:
+  - test01
+  - test02
+  - test03
+version: 0.1.0
+author: jack blue
+email: abc@stackstorm.com
+#######################
+
+
+actions/service_start.yaml
+#######################
+---
+  name: "service_start"
+  pack: "mymonitor"
+  runner_type: "remote-shell-script"
+  description: "start ftp service"
+  enabled: true
+  entry_point: "service_start.py"
+#######################
+
+
+actions/service_start.py
+#######################
+#!/usr/bin/env python
+
+import sys
+import os
+
+
+commands = "service vsftpd start"
+os.system(commands)
+#######################
+
+
+rules/service_rule.yaml
+#######################
+---
+  name: "service_rule"
+  pack: "mymonitor"
+  description: "rule with mysql check"
+  enabled: true
+
+  trigger:
+    type: "mymonitor.service_trigger"
+    parameters: {}
+
+  criteria:
+    trigger.hosts:
+      type: "equals"
+      pattern: "{{st2kv.system.HOSTNAME|string}}"
+
+
+  action:
+    ref: "mymonitor.service_start"
+    parameters:
+      hosts: "{{trigger.hosts|use_none}}"
+      username: 'root'
+      password: '123456'
+#######################
+
+
+sensors/check_mysql_sensor.yaml
+#######################
+---
+class_name: "check_mysql_sensor"
+entry_point: "check_mysql_sensor.py"
+description: "check mysql table"
+poll_interval: 20
+trigger_types:
+  -
+    name: "service_trigger"
+    description: "startup ftp service"
+    payload_info:
+        - "id"
+        - "hosts"
+        - "service_name"
+        - "operation_id"
+        - "state"
+        - "operation_command"
+
+#######################
+
+
+sensors/check_mysql_sensor.py
+#######################
+import MySQLdb
+import sys
+import json
+
+from st2reactor.sensor.base import PollingSensor
+from st2client.models import KeyValuePair
+from st2client.client import Client
+
+
+class check_mysql_sensor(PollingSensor):
+	def __init__(self, sensor_service, config = None, poll_interval = None):
+		super(check_mysql_sensor, self).__init__(sensor_service = sensor_service,
+                    			config = config,
+					poll_interval = poll_interval)
+		
+		self._logger = self._sensor_service.get_logger(__name__)
+		
+	def setup(self):
+		self._mysql_accounts = self._config.get('mysql_accounts')
+		if self._mysql_accounts is None:
+            		raise ValueError('"mysql_accounts" config value is required to connect mysql.')
+        	if len(self._mysql_accounts) == 0:
+            		raise ValueError('at least one account is required to connect mysql.')
+		
+		self._host = self._mysql_accounts.get('hosts')	
+		if self._host is None:
+			raise ValueError('"mysql hosts" config value is required to connect mysql.')
+
+		self._username = self._mysql_accounts.get('username')	
+		if self._username is None:
+			raise ValueError('"mysql username" config value is required to connect mysql.')
+
+		self._password = self._mysql_accounts.get('password')	
+		if self._password is None:
+			raise ValueError('"mysql password" config value is required to connect mysql.')
+
+		self._database = self._mysql_accounts.get('database')	
+		if self._database is None:
+			raise ValueError('"mysql database" config value is required to connect mysql.')
+    
+                self._client = Client(base_url='http://localhost')
+                self._client.keys.update(KeyValuePair(name='HOSTNAME', value='127.0.0.1')) 
+                self._client.keys.update(KeyValuePair(name='OPERATIONCOMMAND', value='ls /tmp')) 
+
+
+	def poll(self):	
+		database_handle = MySQLdb.connect(self._host,self._username,self._password,self._database)
+		cursor = database_handle.cursor()
+		cursor.execute("select * from monitor")
+		try:
+			data_set = cursor.fetchone()
+			id_from_db = data_set[0]
+			ipaddress_from_db = data_set[1]
+			service_name_from_db = data_set[2]
+			operation_id_from_db = data_set[3]
+			state_from_db = data_set[4]
+			operation_command_from_db = data_set[5]
+
+			payload = {
+				'id' : id_from_db,
+				'hosts' : ipaddress_from_db,
+				'service_name' : service_name_from_db, 
+				'operation_id' : operation_id_from_db,
+				'state' : state_from_db, 
+                                'operation_command' : operation_command_from_db
+			}
+			print payload
+			print ipaddress_from_db,type(ipaddress_from_db)
+			print operation_command_from_db,type(ipaddress_from_db)
+			
+                        hostname = self._client.keys.get_by_name(name='HOSTNAME')
+                        hostname.value = json.dumps(ipaddress_from_db)
+                        #hostname.value = ipaddress_from_db
+
+                        operation_command = self._client.keys.get_by_name(name='OPERATIONCOMMAND')
+                        operation_command.value = json.dumps(operation_command_from_db)
+                        #operation_command.value = operation_command_from_db
+			
+			print hostname.value,type(hostname.value)
+			print operation_command.value,type(operation_command.value)
+
+                        self._client.keys.update(hostname)
+                        self._client.keys.update(operation_command)
+
+		#	print hostname.value,type(hostname.value)
+		#	print operation_command.value,type(operation_command.value)
+
+       
+			trigger = 'mymonitor.service_trigger'
+			self._sensor_service.dispatch(trigger = trigger, payload = payload)
+		except:
+		    	print "Error: unable to fetch data"
+		    	database_handle.close()
+		
+
+	def cleanup(self):
+		pass
+	
+	def add_trigger(self, trigger):
+		pass
+
+	def update_trigger(self, trigger):
+		pass
+
+	def remove_trigger(self, trigger):
+		pass
+
+#######################
+
+
+describe monitor;
++-------------------+--------------+------+-----+---------+----------------+
+| Field             | Type         | Null | Key | Default | Extra          |
++-------------------+--------------+------+-----+---------+----------------+
+| id                | int(11)      | NO   | PRI | NULL    | auto_increment |
+| ipaddress         | varchar(20)  | NO   |     | NULL    |                |
+| service_name      | varchar(100) | NO   |     | NULL    |                |
+| operation_id      | int(11)      | NO   |     | NULL    |                |
+| state             | int(11)      | NO   |     | NULL    |                |
+| operation_command | text         | NO   |     | NULL    |                |
++-------------------+--------------+------+-----+---------+----------------+
+
+
+select * from monitor;
++----+---------------+--------------+--------------+-------+----------------------+
+| id | ipaddress     | service_name | operation_id | state | operation_command    |
++----+---------------+--------------+--------------+-------+----------------------+
+|  1 | 192.168.10.15 | ftp          |            1 |     2 | service vsftpd start |
+|  2 | 192.168.10.15 | nginx        |            2 |     4 | service nginx start  |
+|  3 | 192.168.10.15 | httpd        |            3 |     0 | service httpd start  |
+|  4 | 127.0.0.1     |              |            0 |     0 |                      |
+|  5 | 127.0.0.1     |              |            0 |     0 |                      |
+|  6 | 127.0.0.1     |              |            0 |     0 |                      |
++----+---------------+--------------+--------------+-------+----------------------+
+
+
+*********************************************************************************************************************
+
+
+
+

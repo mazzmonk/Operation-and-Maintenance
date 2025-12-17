@@ -1,0 +1,333 @@
+环境:
+ubuntu server 19.04
+ansible 2.7.10
+
+
+apt-get install software-properties-common
+apt-add-repository ppa:ansible/ansible
+apt-get install ansible
+
+
+在运行ansible命令时,命令会按照如下的次序查找配置文件
+1.ANSIBLE_CONFIG 环境变量
+2../ansible.cfg  检查当前目录下的ansible.cfg配置文件
+3.~/.ansible.cfg 用户home目录下的.ansible.cfg配置文件
+4./etc/ansible/ansible.cfg  软件安装时自动生成的配置文件
+
+
+hosts文件中可以使用ssh的相关信息,包括用户名和密码
+例子:
+**************************************************
+[webservers]
+192.168.10.2 
+192.168.10.3 
+
+[all:children]
+webservers
+
+[all:vars]
+ansible_user=blue
+ansible_ssh_pass=123456
+**************************************************
+
+
+$ ansible-doc -l	# 列出Ansible系统支持的模块
+$ ansible-doc -s yum	# 列出yum模块的动作
+
+
+多个Inventory文件时候
+修改ansible.cfg中的inventory的值,指向一个目录
+inventory = /root/inventory/
+
+多个inventory文件合并的时候,可以不同的组用不同的文件,然后单独定义所有组使用的变量等等内容
+例子:
+**************************************************
+# docker-hosts文件
+[docker]
+192.168.10.2 
+192.168.10.3 
+
+# k8s-hosts文件
+[kubernetes]
+192.168.10.1
+192.168.10.2 
+192.168.10.3 
+
+# webservers-hosts文件
+[webservers]
+192.168.10.2 
+192.168.10.3 
+
+# all-hosts 
+[all:vars]
+ansible_user=blue
+ansible_ssh_pass=123456
+ansible_ssh_private_key_file=~/apps/ansible/pki/x.pem
+
+**************************************************
+all-hosts文件中定义了全局变量等内容,这里有用户名/密码/私钥的方式
+但是似乎在单独的文件里将所有组包含进去不生效
+
+比如:
+[all-groups:children]
+docker
+kubernetes
+webservers
+
+这种模式不生效
+
+但是有个默认的包含全部组的组名"all","all"这个组不用定义
+$ ansible all -m 'ping' -o 
+
+# 用ansible的shell模块在webservers组的各服务器上显示"hello"
+$ ansible webservers -m shell -a '/bin/echo hello' -i inventory.cfg
+
+也可以使用command模块,得到类似结果
+$ ansible webservers -m command -a '/bin/echo hello' -i inventory.cfg
+
+
+长时间运行的操作可以在后台运行,以后可以检查它们的状态.例如,要long_running_operation 在后台异步执行,超时为3600秒(-B),并且没有轮询(-P):
+
+$ ansible all -B 3600 -P 0 -a "/usr/bin/long_running_operation --do-stuff"
+
+
+如果您确定稍后要检查作业状态,则可以使用async_status模块,并在后台运行原始作业时返回的作业ID:
+
+$ ansible web1.example.com -m async_status -a "jid=488359678239.2844"
+
+
+轮询是内置的,看起来像这样:
+
+$ ansible all -B 1800 -P 60 -a "/usr/bin/long_running_operation --do-stuff"
+
+
+上面的例子说“最多运行30分钟(-B 30*60=1800),(-P)每60秒轮询状态”.
+
+轮询模式很智能,因此在任何机器上开始轮询之前,所有作业都将启动,--forks如果您希望快速启动所有工作,请务必使用足够高的值,在时间限制(以秒为单位)用完(-B)后,远程节点上的进程将终止.
+
+
+# 拷贝本地文件到远程
+$ ansible docker -m copy -a 'src=~/bin/a.sh dest=/home/blue/bin/a.sh owner=blue' -o
+
+
+# 添加用户
+$ echo 123456 | openssl passwd -1 stdin
+$1$cYTeS7Gz$w251ZGZKugu3LR.xJzL0X0
+
+$ ansible docker -m user -a 'name=jack password="$1$cYTeS7Gz$w251ZGZKugu3LR.xJzL0X0"' -f 5 -o
+
+
+# facts组件用于收集信息,可以使用filter来查看指定信息
+$ ansible docker -m setup
+$ ansible docker -m setup -a 'filter=ansible_all_ipv4_addresses'
+
+
+# 列出Ansible系统支持的模块
+$ ansible-doc -l
+ 
+
+# 列出yum模块的动作
+$ ansible-doc -s yum
+
+
+**********************************************
+
+ansible 1.2以后开始支持role模式,role是日常对playbook目录的一个规范
+
+ansible目录结构
+############################################
+.
+├── ansible.cfg
+├── inventory
+│   ├── all-hosts
+│   ├── docker-hosts
+│   ├── k8s-hosts
+│   └── webservers-hosts
+├── module_utils
+├── modules
+├── pki
+│   └── Backend_Test.pem
+├── roles
+│   └── nginx
+│       ├── files
+│       │   └── index.html
+│       ├── handlers
+│       │   └── main.yaml
+│       ├── tasks
+│       │   └── main.yaml
+│       ├── templates
+│       │   └── nginx.conf.j2
+│       └── vars
+│           └── main.yaml
+├── site.yaml
+└── variable.yaml
+
+#############################################
+主要是role目录和site.yaml文件
+site.yaml	这个文件是role引用的入口文件,文件名可以随意定义
+files				目录里存放一些静态文件
+handler		目录里存放一些task的handler
+tasks			目录里就是我们平常写的playbook中的task
+template	目录里存放着jinja2模板文件
+vars				目录里存放这变量文件
+
+
+当主机及主机组都定义了变量,如果key相同的时候,主机的变量会生效
+
+注意:
+1. 定义group变量的目录名称必须为group_vars,并且在此目录中的文件名称必须对应组的名称
+比如定义了:k8s,docker组,则在group_vars目录中的文件名称必须为k8s,docker,然后可以在其中定义key
+
+2. 定义host变量的目录名称必须为host_vars,并且此目录中的文件名称必须对应相应的主机名称
+比如在k8s组中定义了主机172.31.31.21,172.31.27.162,则在host_vars中有以172.31.31.21及172.31.27.162命名的文件,如果没有,将以此主机所在组为基准
+就是说,如果没有定义host的key,则以所在group定义的key为标准,如果group的key也没有,则执行不成功
+
+3. group_vars,host_vars目录必须在inventory目录中,就是说,必须能让ansible能识别到group和host
+
+如下是详细的内容
+目录结构
+inventory
+├── all-hosts
+├── docker-hosts
+├── group_vars
+│   ├── docker
+│   └── k8s
+├── host_vars
+│   ├── 172.31.27.162
+│   └── 172.31.31.217
+└── k8s-hosts
+
+docker-hosts
+########################
+[docker]
+172.31.20.220
+
+[docker:vars]
+ansible_python_interpreter=/usr/bin/python3.6
+
+
+k8s-hosts
+########################
+[k8s]
+172.31.31.217   
+172.31.27.162
+
+[k8s:vars]
+ansible_python_interpreter=/usr/bin/python3.6
+
+
+group_vars/docker 
+########################
+---
+key: Docker Group
+
+
+group_vars/k8s 
+########################
+---
+key: Kubernetes Group
+
+
+host_vars/172.31.27.162 
+########################
+key: kubernetes02
+
+
+host_vars/172.31.31.217 
+########################
+key: kubernetes01
+
+
+测试用playbook
+test.yaml 
+########################
+---
+- hosts: k8s
+  gather_facts: False
+  tasks:
+    - name: display Host Variable form hostfile
+      debug: 
+        msg: "The {{ inventory_hostname }} value is {{ key }}"
+
+########################
+执行
+$ ansible-playbook test.yaml 
+PLAY [k8s] *****************************************************************************************************************************
+
+TASK [display Host Variable form hostfile] *********************************************************************************************
+ok: [172.31.31.217] => {
+    "msg": "The 172.31.31.217 value is kubernetes01"
+}
+ok: [172.31.27.162] => {
+    "msg": "The 172.31.27.162 value is kubernetes02"
+}
+
+PLAY RECAP *****************************************************************************************************************************
+172.31.27.162              : ok=1    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+172.31.31.217              : ok=1    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+
+
+当host_vars目录中没有任何内容的时候,group_vars中有的k8s组文件开始生效
+$ ansible-playbook test.yaml 
+ 
+PLAY [k8s] *****************************************************************************************************************************
+
+TASK [display Host Variable form hostfile] *********************************************************************************************
+ok: [172.31.31.217] => {
+    "msg": "The 172.31.31.217 value is Kubernetes Group"
+}
+ok: [172.31.27.162] => {
+    "msg": "The 172.31.27.162 value is Kubernetes Group"
+}
+
+PLAY RECAP *****************************************************************************************************************************
+172.31.27.162              : ok=1    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+172.31.31.217              : ok=1    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+
+
+
+命令行模式传入变量
+$ ansible-playbook x.yaml -e "key=KEY"
+
+
+通过写入文件的方式直接使用变量,注意vars
+
+测试用playbook文件
+#############################
+---
+- hosts: k8s
+  gather_facts: False
+  vars:
+     key: aaa
+  tasks: 
+    - name: display Host Variable from hostfile
+      debug: 
+        msg: "The {{ inventory_hostname }} value is {{ key }}"
+
+
+指定文件方式使用变量,注意vars_files
+注意:
+1. var_files指向的文件必须和playbook文件在同一级目录中,如果要放到ansible的目录中,估计需要另外定义一个变量
+
+测试用playbook文件
+#############################
+---
+- hosts: k8s
+  gather_facts: False
+  vars_files:
+     - var.yaml
+  tasks: 
+    - name: display Host Variable from hostfile
+      debug: 
+        msg: "The {{ inventory_hostname }} value is {{ key }}"
+
+
+
+
+
+
+
+
+
+
+

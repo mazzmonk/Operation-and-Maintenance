@@ -1,0 +1,1174 @@
+官方链接: 
+
+https://open-policy-agent.github.io/gatekeeper/website/docs/howto
+
+不要使用 kubernetes 官方文档中提到的内容,当前不准确
+
+步骤:
+1. 安装好 Gatekeeper
+2. 配置 ConstraintTemplate(约束模板) - 用于定义需要约束的内容,命名空间,字段,pod等等
+3. 根据模板匹配具体的约束,比如 命名空间必须包含特定字段,pod 必须包含某种注释等等
+
+1. 安装
+参考:
+https://open-policy-agent.github.io/gatekeeper/website/docs/install
+
+$ kubectl create clusterrolebinding cluster-admin-binding \
+    --clusterrole cluster-admin \
+    --user admin
+
+# 下载好 openpolicyagent/gatekeeper:v3.10.0-beta.0,执行,配置文件不需要改动
+$ kubectl apply -f https:#raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper.yaml
+
+# 启动如下
+$ kubectl get pod -n gatekeeper-system 
+NAME                                             READY   STATUS    RESTARTS   AGE
+gatekeeper-audit-79b575f5cc-2vcn7                1/1     Running   2          3d2h
+gatekeeper-controller-manager-68c5c54958-thst4   1/1     Running   2          3d2h
+gatekeeper-controller-manager-68c5c54958-xds8b   1/1     Running   2          3d2h
+gatekeeper-controller-manager-68c5c54958-xv8sw   1/1     Running   2          3d2h
+
+$ kubectl get crd -A |grep gatekeeper           # crd 指的是 Custom Resource Define 简称CRD,是Kubernetes(v1.7+)为提高可扩展性,让开发者去自定义资源的一种方式
+assign.mutations.gatekeeper.sh                                  2022-08-12T03:24:06Z
+assignmetadata.mutations.gatekeeper.sh                2022-08-12T03:24:06Z
+configs.config.gatekeeper.sh                                        2022-08-12T03:24:06Z
+constraintpodstatuses.status.gatekeeper.sh            2022-08-12T03:24:06Z
+constrainttemplatepodstatuses.status.gatekeeper.sh    2022-08-12T03:24:07Z
+constrainttemplates.templates.gatekeeper.sh           2022-08-12T03:24:07Z
+k8srequiredlabels.constraints.gatekeeper.sh           2022-08-12T05:40:57Z
+modifyset.mutations.gatekeeper.sh                           2022-08-12T03:24:07Z
+mutatorpodstatuses.status.gatekeeper.sh               2022-08-12T03:24:07Z
+providers.externaldata.gatekeeper.sh                        2022-08-12T03:24:07Z
+
+
+2. Constraint Templates - 约束的模板
+
+这里定义了大量的现成的模板,可以根据自己的需要找到需要的模板
+https://github.com/open-policy-agent/gatekeeper-library/tree/master/library/general
+
+如下是一个样例
+
+$ kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/demo/basic/templates/k8srequiredlabels_template.yaml
+
+这里是一个 Constraint Template 的例子
+例子中需要对输入的标签进行匹配
+
+其中的 crd 部分描述了我们定义的 CRD 模板,比如类型叫 K8sRequiredLabels,需要和模板的名称保持一致,然后通过下面的 validation 定义了我们的 CRD 的属性 Schema,比如有一个 labels 的属性参数,类似是字符串数据类型:
+
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredlabels       # 自定义名称
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredLabels         # 必须上面的 name 的值相同
+      validation:
+        # Schema for the `parameters` field
+        openAPIV3Schema:
+          type: object
+          properties:       # 这里开始是定义后面 violation 和其他函数用的变量,是定义的一组属性,用于 parameters 
+            labels:            # 变量名
+              type: array   # 变量类型,这里是 array(数组)
+              items:          # 数组中的成员
+                type: string   # 成员类型
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequiredlabels
+
+        violation[{"msg": msg, "details": {"missing_labels": missing}}] {
+          provided := {label | input.review.object.metadata.labels[label]}      # 获取到创建的对象的所有label
+          required := {label | label := input.parameters.labels[_]}                     # 获取到需要提供的label
+          missing := required - provided                                                # rego语言支持集合相减,得到未满足的label
+                                                                                                        # 断言未满足的label数量>0,如果大于0,说明条件满足,
+                                                                                                        # violation为true,说明违反了约束,返回错误
+          count(missing) > 0
+          msg := sprintf("you must provide labels: %v", [missing])
+        }
+
+
+上面的约束模板创建完成后,实际上相当于创建了一个名为的 K8sRequiredLabels 对象,我们定义的属性位于 spec.parameters(在官方的模板文件中有注释 # Schema for the `parameters` field) 属性下面
+
+$ kubectl get ConstraintTemplate    # 查看当前的约束模板
+
+$ kubectl get K8sRequiredLabels     # 如果没有定义具体的约束,这里应该为空,使用 $ kubectl get k8srequiredlabels 得到的结果相同
+NAME              ENFORCEMENT-ACTION   TOTAL-VIOLATIONS
+No resources found
+
+
+kubectl explain K8sRequiredLabels.spec.parameters.labels
+KIND:     K8sRequiredLabels
+VERSION:  constraints.gatekeeper.sh/v1beta1
+
+FIELD:    labels <[]string>
+
+DESCRIPTION:
+     <empty>
+
+
+
+然后下面的 targets 部分就是定义的约束目标,使用 Rego 进行编写.
+
+* 首先通过 provided := {label | input.review.object.metadata.labels[label]} 获取到创建对象的所有 label 标签.
+* 然后通过 required := {label | label := input.parameters.labels[_]} 获取到需要提供的 label 标签.
+* 将上面两个标签集合相减(rego语言支持该操作),得到未满足的 label.
+* 断言未满足的label数量>0,如果大于0,说明条件满足,violation 为 true,说明违反了约束,返回错误.
+
+
+name: k8srequiredlabels 和 package k8srequiredlabels 对应
+kind: K8sRequiredLabels 和 具体约束里的 kind: K8sRequiredLabels 对应
+
+根据上述的描述,openAPIV3Schema 这里定义的变量,要对应到约束文件中对应的 parameters 部分
+
+input.review - 这个值取自输入的 input 文件
+该input.review对象存储正在评估的准入请求.它具有以下字段:
+
+* dryRun: 描述请求是否由 调用kubectl --dry-run.这不能由 Kubernetes 填充以进行审计.
+* kind: 正在评估的请求对象的资源kind, .groupversion
+* name: 正在评估的请求对象的名称.如果部署期望 API 服务器为请求的资源生成名称,则它可能为空.
+* namespace: 正在评估的请求对象的命名空间.对于集群范围的对象为空.
+* object: 要创建或修改的正在评估的请求对象.
+* oldObject: 被评估的请求对象的原始状态.这仅适用于 UPDATE 操作.
+* operation: 请求的操作(例如 CREATE、UPDATE).这不能由 Kubernetes 填充以进行审计.
+* uid: 请求的唯一标识符.这不能由 Kubernetes 填充以进行审计.
+* userInfo: 请求的用户信息,如username、uid、groups、extra.这不能由 Kubernetes 填充以进行审计.
+
+注意对于input.review Kubernetes 无法填充以进行审计审查的上述字段,依赖它们的约束模板是不可审计的.由 rego 作者来处理这些字段未设置和为空的情况,以避免每个匹配的资源都被报告为违规资源.
+
+
+3. 根据约束模板定义的约束内容
+
+现在我们就可以使用上面的 K8sRequiredLabels 这个约束模板来定义策略了,比如我们要求在所有命名空间上都定义一个 gatekeeper 的标签,则可以创建如下所示的对象:
+
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels             # K8sAllowedRepos,这里有其他值,针对不同的对象,Label,Repos 等等
+metadata:
+  name: ns-must-have-gk
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Namespace"]        # 表示这个约束会在创建命名空间的时候被应用
+  parameters:
+    labels: ["gatekeeper"]       # 传递给 opa 的参数,此处表示一个 key 为 labels,value 为一个列表的字典,与 ConstraintTemplate 里的 properties要匹配上,此处表示要创建的对象需要含有 gatekeeper 的 label
+
+
+match 字段
+
+该 match 字段定义了将应用给定约束的对象的范围.它支持以下匹配器:
+
+* kinds 接受一个对象列表 apiGroups 和 kinds 字段,这些字段列出了约束将应用到的对象的组/种类.如果指定了多个组/种类对象,则资源只需要一个匹配项就可以在范围内. - $ kubectl api-resources 最后一列可以查看
+* scope 确定集群范围和/或命名空间范围的资源是否匹配.接受*、Cluster或Namespaced.(默认为*)
+* namespaces 是命名空间名称的列表.如果已定义,则约束仅适用于列出的命名空间中的资源.命名空间还支持基于前缀的 glob.例如,namespaces: [kube-*] 同时匹配 kube-system 和 kube-public.
+* excludedNamespaces 是命名空间名称的列表.如果已定义,则约束仅适用于不在列出的命名空间中的资源.ExcludedNamespaces 还支持基于前缀的 glob.例如,excludedNamespaces: [kube-*]同时匹配 kube-system 和 kube-public.
+* labelSelector 是两个可选字段的组合:matchLabels 和 matchExpressions.这两个字段提供了基于对象元数据中包含的标签键和值来选择或排除 k8s 对象的不同方法.所有选择表达式都经过 AND 运算以确定对象是否满足选择器的累积要求.
+* namespaceSelector 如果对象是命名空间,则它是针对对象的包含命名空间或对象本身的标签选择器.
+* name 是对象的名称.如果已定义,它将与具有指定名称的对象匹配.Name 还支持基于前缀的 glob.例如,name: pod-*同时匹配 pod-a 和 pod-b.
+
+请注意,如果指定了多个匹配器,则资源必须满足每个顶级匹配器(kinds、namespaces等)才能在范围内.每个顶级匹配器都有自己的语义来匹配匹配.空匹配器被认为是包容性的(匹配所有内容).还要理解 namespaces,excludedNamespaces 和 namespaceSelector 将匹配没有命名空间的集群范围资源.为避免这种情况,scope请将Namespaced.
+
+parameters 字段
+parameters 描述的是 constraint 的意图,会被指向到 ConstraintTemplate's 的 Rego 代码,在这里指向上面 ConstraintTemplate 的 
+required := {label | label := input.parameters.labels[_]} 
+
+这里定义的 parameters 实际就是在 ConstrainTemplate 的 input.parameters.labels 
+
+parameters.labels 就是根据上面的 CRD 规范定义的属性,该值是传递给 opa 的参数,此处表示一个 key 为 labels,value 为一个列表的字典,与 ConstraintTemplate 里的 properties 要匹配上,此处表示要创建的对象需要含有 gatekeeper 的 label.
+
+$ kubectl get constraint    # 查看约束
+
+$ kubectl get crd       # 查看所有的 crd
+
+constraintpodstatuses.status.gatekeeper.sh            2022-08-12T03:24:06Z
+constrainttemplatepodstatuses.status.gatekeeper.sh    2022-08-12T03:24:07Z
+constrainttemplates.templates.gatekeeper.sh           2022-08-12T03:24:07Z
+.....
+
+$ kubectl get constrainttemplates       # 查看 constrainttemplates (约束模板),使用上述内容里第一个"."前的字段
+
+
+4. 测试
+# test-ns.yaml
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ns-test
+  labels:
+    a: b
+    #gatekeeper: abc    # 这里不打开,将会有下面的报错
+
+$ kubectl apply -f test-ns.yaml 
+Error from server (Forbidden): error when creating "test-ns.yaml": admission webhook "validation.gatekeeper.sh" denied the request: [ns-must-have-gk] you must provide labels: {"gatekeeper"}
+
+$ kubectl get ns --show-labels
+
+
+5. GateKeeper 规则(约束模板),input 数据定义
+官方说明: 要注册 admission webhook(类似的 gatekeeper 就是一个 admission webhook),请创建 MutatingWebhookConfiguration 或 ValidatingWebhookConfiguration API 对象
+
+而 GateKeeper 是一个用于 k8s 的 webhook,即是一个 OPA,其配置符合 k8s 的 admission control 的标准,因此,使用 
+
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+
+或者
+
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+
+k8s 的关于 admission control 
+https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#webhook-configuration
+
+
+* 使用 "kind": "AdmissonReview" 的格式来定义输入的数据,就类似 OPA 中定义规则以后,input(request) 数据用以测试规则,可以通过 
+https://play.openpolicyagent.org/p/SI62cRuOEh 做测试使用
+
+构造输入数据及规则的时候,需要互相对应,如下
+
+在规则中的 input 这一行数据需要和 input(request) 的结构相互对应来定义
+***********************************************************************
+规则:
+
+package k8svalidnamespace
+        
+violation[{"msg": msg, "details": {}}] {
+  value := input.review.object.metadata.namespace
+  value == "default"
+  msg := sprintf("Namespace should not be default: %v", [value])
+}
+
+input(request) 数据:
+
+{
+    "kind": "AdmissionReview",
+    "parameters": {},
+    "review": {
+        "kind": {
+            "kind": "Pod",
+            "version": "v1"
+        },
+        "object": {
+            "metadata": {
+                "name": "myapp",
+                "namespace": "default"
+            },
+            "spec": {
+                "containers": []
+            }
+        }
+    }
+}
+
+***********************************************************************
+
+
+附录:
+在 gatekeeper 约束模板(规则)文件中定义的 input 关键字中对应到 k8s 中的 request 时用到的结构
+
+
+###### 详细的 约束模板,约束,input 类型的 yaml 说明 ######
+
+重要:
+violation[]{} 函数部分默认匹配其中的规则就会被 deny 掉,就是说在使用约束文件及 input 类型文件时候,匹配的部分会被 deny 掉
+此函数只在 gatekeeper 中存在,open policy agent 有自己的函数起到相同的作用
+
+
+1. 容器这部分的内容
+container := input.review.object.spec.containers[_]         
+
+# 读取 request 请求中所有的 container(这里例子里可以是 initContainers,ephemeralContainers,containers),spec 后面的部分,需要对照具体的,比如:deployment,service 等等文件中的部分,比如:
+下面的例子中,input.review.object 后面接的内容,对应下面
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx-disallowed
+spec:                                    # 这里
+  initContainers:                  # 这里
+  - name: nginx01
+    image: nginx
+    resources:
+      limits:
+        cpu: "100m"
+        memory: "30Mi"
+  containers:                        # 这里
+    - name: nginx02
+      image: nginx
+      resources:
+        limits:
+          cpu: "100m"
+          memory: "30Mi"
+  ephemeralContainers:      # 这里
+    - name: nginx03
+      image: nginx
+      resources:
+        limits:
+          cpu: "100m"
+          memory: "30Mi"
+
+2. 对应到 request 中的整个对象,比如:pod,deployment 等等文件中的所有对象都在 input.review.object 下
+obj := input.review.object
+
+比如: input.review.object.spec.automountServiceAccountToken 对应如下
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx-automountserviceaccounttoken-allowed
+  labels:
+    app: nginx-not-automountserviceaccounttoken
+spec:
+  automountServiceAccountToken: false       # 这里
+  containers:
+  - name: nginx
+    image: nginx
+
+在一个 ServiceAccount 的模板例子中,有一个函数
+
+# if there is no automountServiceAccountToken spec, check on volumeMount in containers. Service Account token is mounted on /var/run/secrets/kubernetes.io/serviceaccount
+假如没有 automountServiceAccountToken spec,检查 container 中的 volumeMount.Service Account token 将被挂载到 /var/run/secrets/kubernetes.io/serviceaccount
+# https://kubernetes.io/docs/reference/access-authn-authz/service-accounts-admin/#serviceaccount-admission-controller
+ 
+mountServiceAccountToken(spec) {
+            not has_key(spec, "automountServiceAccountToken")
+            "/var/run/secrets/kubernetes.io/serviceaccount" == input_containers[_].volumeMounts[_].mountPath    # 查看上面的解释
+ }
+
+input_containers[c] {
+            c := input.review.object.spec.containers[_]
+}
+
+
+解释: 
+1. has_key 表示在 spec 这个 key下面查找 automountServiceAccountToken 这个字段
+2. input_containers[_].volumeMounts[_].mountPath 在函数中将转换为 
+input.review.object.spec.containers[_].volumeMounts[_].mountPath,具体的可以通过 kubectl describe pod PODNAME -o yaml 查看,挂载的信息
+
+
+3. 要入口控制,优先写出用于 k8s 的 Deployment,Role,Sevice 等等的 yaml 文件,相当于 input 数据,根据 yaml 文件结构构造 ConstraintTemplate 文件,然后构造 constraints 
+如下:
+input.review.object.metadata.name == "system:aggregate-to-edit"
+
+取自 ClusterRole 文件结构
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  annotations:
+    rbac.authorization.kubernetes.io/autoupdate: "true"
+  creationTimestamp: null
+  labels:
+    kubernetes.io/bootstrapping: rbac-defaults
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+  name: system:aggregate-to-edit            # 这里
+
+模板文件中的的规则判断如下
+
+violation[{"msg": msg}] {
+     input.review.object.metadata.name == "system:aggregate-to-edit"        # if 两者相等
+     endpointRule(input.review.object.rules[_])                                                # 函数功能: if rules.resources == "endpoints",执行 hasEditVerb 函
+                                                                                                                       # 数,功能为匹配 verbs 为 create 或 patch 或 update
+     msg := "ClusterRole system:aggregate-to-edit should not allow endpoint edit permissions. For k8s version < 1.22, the Cluster Role should be annotated with rbac.authorization.kubernetes.io/autoupdate=false to prevent autoreconciliation back to default permissions for this role."
+}       # 满足上述条件以后,显示此内容
+
+endpointRule(rule) {
+       "endpoints" == rule.resources[_]
+       hasEditVerb(rule.verbs)
+}
+
+hasEditVerb(verbs) {
+       "create" == verbs[_]
+}
+
+hasEditVerb(verbs) {
+        "patch" == verbs[_]
+}
+        
+hasEditVerb(verbs) {
+        "update" == verbs[_]
+}
+
+4. input 的关于 kind 写法
+input.review.kind.kind == "Service"
+
+如下是 service 的文件,kind 属于一个单独的对象,对应到 input.review.kind 
+metadata 以下的部分对应到 input.review.object 
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-service-disallowed
+spec:
+  type: NodePort
+  ports:
+    - port: 80
+      targetPort: 80
+      nodePort: 30007
+
+ConstraintTemplate 里对应的部分
+
+violation[{"msg": msg}] {
+          input.review.kind.kind == "Service"
+          input.review.object.spec.type == "NodePort"
+          msg := "User is not allowed to create service of type NodePort"
+        }
+
+
+5. object.get() 函数的作用
+object.get("object",key,default)
+在 object 中搜索 key,如果存在,则返回键的值,否则返回默认值. 如果提供的键是一个数组,那么 object.get 将依次使用每个键搜索嵌套对象或数组. 例如: object.get({"a": [{ "b": true }]}, ["a", 0, "b"], false) 结果为真.
+
+hostname := object.get(input.review.object.spec.rules[_], "host", "")
+
+在 input.review.object.spec.rules[_] 中查找 host 这个 key,如果存在就返回 key 对应的 value, 否则设置为 "" 
+
+contains_wildcard(hostname) = true {
+          hostname == ""
+}
+
+contains_wildcard(hostname) = true {
+          contains(hostname, "*")
+}
+
+violation[{"msg": msg}] {       
+          input.review.kind.kind == "Ingress"
+          # object.get is required to detect omitted host fields
+          hostname := object.get(input.review.object.spec.rules[_], "host", "")
+          contains_wildcard(hostname)           # 当 hostname 匹配到 "" 或者 "*" 
+          msg := sprintf("Hostname '%v' is not allowed since it counts as a wildcard, which can be used to intercept traffic from other applications.", [hostname])
+}
+
+6. container := input.review.object.spec[field][_]          # 遍历 field 的所有字段
+
+violation[{"msg": msg}] {
+          general_violation[{"msg": msg, "field": "containers"}]
+}
+
+general_violation[{"msg": msg, "field": field}] {
+          container := input.review.object.spec[field][_]
+          not is_exempt(container)
+          cpu_orig := container.resources.limits.cpu
+          not canonify_cpu(cpu_orig)
+          msg := sprintf("container <%v> cpu limit <%v> could not be parsed", [container.name, cpu_orig])
+}
+
+is_exempt(container) {
+              exempt_images := object.get(object.get(input, "parameters", {}), "exemptImages", [])      # cpu: "200m" memory: "1Gi"
+              img := container.image
+              exemption := exempt_images[_]
+              _matches_exemption(img, exemption)
+}
+
+missing(obj, field) = true {
+          obj[field] == ""
+}
+
+canonify_cpu(orig) = new {
+          is_number(orig)
+          new := orig * 1000
+}
+
+
+endswith	    result := endswith(search, base)
+假如搜索的字段以 base 字段结束,返回 true
+
+replace	y := replace(x, old, new)
+将 x 字符串中的 old 子串替换为 new
+
+is_number()             # 如果输入的值是数字,返回 true 
+is_string()                # 如果输入的值是 string,返回 true
+count(collection)     # 返回 collection 的数值
+
+
+6. 某些时候,逻辑判断默认是遍历
+
+ violation[{"msg": msg}] {
+          # 在 input 的文件和 constraint 中的 parameters.allowedRoles 和 input.review.object.roleRef 的值不匹配,这里的 constraint 中的关键字
+          # 是 cluster-role-1,在 input 文件中对应的值不是 cluster-role-1 
+          not is_allowed(input.review.object.roleRef, input.parameters.allowedRoles)  
+          
+          # 在 input 文件中,遍历 input.review.object.subjects,取 subject.name 的值为 system:unauthenticated 或者 system:anonymous 
+          review(input.review.object.subjects[_]) 
+
+          # 符合上述 2 个条件
+          msg := sprintf("Unauthenticated user reference is not allowed in %v %v ", [input.review.object.kind, input.review.object.metadata.name])
+}
+
+is_allowed(role, allowedRoles) {            # 这里的 role 指的是在输入文件中的 input.review.object.roleRef 的部分,
+                                                             # 值是 apiGroup,kind,name 及对应的值,可能有多组
+          role.name == allowedRoles[_]     # 这里 allowedRoles[_] 是 constraint 中对应的 input.parameters.allowedRoles 的部分,遍历之
+}
+
+review(subject) = true {
+          subject.name == "system:unauthenticated"  # subject 是输入文件中的input.review.object.subjects[_],内容是多组 apiGroup,kind,name
+                                                                                # 的组合,这里是遍历每个 subject.name,直到出现为真的判断
+}
+
+review(subject) = true {
+          subject.name == "system:anonymous"
+}
+
+7. concat, contains 函数
+concat
+output := concat(delimiter, collection)     # 用分隔符(delimiter)连接一组或一组字符串(collection),返回连接后的内容
+
+contains
+result := contains(string, search)        # 在 string 中包含 search 返回真
+
+import data.lib.exempt_container.is_exempt
+        violation[{"msg": msg}] {
+            # 从 input 文件中的 input.review.object.spec.containers/initContainers/ephemeralContainers 的所有内容
+            container := input_containers[_] 
+            
+            # 比较上述 container 中的与 constraint 中的 image 部分,不相等
+            not is_exempt(container)
+
+            # tag 来自 constraint 的 parameters.tags,并且返回值作为 forbid 的参数
+            # 在 input.review.object.spec.containers/initContainers/ephemeralContainers 中的搜索,以 :latest 结尾的 image,返回为真,付给 forbid
+            tags := [forbid | tag = input.parameters.tags[_] ; forbid = endswith(container.image, concat(":", ["", tag]))]
+            
+            # 判断 tags 是否为真,为真,继续下一步            
+            any(tags)
+            msg := sprintf("container <%v> uses a disallowed tag <%v>; disallowed tags are %v", [container.name, container.image, input.parameters.tags])
+        }
+
+        violation[{"msg": msg}] {
+            container := input_containers[_]
+            not is_exempt(container)
+            tag := [contains(container.image, ":")]
+            not all(tag)
+            msg := sprintf("container <%v> didn't specify an image tag <%v>", [container.name, container.image])
+        }
+
+        input_containers[c] {
+            c := input.review.object.spec.containers[_]
+        }
+        input_containers[c] {
+            c := input.review.object.spec.initContainers[_]
+        }
+        input_containers[c] {
+            c := input.review.object.spec.ephemeralContainers[_]
+        }
+      libs:
+        - |
+          package lib.exempt_container
+          is_exempt(container) {
+              exempt_images := object.get(object.get(input, "parameters", {}), "exemptImages", [])
+              img := container.image
+              exemption := exempt_images[_]
+              _matches_exemption(img, exemption)
+          }
+          _matches_exemption(img, exemption) {
+              not endswith(exemption, "*")
+              exemption == img
+          }
+          _matches_exemption(img, exemption) {
+              endswith(exemption, "*")
+              prefix := trim_suffix(exemption, "*")
+              startswith(img, prefix)
+
+8. 关于数字类型的算术计算
+
+violation[{"msg": msg}] {
+          input.review.kind.kind == "Service"
+          input.review.kind.group == ""
+          allowedIPs := {ip | ip := input.parameters.allowedIPs[_]}                     # 来自 constraint 文件
+          externalIPs := {ip | ip := input.review.object.spec.externalIPs[_]}       # 来自 input 文件
+          forbiddenIPs := externalIPs - allowedIPs      # 注意这里,必须是: 输入文件的值 - constraint 中的值,这里需要根据严格的逻辑判断
+                                                                               # 某些时候可能是 constraint 中的值 - 输入文件的值
+          count(forbiddenIPs) > 0
+          msg := sprintf("service has forbidden external IPs: %v", [forbiddenIPs])
+}
+
+********************************
+allowedIPs 的结构如下:       - 来自 constraint
+spec:
+...
+    parameters:
+        allowedIPs:
+            - "203.0.113.0"
+
+
+externalIPs 的结构如下:      - 来自  input 的输入文件
+spec:
+...
+    externalIPs:
+        - 203.0.113.0
+
+********************************
+
+
+这里做了几个测试,关于 externalIPs - allowedIPs 的结果
+a. 
+externalIPs:
+    - 203.0.113.0
+    - 1.1.1.1
+
+allowedIPs:
+   - 203.0.113.0
+
+结果: > 0     # constraint 中的值是 input 文件中值的一部分
+
+b. 
+externalIPs:
+    - 203.0.113.0
+
+allowedIPs:
+   - 203.0.113.0
+   - 1.1.1.1
+
+结果: < 0     # input 文件中的值是 constraint 中值的一部分
+
+c. 
+externalIPs:
+    - 1.1.1.1
+    - 2.2.2.2
+
+Allowed I Ps:
+    - 203.0.113.0
+    - 1.1.1.1
+
+结果: > 0     # input 文件中值的一部分和 constraint 中的一部分值相同
+
+d.
+externalIPs:
+    - 3.3.3.3	
+    - 2.2.2.2
+
+Allowed I Ps:
+    - 203.0.113.0
+    - 1.1.1.1
+
+结果: > 0     # input 文件和 constraint 完全不同
+
+e. input 文件和 constraint 完全相同,则值为 0
+
+9. 在 violation 函数中调用其他函数的逻辑值(真/假)
+如下例子是在输入文件中判定使用 https
+a. 在 https_complete 这个函数中,列出了所有的 https 的条件,就是多个条件的组合,逻辑"和"的关系,必须所有的条件成立
+b. violation 函数中的 not https_complete(ingress) 这里表示,https_complete 这个函数中的条件有任意一条不成立,这里都会返回 false
+
+violation[{"msg": msg}] {
+          input.review.object.kind == "Ingress"
+          re_match("^(extensions|networking.k8s.io)/", input.review.object.apiVersion)
+          ingress := input.review.object
+          not https_complete(ingress)       # 注意这里
+          msg := sprintf("Ingress should be https. tls configuration and allow-http=false anno
+tation are required for %v", [ingress.metadata.name])
+        }
+
+        https_complete(ingress) = true {
+          ingress.spec["tls"]
+          count(ingress.spec.tls) > 0   # 这里比较有意思,input 文中的 spec.tls: [{}],tls 的值虽然为空,但是,count 的值还是 > 0
+          ingress.metadata.annotations["kubernetes.io/ingress.allow-http"] == "false"
+        }
+
+10. constraint.yaml 文件中的细节
+例子1:
+constraint.yaml
+#######################################
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sDisallowAnonymous                                      # 值来自 ConstraintTemplate 中的 metadata.name,需要注意大小写
+metadata:
+  name: no-anonymous
+spec:
+  match:
+    kinds:
+      - apiGroups: ["rbac.authorization.k8s.io"]        # 来自 input 输入文件,注意下面的 example_allowed.yaml
+        kinds: ["ClusterRoleBinding"]                         # 在 input 文件中注意文件头开始的 kind 
+      - apiGroups: ["rbac.authorization.k8s.io"]
+        kinds: ["RoleBinding"]                                      # 例子中没有这个,但是在实际使用中是有这部分内容
+  parameters:
+    allowedRoles: 
+      - cluster-role-1
+
+
+example_allowed.yaml
+#######################################
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-role-binding-1
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-role-1
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: system:authenticated
+- apiGroup: rbac.authorization.k8s.io
+  kind: Group
+  name: system:unauthenticated
+
+#######################################
+
+例子2:
+constraint.yaml
+#######################################
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sHttpsOnly
+metadata:
+  name: ingress-https-only
+spec:
+  match:
+    kinds:
+      - apiGroups: ["extensions", "networking.k8s.io"]          # 这行与下一行的值是来自 sync.yaml 文件,这里是一个 config 文件
+        kinds: ["Ingress"]                                                        # 应该算是一个特殊的应用
+
+
+sync.yaml
+#######################################
+apiVersion: config.gatekeeper.sh/v1alpha1
+kind: Config
+metadata:
+  name: config
+  namespace: "gatekeeper-system"
+spec:
+  sync:
+    syncOnly:
+      - group: "extensions"
+        version: "v1beta1"
+        kind: "Ingress"
+      - group: "networking.k8s.io"
+        version: "v1beta1"
+        kind: "Ingress"
+#######################################
+
+11. 函数 all
+output := all(array_or_set)	    # output is true if all of the values in array_or_set are true. A collection of length 0 returns true.
+not all(X)   # 表示 X 中有任意一个值为"假",返回都是 false
+
+12. 多个代码段的 "if" 及 input.review.operation == "UPDATE"
+
+targets:
+  - target: admission.k8s.gatekeeper.sh
+    rego: |
+      package noupdateserviceaccount
+
+      privileged(userInfo, allowedUsers, allowedGroups) {       # 这里一段代码和后一段都是 if 判断
+        # Allow if the user is in allowedUsers.
+        # Use object.get so omitted parameters can't cause policy bypass by
+        # evaluating to undefined.
+        username := object.get(userInfo, "username", "")
+        allowedUsers[_] == username
+      } {
+        # Allow if the user's groups intersect allowedGroups.
+        # Use object.get so omitted parameters can't cause policy bypass by
+        # evaluating to undefined.
+        userGroups := object.get(userInfo, "groups", [])
+        groups := {g | g := userGroups[_]}
+        allowed := {g | g := allowedGroups[_]}
+        intersection := groups & allowed
+        count(intersection) > 0
+      }
+
+      get_service_account(obj) = spec {     # 数据都来自 Deployment,Services 等等文件,每种文件的格式有所不同
+        obj.kind == "Pod"
+        spec := obj.spec.serviceAccountName
+      } {
+        obj.kind == "ReplicationController"
+        spec := obj.spec.template.spec.serviceAccountName
+      } {
+        obj.kind == "ReplicaSet"
+        spec := obj.spec.template.spec.serviceAccountName
+      } {
+        obj.kind == "Deployment"
+        spec := obj.spec.template.spec.serviceAccountName
+      } {
+        obj.kind == "StatefulSet"
+        spec := obj.spec.template.spec.serviceAccountName
+      } {
+        obj.kind == "DaemonSet"
+        spec := obj.spec.template.spec.serviceAccountName
+      } {
+        obj.kind == "Job"
+        spec := obj.spec.template.spec.serviceAccountName
+      } {
+        obj.kind == "CronJob"
+        spec := obj.spec.jobTemplate.spec.template.spec.serviceAccountName
+      }
+
+      violation[{"msg": msg}] {
+        # This policy only applies to updates of existing resources.
+        input.review.operation == "UPDATE"          # 这里是一个特别的地方,没有在文件中定义
+
+        # Use object.get so omitted parameters can't cause policy bypass by
+        # evaluating to undefined.
+        params := object.get(input, "parameters", {})   # 
+        allowedUsers := object.get(params, "allowedUsers", [])
+        allowedGroups := object.get(params, "allowedGroups", [])
+
+        # Extract the service account.
+        oldKSA := get_service_account(input.review.oldObject)
+        newKSA := get_service_account(input.review.object)
+
+        # Deny unprivileged users and groups from changing serviceAccountName.
+        not privileged(input.review.userInfo, allowedUsers, allowedGroups)          # 注意这里,具体有如下的字段的详细信息,
+                                                                                                                            # 根据描述,userInfo 不能由 kubernetes 审计
+        oldKSA != newKSA
+        msg := "user does not have permission to modify serviceAccountName"
+      } {
+        # Defensively require object to have a serviceAccountName.
+        input.review.operation == "UPDATE"
+        not get_service_account(input.review.object)
+        msg := "missing serviceAccountName field in object under review"
+      } {
+        # Defensively require oldObject to have a serviceAccountName.
+        input.review.operation == "UPDATE"
+        not get_service_account(input.review.oldObject)
+        msg := "missing serviceAccountName field in oldObject under review"
+      }
+
+
+*************************************************************************************************
+input.review 对象存储正在评估的准入请求.它具有以下字段: 
+
+dryRun:           描述请求是否由 kubectl --dry-run 调用.这不能由 Kubernetes 填充以进行审计.
+kind:               正在评估的请求对象的资源种类、组、版本.
+name:             被评估的请求对象的名称.如果部署期望 API 服务器为请求的资源生成名称,则它可能为空.
+namespace:    被评估的请求对象的命名空间.对于集群范围的对象为空.
+object:            要创建或修改的正在评估的请求对象.
+oldObject:       被评估的请求对象的原始状态.这仅适用于 UPDATE 操作.
+operation:      请求的操作(例如 CREATE、UPDATE).这不能由 Kubernetes 填充以进行审计.
+uid:                 请求的唯一标识符.这不能由 Kubernetes 填充以进行审计.
+userInfo:        请求的用户信息,如用户名、uid、组、extra.这不能由 Kubernetes 填充以进行审计.
+
+注意: 对于上述 Kubernetes 无法填充以进行审计审查的 input.review 字段,依赖它们的约束模板是不可审计的.由 rego 作者来处理这些字段未设置和为空的情况,以避免每个匹配的资源都被报告为违规资源.
+
+通俗的说,就是上述字段就会出现在类似 Deployment,Service,Role 等等文件中,这些字段中,kubernetes 无法处理的,依赖于它的 ConstraintTemplate 无法审计,则由 rego 的作者处理
+
+原文地址:
+https://open-policy-agent.github.io/gatekeeper/website/docs/howto
+*************************************************************************************************
+
+pdb := data.inventory.namespace[obj.metadata.namespace]["policy/v1"].PodDisruptionBudget[_]
+
+首先输入会挂在 input 对象下,用到的上下文(就是规则决策基于的源数据)会挂在 data 对象下
+
+* 关于 [][] 语法
+ips_by_port := {
+    80: ["1.1.1.1", "1.1.1.2"],
+    443: ["2.2.2.1"],
+}
+
+ips_by_port[80]
+[
+    "1.1.1.1",
+    "1.1.1.2"
+]
+
+some port; ips_by_port[port][_] == "2.2.2.1"
++-------+
+| port   |
++-------+
+| 443   |
++-------+
+
+
+13. 这是一段关于 poddisruptionbudget 的规则,其中有部分内容不知道什么意思
+源文件地址: 
+https://github.com/open-policy-agent/gatekeeper-library/blob/master/library/general/poddisruptionbudget/template.yaml
+
+violation[{"msg": msg}] {
+          obj := input.review.object
+        
+          # 未知什么意思,特别是 data.inventory 从那里来的,同时 namespace[][].PodDisruptionBudget 未知什么意思
+          pdb := data.inventory.namespace[obj.metadata.namespace]["policy/v1"].PodDisruptionBudget[_]   
+          obj.spec.selector.matchLabels == pdb.spec.selector.matchLabels
+
+          not valid_pdb_min_available(obj, pdb)
+          msg := sprintf(
+            "%v <%v> has %v replica(s) but PodDisruptionBudget <%v> has minAvailable of %v, PodDisruptionBudget c
+ount should always be lower than replica(s), and not used when replica(s) is set to 1",
+            [obj.kind, obj.metadata.name, obj.spec.replicas, pdb.metadata.name, pdb.spec.minAvailable, obj.spec.r
+eplicas],
+          )
+        }
+
+14. 全局变量为数组,数组的元素类型是 object,object 可以存储多个值,就是多个值作为一个元素,甚至是多个k/v组合成一个元素
+        openAPIV3Schema:
+          type: object
+          properties:
+            ranges:
+              type: array   # 数组
+              description: Allowed ranges for numbers of replicas.  Values are inclusive.
+              items:
+                type: object    #数组的元素是 object 类型
+                description: A range of allowed replicas.  Values are inclusive.
+                properties:         # 注意这里,有 2 个属性,
+                  min_replicas:
+                    description: The minimum number of replicas allowed, inclusive.
+                    type: integer
+                  max_replicas:
+                    description: The maximum number of replicas allowed, inclusive.
+                    type: integer
+
+
+比如:
+array[(min_replicas: 3,max_replicas: 80),(min_replicas: 4,max_replicas: 60),(min_replicas: 5,max_replicas: 100)]
+
+说明: 每个数组元素类型都是 object,每个 object 具有 2 个属性,min_replicas 及 max_replicas
+
+15. 数组中的元素是由多个 object 组成,表示这个 object 的某个 key 的所有值
+
+annotations:
+      - key: a8r.io/owner
+        # Matches email address or github user
+        allowedRegex: ^([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,6}|[a-z]{1,39})$
+      - key: a8r.io/runbook
+        # Matches urls including or not http/https
+        allowedRegex: ^(http:\/\/www\.|https:\/\/www\.|http:\/\/|https:\/\/)?[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,5}(:[0-9]{1,5})?(\/.*)?$
+
+比如: 
+input.parameters.annotations[_]                                     # 表示 annotations 这个数组,包括其中所有的元素
+annotation := input.parameters.annotations[_].key        # 表示 annotations 数组中每个元素中的 key 这个键
+
+
+16. 强制在现有的 kubernetes 上执行策略,data.inventory 的用法    --- 重要
+
+如下的链接:第一部分描述了一些基本的概念
+原文地址:
+https://medium.com/nontechcompany/enforce-your-policies-as-code-on-kubernetes-using-gatekeeper-opa-13a9d740587a
+
+OpenPolicyAgent 和 GateKeeper.他们有什么区别？
+
+OPA本身就是"策略引擎".它允许您使用称为Rego( ray-go)的特定领域语言来表达您的策略.它还为您的服务提供了一个 API 来查询,以根据定义的策略验证请求.
+
+Gatekeeper是部署到 Kubernetes 中的 controller/operator,它允许您在 Kubernetes 中本地定义策略(使用 CRD,您可能已经猜对了)并将其自身集成到 Kubernetes api-server.因此,每次您向 Kubernetes api-server (kubectl apply / create / update)发出请求时,该请求都会被发送到 Gatekeeper 控制器以根据定义的策略来决定是接受还是拒绝
+
+Gatekeeper 的工作原理.
+
+需要了解的概念是"Kubernetes准入控制器(Kubernetes admission controller)".
+
+Kubernetes 准入控制器是 Gatekeeper 用来拦截您的请求以验证它们的.
+
+在 Kubernetes 中,在您对 api-server 的请求完成并保存到 etcd 数据库之前.后台发生了几件事,如下图所示
+
+API request -> API HTTP handler -> Authentication  -> Mutating admission -> Object Schema  -> Validating admission -> Persisted to etcd
+                                                          Authorization                                               Validation
+                                                                                                   Webhook                                                   Webhook
+  
+在请求经过身份验证和授权之后.在涉及我们范围的过程中有 2 个主要的准入控制器,它们是变异控制器(Mutating)和验证(Validating)控制器.
+
+变异准入(Mutating Admission): 一旦 Kubernetes 授权了你的请求,它就会向 mutating 准入进程发送一个包含正在创建或更新对象的请求,以调用定义的 webhook 服务.
+
+这个 webhook 服务可以做两件事,它要么拒绝你的请求,要么"改变"你的请求对象.给你一个 Mutate 的例子,假设你创建了一个 Pod 没有指定 serviceAccount.您可以看到,一旦它被创建,它就会附加一个serviceAccount: default .这实际上是由不同的控制器完成的,但它应该让您了解 mutate 的工作原理.
+
+验证准入(Validating Admission): 这个控制器通过将请求发送到已注册的 webhook 来决定是否允许或拒绝请求.
+
+一旦你了解到 Kubernetes api-server 中有这个概念.就可以知道,如何实现 Gatekeeper.
+
+目前,Gatekeeper 仅使用Validating Admission 控制器将自己注册到 Kubernetes api-server 作为 webhook 进行验证.
+
+地址: https://gist.githubusercontent.com/InsomniaCoder/7002c5d7a0c20f69ef244b625e701d44/raw/ed5ab6280159e9125ee15b56112f6a48dad61c42/gatekeeper-admission-controller-register.yaml
+
+来自 Gatekeeper 官方 Helm 图表的代码,用于将自身注册为验证 webhook
+这个 yaml 是从官方 Gatekeerper 的 Helm 图表中捕获的.您不需要详细了解这一点,但它所做的基本上是将自己注册为验证 webhook,以便在有 CREATE 或 UPDATE 请求发送到 api-server 时调用.
+
+第二部分
+原文地址:
+https://medium.com/nontechcompany/enforce-your-policies-as-code-on-kubernetes-using-gatekeeper-part2-5b4c8a68297a
+描述了审计,同步的概念(重要)
+
+基本上,有两件事我们没有讨论:
+
+* 有时,我们不能仅仅根据正在创建或更新的对象做出决定.经典的例子是,当我们想要强制在集群中只能创建唯一的 Ingress 主机名时.为了实现这一点,我们需要有关集群中现有入口的更多信息.同步功能是这个场景的关键人物.
+* 其次,如果在我们将策略应用到集群之前预先创建了资源怎么办.我们如何检测它？在这种情况下,审计功能就出现了
+
+sync(同步)
+OPA 官方关于 sync 的内容
+
+如果不访问比被测对象更多的状态,某些约束是不可能编写的.例如,除非规则有权访问所有其他入口,否则不可能知道入口的主机名在所有入口中是否唯一.为了使此类规则成为可能,我们启用了将数据同步到 OPA 中.    
+--- 意思是某些规则可能因为权限问题不能访问所有资源,但是编写约束的时候需要使用到,因此使用了数据同步功能,将 k8s 的数据同步到 Gatekeeper,如此随意访问
+
+默认情况下,审计功能不需要复制.但是,当该 audit-from-cache 标志设置为 true 时,OPA 缓存将用作审计查询的真实来源;因此,一个对象必须首先被缓存,然后才能对其约束进行审计.
+
+Kubernetes 数据可以通过同步配置资源复制到 OPA.当前定义的资源 syncOnly 将同步到 OPA.更新 syncOnly 应该动态更新同步的对象.下面是一个例子: 
+
+apiVersion: config.gatekeeper.sh/v1alpha1
+kind: Config
+metadata:
+  name: config
+  namespace: "gatekeeper-system"
+spec:
+  sync:
+    syncOnly:
+      - group: ""
+        version: "v1"
+        kind: "Namespace"
+      - group: ""
+        version: "v1"
+        kind: "Pod"
+
+您可以使用以下命令安装此配置: 
+
+kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/demo/basic/sync.yaml
+
+数据同步到 OPA 后,规则可以访问 data.inventory 文档下的缓存数据.
+
+该data.inventory文档具有以下格式: 
+
+* 对于集群范围的对象: data.inventory.cluster[<groupVersion>][<kind>][<name>]
+    * 引用 Gatekeeper 命名空间的示例: data.inventory.cluster["v1"].Namespace["gatekeeper"]
+* 对于命名空间范围的对象: data.inventory.namespace[<namespace>][groupVersion][<kind>][<name>]
+    * 引用 Gatekeeper pod 的示例: data.inventory.namespace["gatekeeper"]["v1"]["Pod"]["gatekeeper-controller-manager-d4c98b788-j7d92"]
+
+原文地址:
+https://open-policy-agent.github.io/gatekeeper/website/docs/sync    
+
+使用集群信息来帮助我们做出决定.Gatekeeper 要求我们创建一个同步ConfigMap,它会告诉 Gatekeeper 将集群中的信息同步到其内存缓存中,并且可以通过以下方式访问该信息data.inventory
+
+apiVersion: config.gatekeeper.sh/v1alpha1
+kind: Config
+metadata:
+  name: config
+  namespace: "gatekeeper-system"
+spec:
+  sync:
+    syncOnly:
+      - group: ""
+        version: "v1"
+        kind: "Namespace"
+
+应用此 configmap 将使您的策略访问集群的资源信息(在本例中为命名空间),我们可以在决策过程中进一步使用这些数据.
+
+例如,如果我们想创建一个策略来强制创建到指定命名空间的所有资源必须包含该命名空间的所有标签.
+
+1. 让我们首先创建一个带有"author"标签的命名空间
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    author: insomnia-coder
+  name: test-opa-2
+
+2. 让生成我们的 ConstraintTemplate
+我们将其命名为ResourceNamespaceLabelConstraint
+ 
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: resourcenamespacelabelconstraint
+spec:
+  crd:
+    spec:
+      names:
+        kind: ResourceNamespaceLabelConstraint
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package insomniacoder.constraints
+
+        violation[{"msg": msg}] {
+             msg := sprintf("%v",[input])
+        }
+
+查看正文,您会看到我所做的只是拦截创建对象以检查它以进行进一步的步骤.
+
+然后,我们将它应用到适用于我们的测试命名空间(test-opa-2)下的所有核心资源的实际约束中
+
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: ResourceNamespaceLabelConstraint
+metadata:
+  name: resourcenamespacelabelconstraint
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["*"]
+    namespaces:
+      - "test-opa-2"
+
+3. 让我们创建一个测试服务来捕获请求对象
+
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: test
+  name: test
+  namespace: test-opa-2
+spec:
+  ports:
+  - name: 8080-8080
+    port: 8080
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app: test
+  type: ClusterIP
+
+好的,所有设置都完成了,是时候编写我们想要的策略了.
+
+4. 我们将从这样的输入对象中获取正在创建的对象的标签
+
+input.review.object.spec.metadata.labels
+
+我们将使用从之前同步的 Gatekeeper 内存缓存中查询的数据(同步到 Gatekeeper 内存缓存中的数据)
+
+从 gatekeeper 的官方文档中,为了使用 Namespaced 对象,这是访问它的格式
+
+data.inventory.namespace[<namespace>][groupVersion][<kind>][<name>]
+
+* 引用 Gatekeeper pod 的示例: data.inventory.namespace["test-opa-2"]["v1"]["Pod"]["test-xxxxxxx"]
+
+对于集群的级别对象,例如我们的命名空间,格式如下所示
+
+* data.inventory.cluster[<groupVersion>][<kind>][<name>]
+
+在我们的例子中,我们可以访问我们的命名空间标签
+
+data.inventory.cluster["v1"].Namespace["<namespace>"].metadata.labels
+
+这里注意,namespace,cluster 是针对所有的 yaml 文件,因此,可能能取到所有 yaml 文件中的 namespace 名称或者类似的内容
+
+5. 我们将比较创建对象的标签和命名空间的标签.
+如下是 ConstraintTemplate 的一部分
+
+violation[{"msg": msg}] {
+          
+          createdLabels := input.review.object.metadata.labels
+          createdObjectNS := input.review.object.metadata.namespace
+          defaultNSLabels := data.inventory.cluster["v1"].Namespace[createdObjectNS].metadata.labels
+          nsLabels := object.remove(defaultNSLabels,{"kubernetes.io/metadata.name"})
+          
+          # check if created object has all the labels namespace has
+         
+          # iterate keys
+          objectLabelKeys := { label | createdLabels[label] }
+          namespaceLabelKeys := { label | nsLabels[label] }
+          objectLabelCount := count(objectLabelKeys)
+          nsLabelCount := count(namespaceLabelKeys)
+
+          # if object contain all labels, all ns keys must be removed. if it equals mean it contains all
+          count(objectLabelKeys - namespaceLabelKeys) != (objectLabelCount - nsLabelCount)
+          msg := sprintf("Created <%v> does not contain all labels in Namespace <%v>\n namespace labels: <%v>, resource labels: <%v>", [input.review.kind.kind, createdObjectNS, namespaceLabelKeys, objectLabelKeys])
+        }
+
+注意这个 2 个变量
+defaultNSLabels := data.inventory.cluster["v1"].Namespace[createdObjectNS].metadata.labels      # 缓存到 Gatekeeper 的内容
+nsLabels := object.remove(defaultNSLabels,{"kubernetes.io/metadata.name"})
+
+nsLabels 展开以后如下:
+object.remove(data.inventory.cluster["v1"].Namespace[input.review.object.metadata.namespace].metadata.labels,{"kubernetes.io/metadata.name"})
+
+audit(审计)
+在我们实施与我们的政策同步后,我们不再担心有人可能会犯下忘记正确标记他们的资源的致命行为
+
+但是,我们如何确保在我们的卓越策略有效之前集群中预先存在的所有资源都将得到遵守.
+
+Gatekeeper 带有审计功能,可以根据我们应用的策略不断检查集群资源.此审核操作的结果将显示在status约束字段中.
+
+默认情况下,Gatekeeper 会审计集群中的所有资源,并在每个审计周期(默认每 60 秒)向 Kubernetes api-server 请求资源.这种行为,在大规模集群中,可以通过轰炸 api-server 并导致 api-server 无法为其他任务提供服务,从而默默地对集群本身造成破坏性影响.
+
+因此,为了防止我们可以通过在 Helm 中将此值设置为 true,将 Gatekeeper 的行为更改为仅验证 OPA 缓存中的资源
+
+
+
+
+

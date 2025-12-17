@@ -1,0 +1,307 @@
+sudo不用密码
+修改/etc/sudoers文件
+在 root	ALL=(ALL:ALL) ALL 后加一行,表示用户
+blue	ALL=(ALL) NOPASSWD:ALL
+
+在 %sudo	ALL=(ALL:ALL) ALL 后加一行,表示用户组
+%blue	ALL=(ALL) NOPASSWD:ALL
+
+必须加上组,否则仍然不起作用
+
+
+编译
+先安装库
+apt install cmake python-sphinx libibverbs-dev librdmacm-dev libudev-dev libblkid-dev libldap2-dev libcunit1-dev libfuse-dev  xfslibs-dev libaio-dev  libleveldb-dev pkgconf libsnappy-dev liblz4-dev libkeyutils-dev libcurl4-openssl-dev install libssl-dev libgoogle-perftools-dev libexpat1-dev  liboath-dev  python-dev  zlib1g-dev liblttng-ust-dev libbabeltrace-dev libncurses-dev libsnl-dev gperf  librabbitmq-dev
+
+Could NOT find Cython2
+apt install python-pip
+pip install cython
+
+原有的leveldb似乎编译的时候会报错.类似rocksdb xxx的报错,因此,先下载一个rocksdb编译完成,然后在重新编译
+
+
+
+# mon设置
+uuidgen
+
+./ceph-authtool --create-keyring ceph.mon.keyring --gen-key -n mon. --cap mon 'allow *'
+./ceph-authtool --create-keyring ceph.client.admin.keyring --gen-key -n client.admin  --cap mon 'allow *' --cap osd 'allow *' --cap mds 'allow *'
+./ceph-authtool ceph.mon.keyring --import-keyring ceph.client.admin.keyring
+
+./monmaptool --create --add ubu01 192.168.10.1 --fsid a6aaf316-dccf-4c84-801e-16a81288e2ff ../etc/monmap
+
+# 使用监视器映射和密钥环填充监视器守护程序,初始化data
+ceph-mon --cluster ceph --mkfs -i ubu01 --monmap monmap --keyring ceph.mon.keyring --conf ~/apps/ceph/etc/ceph.conf
+
+ceph.conf必须记录mon data的值,保证自定义的data能工作
+
+# 启动,默认的socket在/var/run/ceph/ceph-mon.ubu01.asok
+ceph-mon -f --cluster ceph --id ubu01 --setuser 201 --setgroup 201 --conf ~/apps/ceph/etc/ceph.conf
+
+# 查看状态
+ceph -s --verbose -c /home/blue/apps/ceph/etc/ceph.conf
+
+# osd设置
+
+ceph-authtool --create-keyring --gen-key -n client.bootstrap-osd --cap mon 'profile bootstrap-osd' --cap mgr 'allow r'
+ceph-authtool --create-keyring ceph.keyring --gen-key -n client.bootstrap-osd --cap mon 'profile bootstrap-osd' --cap mgr 'allow r'
+ceph-authtool ceph.mon.keyring --import-keyring ceph.keyring
+
+./bin/ceph-authtool --create-keyring ceph.auth.keyring --gen-key -n auth. --cap auth 'allow *'
+
+# 获取OSD ID
+ceph osd create -c /home/blue/apps/ceph/etc/ceph.conf --keyring /home/blue/apps/ceph/var/run/ceph.client.admin.keyring
+
+ceph-disk prepare --cluster ceph --cluster-uuid a6aaf316-dccf-4c84-801e-16a81288e2ff --fs-type xfs /dev/sdb 
+mount /dev/sdb1 /home/blue/apps/ceph/osd/ceph-0/
+
+# 查看disk
+ceph-disk list
+
+
+# mds设置
+ceph-authtool --create-keyring mds/ceph-ubu02/keyring --gen-key -n mds.ubu02
+ceph-authtool --create-keyring mds/ceph-ubu03/keyring --gen-key -n mds.ubu03
+
+ceph auth add mds.ubu02 osd "allow rwx" mds "allow" mon "allow profile mds" -i ~/apps/ceph/mds/ceph-ubu02/keyring -c ~/apps/ceph/etc/ceph.conf
+
+
+
+
+#####################################
+使用ceph-deploy来部署
+
+1. 环境
+OS: ubuntu server 19.x版本
+ceph :ceph version 13.2.6
+
+在安装操作系统的时候,需要注意,osd角色需要单独准备一块硬盘或者是单独准备2个分区
+这里以硬盘为例子
+
+服务器信息:
+IP								HOSTNAME
+192.168.10.100     proxy                          # 用于从远程部署
+192.168.10.1		    ubu01                         # 用于mon角色 - 监控
+192.168.10.2         ubu02                         # 用于osd角色 - 数据
+192.168.10.3         ubu03                         # 用于osd角色 - 数据 
+
+软件列表:
+
+binutils_2.32-7ubuntu4_amd64.deb
+binutils-common_2.32-7ubuntu4_amd64.deb
+binutils-x86-64-linux-gnu_2.32-7ubuntu4_amd64.deb
+ceph_13.2.6-0ubuntu0.19.04.2_amd64.deb
+ceph-base_13.2.6-0ubuntu0.19.04.2_amd64.deb
+ceph-common_13.2.6-0ubuntu0.19.04.2_amd64.deb
+ceph-mgr_13.2.6-0ubuntu0.19.04.2_amd64.deb
+ceph-mon_13.2.6-0ubuntu0.19.04.2_amd64.deb
+ceph-osd_13.2.6-0ubuntu0.19.04.2_amd64.deb
+chrony_3.4-1ubuntu1_amd64.deb
+javascript-common_11_all.deb
+libbabeltrace1_1.5.6-2_amd64.deb
+libbinutils_2.32-7ubuntu4_amd64.deb
+libcephfs2_13.2.6-0ubuntu0.19.04.2_amd64.deb
+libdw1_0.176-1_amd64.deb
+libgoogle-perftools4_2.5-2.2ubuntu3_amd64.deb
+libjs-jquery_3.3.1~dfsg-1_all.deb
+libleveldb1d_1.20-2.1_amd64.deb
+liboath0_2.6.1-1.3_amd64.deb
+librados2_13.2.6-0ubuntu0.19.04.2_amd64.deb
+libradosstriper1_13.2.6-0ubuntu0.19.04.2_amd64.deb
+librbd1_13.2.6-0ubuntu0.19.04.2_amd64.deb
+libsnappy1v5_1.1.7-1_amd64.deb
+libtcmalloc-minimal4_2.5-2.2ubuntu3_amd64.deb
+python3-bcrypt_3.1.6-1_amd64.deb
+python3-bs4_4.7.1-1build1_all.deb
+python3-cephfs_13.2.6-0ubuntu0.19.04.2_amd64.deb
+python3-cherrypy3_8.9.1-2_all.deb
+python3-distutils_3.7.3-1ubuntu1_all.deb
+python3-html5lib_1.0.1-1_all.deb
+python3-lib2to3_3.7.3-1ubuntu1_all.deb
+python3-logutils_0.3.3-5_all.deb
+python3-lxml_4.3.3-1_amd64.deb
+python3-mako_1.0.7+ds1-1_all.deb
+python3-paste_3.0.6+dfsg-1_all.deb
+python3-pastedeploy_2.0.1-1_all.deb
+python3-pastescript_2.0.2-2_all.deb
+python3-pecan_1.3.2-0ubuntu1_all.deb
+python3-prettytable_0.7.2-4_all.deb
+python3-pyinotify_0.9.6-1_all.deb
+python3-rados_13.2.6-0ubuntu0.19.04.2_amd64.deb
+python3-rbd_13.2.6-0ubuntu0.19.04.2_amd64.deb
+python3-repoze.lru_0.7-1_all.deb
+python3-routes_2.4.1-1_all.deb
+python3-setuptools_40.8.0-1_all.deb
+python3-simplegeneric_0.8.1-2_all.deb
+python3-simplejson_3.16.0-1_amd64.deb
+python3-singledispatch_3.4.0.3-2_all.deb
+python3-soupsieve_1.8+dfsg-1_all.deb
+python3-tempita_0.5.2-2_all.deb
+python3-waitress_1.2.0~b2-2_all.deb
+python3-webencodings_0.5.1-1_all.deb
+python3-webob_1%3a1.8.5-1_all.deb
+python3-webtest_2.0.28-1ubuntu1_all.deb
+python3-werkzeug_0.14.1+dfsg1-4_all.deb
+python-pastedeploy-tpl_2.0.1-1_all.deb
+
+下载包的时候注意:
+只下载,不安装,下载的包在/var/cache/apt/archives下
+# apt-get install ceph -d 
+
+2. 安装配置
+需要注意的是,必须通过proxy可以ssh到所有的ceph集群的机器上,同时在hosts的文件中必须有
+
+192.168.10.1 ubu01
+192.168.10.2 ubu02
+192.168.10.3 ubu03
+
+
+现在所有ceph集群的机器上安装完上述的包
+# dpkg -i *.deb
+
+
+# 建立monitor - mon角色 - 这里是单mon角色,一个完整的集群是至少有3个
+# 在proxy上操作
+# mkdir my-cluster
+# cd my-cluster
+# ceph-deploy new ubu01          # 建立一个mon
+
+编辑ceph.conf文件,添加2行
+
+os pool default size = 2								# 表示有2个osd
+public network = 192.168.10.0/24			# 表示互相通讯用的网段
+
+# ceph-deploy mon create-initial			# 搜集密钥并且初始化mon
+
+有时候有报错,重启mon机器
+
+如果想要重新开始,可以
+ceph-deploy purge {ceph-node} [{ceph-node}]
+ceph-deploy purgedata {ceph-node} [{ceph-node}]
+ceph-deploy forgetkeys
+rm ceph.*
+
+
+# 建立osd角色
+
+# ceph-deploy gatherkeys ubu01
+
+# ceph-deploy osd create ubu02 --data /dev/sdb
+# ceph-deploy osd create ubu03 --data /dev/sdb
+
+# 这个过程实际是可以分为2个过程
+# 1. Prepare the OSD # ceph-volume lvm prepare --data /dev/sdb
+# 2. Active the OSD # ceph-volume lvm active 0 a7f64266-0894-4f1e-a635-d0aeaca0e993
+# 使用create是直接合并了2个过程,这里用的是bluestore,如果是用filestore的话,就需要指定--data,--journal,区别就是filestore时--data,--journal可以指定分区,而bluestore指定磁盘
+# 在proxy上执行如下命令,等同于/usr/sbin/ceph-volume --cluster ceph lvm create --bluestore --data /dev/sdb这个命令
+
+
+具体的执行日志:
+*******************************************************************
+root@proxy:~/my-cluster# ceph-deploy osd create ubu03 --data /dev/sdb
+[ceph_deploy.conf][DEBUG ] found configuration file at: /root/.cephdeploy.conf
+[ceph_deploy.cli][INFO  ] Invoked (2.0.1): /usr/bin/ceph-deploy osd create ubu03 --data /dev/sdb
+[ceph_deploy.cli][INFO  ] ceph-deploy options:
+[ceph_deploy.cli][INFO  ]  verbose                       : False
+[ceph_deploy.cli][INFO  ]  quiet                         : False
+[ceph_deploy.cli][INFO  ]  username                      : None
+[ceph_deploy.cli][INFO  ]  overwrite_conf                : False
+[ceph_deploy.cli][INFO  ]  ceph_conf                     : None
+[ceph_deploy.cli][INFO  ]  cluster                       : ceph
+[ceph_deploy.cli][INFO  ]  subcommand                    : create
+[ceph_deploy.cli][INFO  ]  cd_conf                       : <ceph_deploy.conf.cephdeploy.Conf object at 0x7f6f139ca048>
+[ceph_deploy.cli][INFO  ]  default_release               : False
+[ceph_deploy.cli][INFO  ]  func                          : <function osd at 0x7f6f13a612f0>
+[ceph_deploy.cli][INFO  ]  data                          : /dev/sdb
+[ceph_deploy.cli][INFO  ]  journal                       : None
+[ceph_deploy.cli][INFO  ]  zap_disk                      : False
+[ceph_deploy.cli][INFO  ]  fs_type                       : xfs
+[ceph_deploy.cli][INFO  ]  dmcrypt                       : False
+[ceph_deploy.cli][INFO  ]  dmcrypt_key_dir               : /etc/ceph/dmcrypt-keys
+[ceph_deploy.cli][INFO  ]  filestore                     : None
+[ceph_deploy.cli][INFO  ]  bluestore                     : None
+[ceph_deploy.cli][INFO  ]  block_db                      : None
+[ceph_deploy.cli][INFO  ]  block_wal                     : None
+[ceph_deploy.cli][INFO  ]  host                          : ubu03
+[ceph_deploy.cli][INFO  ]  debug                         : False
+[ceph_deploy.osd][DEBUG ] Creating OSD on cluster ceph with data device /dev/sdb
+[ubu03][DEBUG ] connected to host: ubu03 
+[ceph_deploy.osd][INFO  ] Distro info: Ubuntu 19.04 disco
+[ceph_deploy.osd][DEBUG ] Deploying osd to ubu03
+[ubu03][INFO  ] Running command: /usr/sbin/ceph-volume --cluster ceph lvm create --bluestore --data /dev/sdb
+[ubu03][DEBUG ] Running command: /bin/ceph-authtool --gen-print-key
+[ubu03][DEBUG ] Running command: /bin/ceph --cluster ceph --name client.bootstrap-osd --keyring /var/lib/ceph/bootstrap-osd/ceph.keyring -i - osd new e6141717-59a5-4c6f-9472-b25d476d7801
+[ubu03][DEBUG ] Running command: /usr/sbin/vgcreate --force --yes ceph-4d8726ba-ce02-47aa-bf4f-acc4ab107ff0 /dev/sdb
+[ubu03][DEBUG ]  stdout: Wiping xfs signature on /dev/sdb.
+[ubu03][DEBUG ]  stdout: Physical volume "/dev/sdb" successfully created.
+[ubu03][DEBUG ]  stdout: Volume group "ceph-4d8726ba-ce02-47aa-bf4f-acc4ab107ff0" successfully created
+[ubu03][DEBUG ] Running command: /usr/sbin/lvcreate --yes -l 100%FREE -n osd-block-e6141717-59a5-4c6f-9472-b25d476d7801 ceph-4d8726ba-ce02-47aa-bf4f-acc4ab107ff0
+[ubu03][DEBUG ]  stdout: Wiping xfs signature on /dev/ceph-4d8726ba-ce02-47aa-bf4f-acc4ab107ff0/osd-block-e6141717-59a5-4c6f-9472-b25d476d7801.
+[ubu03][DEBUG ]  stdout: Logical volume "osd-block-e6141717-59a5-4c6f-9472-b25d476d7801" created.
+[ubu03][DEBUG ] Running command: /bin/ceph-authtool --gen-print-key
+[ubu03][DEBUG ] Running command: /bin/mount -t tmpfs tmpfs /var/lib/ceph/osd/ceph-1
+[ubu03][DEBUG ] --> Absolute path not found for executable: restorecon
+[ubu03][DEBUG ] --> Ensure $PATH environment variable contains common executable locations
+[ubu03][DEBUG ] Running command: /bin/chown -h ceph:ceph /dev/ceph-4d8726ba-ce02-47aa-bf4f-acc4ab107ff0/osd-block-e6141717-59a5-4c6f-9472-b25d476d7801
+[ubu03][DEBUG ] Running command: /bin/chown -R ceph:ceph /dev/dm-0
+[ubu03][DEBUG ] Running command: /bin/ln -s /dev/ceph-4d8726ba-ce02-47aa-bf4f-acc4ab107ff0/osd-block-e6141717-59a5-4c6f-9472-b25d476d7801 /var/lib/ceph/osd/ceph-1/block
+[ubu03][DEBUG ] Running command: /bin/ceph --cluster ceph --name client.bootstrap-osd --keyring /var/lib/ceph/bootstrap-osd/ceph.keyring mon getmap -o /var/lib/ceph/osd/ceph-1/activate.monmap
+[ubu03][DEBUG ]  stderr: got monmap epoch 1
+[ubu03][DEBUG ] Running command: /bin/ceph-authtool /var/lib/ceph/osd/ceph-1/keyring --create-keyring --name osd.1 --add-key AQC/MV5dwdl1EBAApI92rpSk6fpR9fI8vJnEZw==
+[ubu03][DEBUG ]  stdout: creating /var/lib/ceph/osd/ceph-1/keyring
+[ubu03][DEBUG ] added entity osd.1 auth auth(auid = 18446744073709551615 key=AQC/MV5dwdl1EBAApI92rpSk6fpR9fI8vJnEZw== with 0 caps)
+[ubu03][DEBUG ] Running command: /bin/chown -R ceph:ceph /var/lib/ceph/osd/ceph-1/keyring
+[ubu03][DEBUG ] Running command: /bin/chown -R ceph:ceph /var/lib/ceph/osd/ceph-1/
+[ubu03][DEBUG ] Running command: /bin/ceph-osd --cluster ceph --osd-objectstore bluestore --mkfs -i 1 --monmap /var/lib/ceph/osd/ceph-1/activate.monmap --keyfile - --osd-data /var/lib/ceph/osd/ceph-1/ --osd-uuid e6141717-59a5-4c6f-9472-b25d476d7801 --setuser ceph --setgroup ceph
+[ubu03][DEBUG ] --> ceph-volume lvm prepare successful for: /dev/sdb
+[ubu03][DEBUG ] Running command: /bin/chown -R ceph:ceph /var/lib/ceph/osd/ceph-1
+[ubu03][DEBUG ] Running command: /bin/ceph-bluestore-tool --cluster=ceph prime-osd-dir --dev /dev/ceph-4d8726ba-ce02-47aa-bf4f-acc4ab107ff0/osd-block-e6141717-59a5-4c6f-9472-b25d476d7801 --path /var/lib/ceph/osd/ceph-1 --no-mon-config
+[ubu03][DEBUG ] Running command: /bin/ln -snf /dev/ceph-4d8726ba-ce02-47aa-bf4f-acc4ab107ff0/osd-block-e6141717-59a5-4c6f-9472-b25d476d7801 /var/lib/ceph/osd/ceph-1/block
+[ubu03][DEBUG ] Running command: /bin/chown -h ceph:ceph /var/lib/ceph/osd/ceph-1/block
+[ubu03][DEBUG ] Running command: /bin/chown -R ceph:ceph /dev/dm-0
+[ubu03][DEBUG ] Running command: /bin/chown -R ceph:ceph /var/lib/ceph/osd/ceph-1
+[ubu03][DEBUG ] Running command: /bin/systemctl enable ceph-volume@lvm-1-e6141717-59a5-4c6f-9472-b25d476d7801
+[ubu03][DEBUG ]  stderr: Created symlink /etc/systemd/system/multi-user.target.wants/ceph-volume@lvm-1-e6141717-59a5-4c6f-9472-b25d476d7801.service → /lib/systemd/system/ceph-volume@.service.
+[ubu03][DEBUG ] Running command: /bin/systemctl enable --runtime ceph-osd@1
+[ubu03][DEBUG ]  stderr: Created symlink /run/systemd/system/ceph-osd.target.wants/ceph-osd@1.service → /lib/systemd/system/ceph-osd@.service.
+[ubu03][DEBUG ] Running command: /bin/systemctl start ceph-osd@1
+[ubu03][DEBUG ] --> ceph-volume lvm activate successful for osd ID: 1
+[ubu03][DEBUG ] --> ceph-volume lvm create successful for: /dev/sdb
+[ubu03][INFO  ] checking OSD status...
+[ubu03][INFO  ] Running command: /bin/ceph --cluster=ceph osd stat --format=json
+[ceph_deploy.osd][DEBUG ] Host ubu03 is now ready for osd use.
+
+*******************************************************************
+
+# ubu02,ubu03上查看
+ceph-volume lvm list
+
+
+# 将ceph.client.admin.keyring放到ubu01/02/03上的/etc/ceph/ceph.client.admin.keyring
+ceph-deploy admin ubu01 ubu02 ubu03
+
+# 登录任意一台有admin的可以的机器执行
+ceph osd tree
+*******************************************************************
+ID CLASS WEIGHT  TYPE NAME      STATUS REWEIGHT PRI-AFF 
+-1       0.01959 root default                           
+-3       0.00980     host ubu02                         
+ 0   hdd 0.00980         osd.0      up  1.00000 1.00000 
+-5       0.00980     host ubu03                         
+ 1   hdd 0.00980         osd.1      up  1.00000 1.00000 
+*******************************************************************
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

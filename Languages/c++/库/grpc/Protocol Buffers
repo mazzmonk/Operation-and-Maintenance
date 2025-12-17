@@ -1,0 +1,95 @@
+Making install in .
+make[1]: Entering directory '/home/jack/src/protobuf-3.11.4'
+make[2]: Entering directory '/home/jack/src/protobuf-3.11.4'
+make[2]: Nothing to be done for 'install-exec-am'.
+ /bin/mkdir -p '/usr/lib/pkgconfig'
+ /usr/bin/install -c -m 644 protobuf.pc protobuf-lite.pc '/usr/lib/pkgconfig'
+make[2]: Leaving directory '/home/jack/src/protobuf-3.11.4'
+make[1]: Leaving directory '/home/jack/src/protobuf-3.11.4'
+Making install in src
+make[1]: Entering directory '/home/jack/src/protobuf-3.11.4/src'
+make[2]: Entering directory '/home/jack/src/protobuf-3.11.4/src'
+ /bin/mkdir -p '/usr/lib'
+ /bin/bash ../libtool   --mode=install /usr/bin/install -c   libprotobuf-lite.la libprotobuf.la libprotoc.la '/usr/lib'
+libtool: install: /usr/bin/install -c .libs/libprotobuf-lite.so.22.0.4 /usr/lib/libprotobuf-lite.so.22.0.4
+libtool: install: (cd /usr/lib && { ln -s -f libprotobuf-lite.so.22.0.4 libprotobuf-lite.so.22 || { rm -f libprotobuf-lite.so.22 && ln -s libprotobuf-lite.so.22.0.4 libprotobuf-lite.so.22; }; })
+libtool: install: (cd /usr/lib && { ln -s -f libprotobuf-lite.so.22.0.4 libprotobuf-lite.so || { rm -f libprotobuf-lite.so && ln -s libprotobuf-lite.so.22.0.4 libprotobuf-lite.so; }; })
+libtool: install: /usr/bin/install -c .libs/libprotobuf-lite.lai /usr/lib/libprotobuf-lite.la
+libtool: install: /usr/bin/install -c .libs/libprotobuf.so.22.0.4 /usr/lib/libprotobuf.so.22.0.4
+libtool: install: (cd /usr/lib && { ln -s -f libprotobuf.so.22.0.4 libprotobuf.so.22 || { rm -f libprotobuf.so.22 && ln -s libprotobuf.so.22.0.4 libprotobuf.so.22; }; })
+libtool: install: (cd /usr/lib && { ln -s -f libprotobuf.so.22.0.4 libprotobuf.so || { rm -f libprotobuf.so && ln -s libprotobuf.so.22.0.4 libprotobuf.so; }; })
+libtool: install: /usr/bin/install -c .libs/libprotobuf.lai /usr/lib/libprotobuf.la
+libtool: warning: relinking 'libprotoc.la'
+libtool: install: (cd /home/jack/src/protobuf-3.11.4/src; /bin/bash "/home/jack/src/protobuf-3.11.4/libtool"  --silent --tag CXX --mode=relink g++ -pthread -DHAVE_PTHREAD=1 -DHAVE_ZLIB=1 -Wall -Wno-sign-compare -O2 -g -std=c++11 -DNDEBUG -version-info 22:4:0 -export-dynamic -no-undefined -Wl,--version-script=./libprotoc.map -o libprotoc.la -rpath /usr/lib google/protobuf/compiler/code_generator.lo google/protobuf/compiler/command_line_interface.lo google/protobuf/compiler/plugin.lo google/protobuf/compiler/plugin.pb.lo google/protobuf/compiler/subprocess.lo google/protobuf/compiler/zip_writer.lo google/protobuf/compiler/cpp/cpp_enum.lo google/protobuf/compiler/cpp/cpp_enum_field.lo google/protobuf/compiler/cpp/cpp_extension.lo google/protobuf/compiler/cpp/cpp_field.lo google/protobuf/compiler/cpp/cpp_file.lo google/protobuf/compiler/cpp/cpp_generator.lo google/protobuf/compiler/cpp/cpp_helpers.lo google/protobuf/compiler/cpp/cpp_map_field.lo google/protobuf/compiler/cpp/cpp_message.lo google/protobuf/compiler/cpp/cpp_message_field.lo google/protobuf/compiler/cpp/cpp_padding_optimizer.lo google/protobuf/compiler/cpp/cpp_primitive_field.lo google/protobuf/compiler/cpp/cpp_service.lo google/protobuf/compiler/cpp/cpp_string_field.lo google/protobuf/compiler/java/java_context.lo google/protobuf/compiler/java/java_enum.lo google/protobuf/compiler/java/java_enum_lite.lo google/protobuf/compiler/java/java_enum_field.lo google/protobuf/compiler/java/java_enum_field_lite.lo google/protobuf/compiler/java/java_extension.lo google/protobuf/compiler/java/java_extension_lite.lo google/protobuf/compiler/java/java_field.lo google/protobuf/compiler/java/java_file.lo google/protobuf/compiler/java/java_generator.lo google/protobuf/compiler/java/java_generator_factory.lo google/protobuf/compiler/java/java_helpers.lo google/protobuf/compiler/java/java_map_field.lo google/protobuf/compiler/java/java_map_field_lite.lo google/protobuf/compiler/java/java_message.lo google/protobuf/compiler/java/java_message_lite.lo google/protobuf/compiler/java/java_message_builder.lo google/protobuf/compiler/java/java_message_builder_lite.lo google/protobuf/compiler/java/java_message_field.lo google/protobuf/compiler/java/java_message_field_lite.lo google/protobuf/compiler/java/java_name_resolver.lo google/protobuf/compiler/java/java_primitive_field.lo google/protobuf/compiler/java/java_primitive_field_lite.lo google/protobuf/compiler/java/java_shared_code_generator.lo google/protobuf/compiler/java/java_service.lo google/protobuf/compiler/java/java_string_field.lo google/protobuf/compiler/java/java_string_field_lite.lo google/protobuf/compiler/java/java_doc_comment.lo google/protobuf/compiler/js/js_generator.lo google/protobuf/compiler/js/well_known_types_embed.lo google/protobuf/compiler/objectivec/objectivec_enum.lo google/protobuf/compiler/objectivec/objectivec_enum_field.lo google/protobuf/compiler/objectivec/objectivec_extension.lo google/protobuf/compiler/objectivec/objectivec_field.lo google/protobuf/compiler/objectivec/objectivec_file.lo google/protobuf/compiler/objectivec/objectivec_generator.lo google/protobuf/compiler/objectivec/objectivec_helpers.lo google/protobuf/compiler/objectivec/objectivec_map_field.lo google/protobuf/compiler/objectivec/objectivec_message.lo google/protobuf/compiler/objectivec/objectivec_message_field.lo google/protobuf/compiler/objectivec/objectivec_oneof.lo google/protobuf/compiler/objectivec/objectivec_primitive_field.lo google/protobuf/compiler/php/php_generator.lo google/protobuf/compiler/python/python_generator.lo google/protobuf/compiler/ruby/ruby_generator.lo google/protobuf/compiler/csharp/csharp_doc_comment.lo google/protobuf/compiler/csharp/csharp_enum.lo google/protobuf/compiler/csharp/csharp_enum_field.lo google/protobuf/compiler/csharp/csharp_field_base.lo google/protobuf/compiler/csharp/csharp_generator.lo google/protobuf/compiler/csharp/csharp_helpers.lo google/protobuf/compiler/csharp/csharp_map_field.lo google/protobuf/compiler/csharp/csharp_message.lo google/protobuf/compiler/csharp/csharp_message_field.lo google/protobuf/compiler/csharp/csharp_primitive_field.lo google/protobuf/compiler/csharp/csharp_reflection_class.lo google/protobuf/compiler/csharp/csharp_repeated_enum_field.lo google/protobuf/compiler/csharp/csharp_repeated_message_field.lo google/protobuf/compiler/csharp/csharp_repeated_primitive_field.lo google/protobuf/compiler/csharp/csharp_source_generator_base.lo google/protobuf/compiler/csharp/csharp_wrapper_field.lo libprotobuf.la -lz )
+libtool: install: /usr/bin/install -c .libs/libprotoc.so.22.0.4T /usr/lib/libprotoc.so.22.0.4
+libtool: install: (cd /usr/lib && { ln -s -f libprotoc.so.22.0.4 libprotoc.so.22 || { rm -f libprotoc.so.22 && ln -s libprotoc.so.22.0.4 libprotoc.so.22; }; })
+libtool: install: (cd /usr/lib && { ln -s -f libprotoc.so.22.0.4 libprotoc.so || { rm -f libprotoc.so && ln -s libprotoc.so.22.0.4 libprotoc.so; }; })
+libtool: install: /usr/bin/install -c .libs/libprotoc.lai /usr/lib/libprotoc.la
+libtool: install: /usr/bin/install -c .libs/libprotobuf-lite.a /usr/lib/libprotobuf-lite.a
+libtool: install: chmod 644 /usr/lib/libprotobuf-lite.a
+libtool: install: ranlib /usr/lib/libprotobuf-lite.a
+libtool: install: /usr/bin/install -c .libs/libprotobuf.a /usr/lib/libprotobuf.a
+libtool: install: chmod 644 /usr/lib/libprotobuf.a
+libtool: install: ranlib /usr/lib/libprotobuf.a
+libtool: install: /usr/bin/install -c .libs/libprotoc.a /usr/lib/libprotoc.a
+libtool: install: chmod 644 /usr/lib/libprotoc.a
+libtool: install: ranlib /usr/lib/libprotoc.a
+libtool: finish: PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/sbin" ldconfig -n /usr/lib
+----------------------------------------------------------------------
+Libraries have been installed in:
+   /usr/lib
+
+If you ever happen to want to link against installed libraries
+in a given directory, LIBDIR, you must either use libtool, and
+specify the full pathname of the library, or use the '-LLIBDIR'
+flag during linking and do at least one of the following:
+   - add LIBDIR to the 'LD_LIBRARY_PATH' environment variable
+     during execution
+   - add LIBDIR to the 'LD_RUN_PATH' environment variable
+     during linking
+   - use the '-Wl,-rpath -Wl,LIBDIR' linker flag
+   - have your system administrator add LIBDIR to '/etc/ld.so.conf'
+
+See any operating system documentation about shared libraries for
+more information, such as the ld(1) and ld.so(8) manual pages.
+----------------------------------------------------------------------
+ /bin/mkdir -p '/usr/bin'
+  /bin/bash ../libtool   --mode=install /usr/bin/install -c protoc '/usr/bin'
+libtool: install: /usr/bin/install -c .libs/protoc /usr/bin/protoc
+ /bin/mkdir -p '/usr/include'
+ /bin/mkdir -p '/usr/include/google/protobuf'
+ /usr/bin/install -c -m 644  google/protobuf/descriptor.proto google/protobuf/any.proto google/protobuf/api.proto google/protobuf/duration.proto google/protobuf/empty.proto google/protobuf/field_mask.proto google/protobuf/source_context.proto google/protobuf/struct.proto google/protobuf/timestamp.proto google/protobuf/type.proto google/protobuf/wrappers.proto '/usr/include/google/protobuf'
+ /bin/mkdir -p '/usr/include/google/protobuf/compiler'
+ /usr/bin/install -c -m 644  google/protobuf/compiler/plugin.proto '/usr/include/google/protobuf/compiler'
+ /bin/mkdir -p '/usr/include'
+ /bin/mkdir -p '/usr/include/google/protobuf'
+ /usr/bin/install -c -m 644  google/protobuf/any.pb.h google/protobuf/api.pb.h google/protobuf/any.h google/protobuf/arena.h google/protobuf/arena_impl.h google/protobuf/arenastring.h google/protobuf/descriptor_database.h google/protobuf/descriptor.h google/protobuf/descriptor.pb.h google/protobuf/duration.pb.h google/protobuf/dynamic_message.h google/protobuf/empty.pb.h google/protobuf/extension_set.h google/protobuf/extension_set_inl.h google/protobuf/field_mask.pb.h google/protobuf/generated_enum_reflection.h google/protobuf/generated_enum_util.h google/protobuf/generated_message_reflection.h google/protobuf/generated_message_table_driven.h google/protobuf/generated_message_util.h google/protobuf/has_bits.h google/protobuf/implicit_weak_message.h google/protobuf/inlined_string_field.h google/protobuf/map_entry.h google/protobuf/map_entry_lite.h google/protobuf/map_field.h google/protobuf/map_field_inl.h google/protobuf/map_field_lite.h google/protobuf/map.h google/protobuf/map_type_handler.h google/protobuf/message.h google/protobuf/message_lite.h google/protobuf/metadata.h google/protobuf/metadata_lite.h google/protobuf/parse_context.h google/protobuf/port.h google/protobuf/port_def.inc google/protobuf/port_undef.inc google/protobuf/reflection.h google/protobuf/reflection_ops.h '/usr/include/google/protobuf'
+ /bin/mkdir -p '/usr/include/google/protobuf/compiler/java'
+ /usr/bin/install -c -m 644  google/protobuf/compiler/java/java_generator.h google/protobuf/compiler/java/java_names.h '/usr/include/google/protobuf/compiler/java'
+ /bin/mkdir -p '/usr/include/google/protobuf/compiler/cpp'
+ /usr/bin/install -c -m 644  google/protobuf/compiler/cpp/cpp_generator.h '/usr/include/google/protobuf/compiler/cpp'
+ /bin/mkdir -p '/usr/include/google/protobuf/compiler/python'
+ /usr/bin/install -c -m 644  google/protobuf/compiler/python/python_generator.h '/usr/include/google/protobuf/compiler/python'
+ /bin/mkdir -p '/usr/include/google/protobuf/compiler/js'
+ /usr/bin/install -c -m 644  google/protobuf/compiler/js/js_generator.h google/protobuf/compiler/js/well_known_types_embed.h '/usr/include/google/protobuf/compiler/js'
+ /bin/mkdir -p '/usr/include/google/protobuf'
+ /usr/bin/install -c -m 644  google/protobuf/repeated_field.h google/protobuf/service.h google/protobuf/source_context.pb.h google/protobuf/struct.pb.h google/protobuf/text_format.h google/protobuf/timestamp.pb.h google/protobuf/type.pb.h google/protobuf/unknown_field_set.h google/protobuf/wire_format.h google/protobuf/wire_format_lite.h google/protobuf/wrappers.pb.h '/usr/include/google/protobuf'
+ /bin/mkdir -p '/usr/include/google/protobuf/stubs'
+ /usr/bin/install -c -m 644  google/protobuf/stubs/callback.h google/protobuf/stubs/bytestream.h google/protobuf/stubs/casts.h google/protobuf/stubs/common.h google/protobuf/stubs/fastmem.h google/protobuf/stubs/hash.h google/protobuf/stubs/logging.h google/protobuf/stubs/macros.h google/protobuf/stubs/map_util.h google/protobuf/stubs/mutex.h google/protobuf/stubs/once.h google/protobuf/stubs/platform_macros.h google/protobuf/stubs/port.h google/protobuf/stubs/status.h google/protobuf/stubs/stl_util.h google/protobuf/stubs/stringpiece.h google/protobuf/stubs/strutil.h google/protobuf/stubs/template_util.h '/usr/include/google/protobuf/stubs'
+ /bin/mkdir -p '/usr/include/google/protobuf/util'
+ /usr/bin/install -c -m 644  google/protobuf/util/type_resolver.h google/protobuf/util/delimited_message_util.h google/protobuf/util/field_comparator.h google/protobuf/util/field_mask_util.h google/protobuf/util/json_util.h google/protobuf/util/time_util.h google/protobuf/util/type_resolver_util.h google/protobuf/util/message_differencer.h '/usr/include/google/protobuf/util'
+ /bin/mkdir -p '/usr/include/google/protobuf/compiler/php'
+ /usr/bin/install -c -m 644  google/protobuf/compiler/php/php_generator.h '/usr/include/google/protobuf/compiler/php'
+ /bin/mkdir -p '/usr/include/google/protobuf/compiler'
+ /usr/bin/install -c -m 644  google/protobuf/compiler/code_generator.h google/protobuf/compiler/command_line_interface.h google/protobuf/compiler/importer.h google/protobuf/compiler/parser.h google/protobuf/compiler/plugin.h google/protobuf/compiler/plugin.pb.h '/usr/include/google/protobuf/compiler'
+ /bin/mkdir -p '/usr/include/google/protobuf/compiler/ruby'
+ /usr/bin/install -c -m 644  google/protobuf/compiler/ruby/ruby_generator.h '/usr/include/google/protobuf/compiler/ruby'
+ /bin/mkdir -p '/usr/include/google/protobuf/io'
+ /usr/bin/install -c -m 644  google/protobuf/io/io_win32.h google/protobuf/io/coded_stream.h google/protobuf/io/gzip_stream.h google/protobuf/io/printer.h google/protobuf/io/strtod.h google/protobuf/io/tokenizer.h google/protobuf/io/zero_copy_stream.h google/protobuf/io/zero_copy_stream_impl.h google/protobuf/io/zero_copy_stream_impl_lite.h '/usr/include/google/protobuf/io'
+ /bin/mkdir -p '/usr/include/google/protobuf/compiler/csharp'
+ /usr/bin/install -c -m 644  google/protobuf/compiler/csharp/csharp_generator.h google/protobuf/compiler/csharp/csharp_names.h '/usr/include/google/protobuf/compiler/csharp'
+ /bin/mkdir -p '/usr/include/google/protobuf/compiler/objectivec'
+ /usr/bin/install -c -m 644  google/protobuf/compiler/objectivec/objectivec_generator.h google/protobuf/compiler/objectivec/objectivec_helpers.h '/usr/include/google/protobuf/compiler/objectivec'
+make[2]: Leaving directory '/home/jack/src/protobuf-3.11.4/src'
+make[1]: Leaving directory '/home/jack/src/protobuf-3.11.4/src'
+

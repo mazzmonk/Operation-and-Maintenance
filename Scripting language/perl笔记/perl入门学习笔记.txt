@@ -1,0 +1,1362 @@
+﻿''不会转译其中的特殊符号，比如$my就不会转译成相应的变量内容
+""则会转译
+
+${what}s 变量$what值后边加一个字符s
+
+
+
+chomp($text) 去掉字符变量$text行末的换行符
+
+chomp($text = <STDIN>)去除输入中的行末换行符
+
+$string .= "efc"; 如果string原来有内容，则将eft加到原来string后边，若为空，则内容就为efc
+
+$#rocks 可以得到数组rocks最后一个元素的索引值
+
+(0..$#rocks) rocks数组里的所有索引数字
+
+qw(fred barney betty wilma dino) qw表示“quoted word"（加上引号的单词）等同于("fred","barney","betty","wilma","dino"),但是当做单引号处理
+
+pop(@array) pop@array作用相同，都是取出数组array的最后一个元素，数组array原来的最后一个元素就被拿走。
+
+push(@array,0) push @array,0 push @array,1..10上述方式都是在末端添加元素，效果相同。
+
+shift(@array) shift @array作用相同，都是取走开头的元素
+unshift(@array,5) unshift @array,4 在开头添加元素。
+
+$email = "fred\@bedrock.edu";
+$email = 'fred@bedrock.edu";
+这样写避免将@bedrock当做数组处理，比如$email = "fred@bedrock.edu"将会把@bedrock当数组处理
+
+foreach (1..10){
+	print "I can count to $_!\n"
+}
+结果是：
+I can count to 1!
+I can count to 2!
+I can count to 3!
+I can count to 4!
+I can count to 5!
+I can count to 6!
+I can count to 7!
+I can count to 8!
+I can count to 9!
+
+$_用以省略变量输入
+@_数组元素
+
+$_ = "yabba daba\n";
+print;
+打印出$_的内容
+I can count to 10!
+
+reverse 反序列表值(可能来之数组)
+@fred = 6..10;
+@fred = reverse(@fred);
+
+@back = reverse sort @rocks; 反序排序数组值
+
+
+@people = qw( fred barney betty );
+@sorted = sort @people; #列表上下文:barney,betty,fred
+@number = 42 + @people; #标量上下文:42 + 3，得45
+$n = @people; #得到3
+
+@people在不同的表达式里返回的内容不同。
+
+@backwards = reverse qw/ yabba dabba doo/; # doo,dabba,yabba
+$backwards = reverse qw/ yabba dabba doo/; #oodabbadabbay
+这里的列表和标量得到的结果不同
+
+$fred = something;      #标量上下文
+@pebbles = something;   #列表上下文，列表只有1个元素
+($wilma,$betty) = something; #列表上下文，第一个元素是something，第二个元素是undef
+($dino) = something;   #列表上下文，列表只有一个元素something
+
+scalar伪函数，用来强制引入标量上下文
+@rocks = qw( talc quartz jade obsidina );
+print "I have ", @rocks, "rocks!\n"; #这里会打印出列表的内容
+print "I have ", scalar @rocks, " rocks!\n" #这里会打印出元素的个数
+
+chomp(@line = <STDIN>);#chomp去掉所有元素的换行符，这里是去掉所有输入的换行符，比如说，每行一个元素，输入多行的时候，使用chomp时候会出现，将所有元素一行输出。
+
+#!/usr/bin/perl -w
+sub max {
+        my($max_so_far) = shift @_;             #数组中的一个值，暂时当做最大值
+        foreach (@_) {                          #遍历数组@_中的其他元素
+                if ( $_ >$max_so_far) {		#当前元素比 $max_so_far更大吗？
+                        $max_so_far = $_;
+                }
+        }
+        $max_so_far;
+}
+$max = &max
+
+print "$max\n";
+
+当使用 foreach (@fred){
+
+			}
+（）是必须的
+
+
+
+sub max{
+	if(@_ ! = 2) {
+		
+		print " 参数数目不对\n"
+	}
+
+..
+}
+
+使用@_来检查参数子程序的参数数目
+
+
+
+my是私有变量的标示，就是局部变量
+
+use strict 强制执行一些严格的、确保良好程序设计的规则。
+
+sub division{
+		
+	$_[0] / $_[1];             #用第一个参数除以第二个参数
+}
+
+my $quotient = division(355,113);  #使用&division，省略了&，因为子程序在前边已经定义过
+
+
+defined函数：要想知道一个值是undef还是非空字符串，可以使用defined函数，它对undef返回假，其他所有情况则返回真。
+
+defined是用来测试一个变量是否是undef的，也就是说这个变量一定有，只是不知道对这个变量赋过值没有
+
+
+通俗的说，不带变量的shift就是不断读出：传入函数的参数
+例如：调用 mysub（'a' , 'b' , 'c')后
+$pk = shift的结果就是 pk里面存入了 'a' 这个值
+如果下面还有语句例如：
+$pk2 = shift 那么pk2里面就存入了 'b' 这个值 
+
+
+#!/opt/ActivePerl-5.12/bin/perl -w
+use 5.010;
+sub greet {
+                state $last_person;
+                my $name = shift;
+                print "Hi $name! ";
+                if (defined $last_person) {
+                        print "$last_person is also here!\n";
+                }
+                else {
+                        print "You are the first one here!\n";
+                }
+                $last_person = $name;
+}
+
+greet( 'Fred' );
+greet( 'barney' );
+
+程序有个小技巧，开始的时候last_person的值是undef，用defined来判断是否是undef，就知道了，是不是第一次是赋值了，而最后last_name保存当前值作为下一次记得的值。
+
+上述程序的需求是写一个greet的子程序，当给定一个人名作为参数时，打印出欢迎他得信息，并告诉他前一来宾的名字：
+
+greet("Fred");
+greet("Barney");
+
+按照表达式的顺序，打印如下：
+Hi Fred!You are the first one here!
+Hi Barney!Fred is also here!
+
+
+
+#!/opt/ActivePerl-5.12/bin/perl -w
+
+use 5.010;
+
+sub greet {
+
+                state @names;
+
+                my $name = shift;
+
+                print "Hi,$name!";
+
+                if ( @names ) {
+
+                        print "I've seen: @names\n";
+                }
+
+                else {
+
+                        print "You are the first one here!\n";
+                }
+                push @names,$name;
+                }
+
+greet( 'Fred' );
+greet( 'Barney' );
+greet( 'Wilma' );
+greet( 'Betty' );
+
+
+
+Hi,Fred!You are the first one here!
+Hi,Barney!I've seen: Fred
+Hi,Wilma!I've seen: Fred Barney
+Hi,Betty!I've seen: Fred Barney Wilma
+
+上述state数组用法，state在5.10的版本才提供
+
+
+while (defined($line = <STDIN>)){
+
+	print "I saw $line";
+}
+
+foreach (<STDIN>){
+
+	print "I saw $line";
+}
+
+上述2段的输出是有区别的，第一个有输入就马上输出，第二个，当所有的输入都完毕以后才会把所有的一次输出。
+
+./t.pl  file1 - file2
+
+t.pl调用的参数是文件file1，标准输入，文件file2
+
+
+
+while (defined($line = <>)){
+
+                chomp($line);
+
+                print "It was $line that I saw!\n";
+}
+
+ 
+<>用来表示“行输入”的特例，只是从用户指定的位置读取。
+
+./t.pl file1 file2 fiel3
+
+结果将会是显示"It was (file1的第一行) that I saw!，然后"It was (file的第二行）that I saw!,以此类推，当file1完了，继续file2，file3知道文件结尾，3个文件中间不会有空隙，会把3个文件当成
+一个大文件处理。
+
+while(<>) {
+
+	chomp;
+	print "It was $_ that I saw!\n"
+}
+
+chomp不加参数的时候，直接作用在$_上，效果和上述一样。
+
+@ARGV是一个特殊的数组，<>的参数来之于这个数组，我们像其他数组一样处理它
+
+@ARGV = qw# larry moe curly #;强制<>读取这三个文件
+
+while (<>) {
+
+	chomp;
+	print "It was $_ that \n";
+}
+
+print @array; 
+
+12345678910
+
+print "@array\n";
+
+1 2 3 4 5 6 7 8 9 10
+
+通常在使用引号的场合，字符串后边最好都加上\n。
+
+
+open CONFIG,"dino";              打开已存在的文件dino
+open CONFIG,"<dino";             输入
+open BEDROCK,">fred";		 创建新文件，打开文件句柄输出到新文件fred，清除原文件内容
+open LOG,">>logfile";            创建新文件，打开文件句柄输出到新文件logfile，追加的方式
+
+
+Name "main::LOG" used only once: possible typo at ./t.pl line 5.
+出现这种类似的提示，是因为使用了-w选项
+
+
+if (! open LOG,">>/root/logfile") {
+
+	die "Cannot create logfile:$!";
+}
+
+Cannot create logfile:Permission denied at ./t.pl line 6.
+
+这里会得到如上述的提示，权限不够，上述的解释性的系统错误信息保存在perl的特殊变量$!中
+die函数在程序运行碰到错误，就会马上终止程序。
+warn函数类似die，只是不会终止程序。
+
+
+在默认情况下，print/printf指定的文件句柄，它的输出就会送到 STDOUT
+
+select BEDROCK;
+
+print "I hope Mr.Slate doesn't find out about this.\n";
+print "Wilma!\n";
+
+select可以改变默认的文件句柄，当修改了默认的文件句柄，程序会一直在那里输出。当指定的默认文件句柄使用完毕，把其设置会原先的默认值STDOUT.
+
+将数据输出到文件句柄时，默认都经过缓冲处理，不过只要将特殊变量$|设定为1，就会使当前的默认文件句柄在每次进行输出操作后，立即刷新缓冲区。因此，如果要让输出内容立即显示，可以如下：
+
+select LOG;
+$| = 1;
+select STDOUT;
+
+print LOG "This gets written to the LOG at once!\n";
+
+
+if ( ! open STDERR,">>.error_log"){
+	
+	die "Can't open error log for append:$!";
+}
+
+将错误信息写到自定的错误日志中
+
+say函数功能和print差不多，但是会在每行输出的结尾自动加上换行符，此函数是5.10的版本中才有
+
+print和say函数打印出来的结果
+
+say "@k";  c a b       在末尾加上一个换行符
+say "@k\n"; c a b      在末尾加上一个换行符，就会多一个空行，say本身自带一个换行符
+
+print "@v"; 3 2 1      不会再末尾加上换行符
+pirnt "@v\n"; 3 1 2    类似第一个效果
+ 
+say @k;   cab          中间没有空格，但是末尾有一个换行符
+
+print @v; 312          中间没有空格，末尾也没有换行符
+
+
+use 5.010;
+
+
+chomp($line = <STDIN>);
+@array = 1234567890;
+
+print "@array" x 7,"\n";
+printf "%${line}s\n","hello";
+printf "%${line}s\n","good-bye";
+
+
+输出
+./t.pl   
+10
+1234567890123456789012345678901234567890123456789012345678901234567890
+     hello
+  good-bye
+
+用户输入对其的数字，按照数字对齐。这里有个标量变量的插入问题，注意。
+
+
+
+
+哈希类似数组，不同之处在于以名字来检索。检索用的键不是数字，是唯一的字符串。
+
+$hash{$some_key}
+
+$family_name{"fred"} = "flintstone";
+$family_name{"barney"} = "rubble";
+
+%family_name用以指定整个哈希
+
+%some_hash = ("foo",35,"bar",12.4",2.5,"hello");
+注意这里的（）和哈希的元素指定不同。
+
+@any_array = %some_hash;
+
+把哈希转换成列表，但是输出的顺序乱了，主要是perl自己的处理机制做了特别的排序。
+
+%ip_address = reverse %host_name;
+
+使用reverse函数会把键和值互换，但是可能导致换以后的键不是唯一，因此后边的会覆盖前边的。
+
+哈希的另外一种表示方式
+my %last_name = (
+
+		"fred" => "flintstone",
+		"dino" => undef,
+		"barney" => "rubble",
+		"betty" => "rubble"
+	）;
+
+使用如下方式表示哈希
+@{'a','b','c' } = 1 .. 3;
+
+	
+	
+my $count = keys %hash;
+my $count = values %hash;
+
+这里根据标量上下文，key ,values得到的是哈希中的键/值的个数。
+
+
+each函数罗列哈希的每个键/值对，实际用的就是再while循环中
+
+while(($key,$value) = each %hash){
+	print "$key => $value\n";
+}
+
+each返回键/值顺序是乱，按照哈希的自然顺序，使用如下方式对键排序，得到排序好的键/值对。
+
+foreach $key (sort keys %hash) {
+	
+	$value = $hash{$key};
+	print "$key => $value\n"
+}
+
+
+
+if($books{$someone}) {
+	
+	print "$someone has at least one book checked out.\n";
+}
+判断某项哈希元素的真假
+
+
+if (exists $books{"dino"}) {
+	
+	print "Hey,there's a library card for dino!\n";
+}
+
+exists函数判断是否有某个键
+
+
+my $person = "betty";
+delete $books{$person};
+
+删除指定的哈希键及对应的值，如果没有直接结束
+
+
+print "PATH is $ENV{PATH}\n";
+
+$ENV用来获取系统环境变量，获取ENV中的PATH变量的值
+%ENV当做一个哈希来处理，和普通的哈希一样
+等号左边的是键，右边是值
+
+
+
+
+
+chomp(@words = <STDIN>);
+
+$ $word(@words){
+	
+	$count{$word} += 1;
+	
+	print $count{word},"\n";
+}
+
+
+当输入每行一个单词的时候，输出N个单词结束以后，将打印出这个单词出现的次数。
+
+比如
+fred
+barney
+fred
+wilma
+fred
+
+输出
+1
+1
+2
+1
+3
+
+就是说，当一次出现fred的时候，$count{"fred"}的值是1，第二次出现时候，将原来的$count{"fred"}值加上1，就是2，以此类推。
+
+
+
+正则表达式
+
+正则表达式中的元字符
+. 表示单字符匹配，匹配1次字符,不匹配换行符
+* 表示前边的内容匹配0，1或者多次   >= 0 
+.*表示匹配任意字符无限次      
++ 表示前边的内容至少1次匹配至多次  >=1
+？表示前边的内容0或者1次           0,1
+
+*，+，?前边必须有东西
+
+
+/fred( |\t)+barney/ 在fred和barney之间空格，制表符或者两者组合出现一次以上的字符串。
+/fred( +|\t+)barney/ 中间的分隔符全是空格或者全是制表符
+[abcwxyz]匹配7个字符中任意一个
+[^def]除def这三个字符以外的任何字符
+[^n\-z]匹配n、连字符与z以外的的任何字符，使用\，是因为连字符在字符集里有特殊意义
+[]以外的连字符没有特殊意义
+[0-9] 简写\d 匹配单个数字
+[A-Za-z0-9_] 简写\w  匹配单个字符（字母，数字，下划线）
+
+\s 匹配字符集中的某个字符[\f\t\n\r]，换页，制表，换行，回车，空格，因此\s*匹配任意数目的空白（包括0个），或者\s+匹配一个以上的空白。
+
+/[\dA-Fa-f]+/匹配16进制数
+
+[\d\D] 任意字符包括换行符
+
+
+/ /是M/ /的简写
+
+/i 忽略大小写
+/s 任意字符，包括换行符，.则匹配除换行符以外的任意字符
+
+ $_ = "I saw Barney\ndown at the bowling alley\nwith fred\nlast night.\n";
+
+ if (/Barney.*fred/s) {
+	print "That string mentions fred after barney!\n";
+ }
+上述的Barney和fred在不同的行，如果不使用/s，上述匹配失败。
+
+/ -? \d+ \.? \d* /x 在模式里随意加入空白，使得更容易阅读、理解。就是忽略原始的空白和制表符
+/
+ -?    #0或者1个减号
+ \d+   #1个或者多个数字
+ \.?   #0或者1个小数点
+ \d*   #0或者多个数字
+ 
+/x     结尾
+
+
+/^\s*$/匹配空白行
+
+\b 单词边界锚位   /\bfred\b/匹配fred ,无法匹配frederick、alfred或者manfredmann 
+/\bhunt/ 匹配hunt、hunting或者hunter，排除shunt;
+/stone\b/ 匹配standstone或者flintstone，但是不包括capstones。
+
+\B，非单词边界锚位，它能匹配所以\b不能匹配的位置，/\bsearch\B/会匹配searches、searching与searched，但是不能匹配search或者researching。
+
+=~ 使用右边的的模式匹配左边的字符串 
+
+my $some_other = "I dream of betty rubble.";
+
+if ($some_other =~ /\brub/) {
+	
+	print "Aye,there's the rub.\n";
+}
+
+
+my $what = "larry";
+
+while (<>) {
+
+	if (/^($what)/) {
+
+		print "we saw $what in beginning of $_";
+	}
+}
+
+这里可以使用my $what = shift @ARGV;从输入中得到匹配的内容，比如输入fred|barney，则模式会变成/^(fred|barney)/
+
+
+捕获功能，把（圆括号中的模式所匹配）部分字符串暂时记下来的能力。如果有一对以上的圆括号，就有一次以上的捕获。被捕获的都是字符串，因此存储他们的标量变量类似$1，$2.....有多少对括号就有多少个变量
+
+$_ = "Hello there,neighbor";
+
+if (/\s(\w+),/) {
+	print "the word was $1\n";
+}
+这里$1的内容是there，括号中的意思是空白和逗号之间的单词。
+
+$_ = "hello there ,neighbor";
+
+if (/(\S+) (\S+),(\S+)/){
+	 print "words were $1 $2 $3\n";
+}
+
+
+
+if(/(?:bronto)?saurus(steak|burger)/){
+
+	print "Fred wants a $1\n";
+}
+(?:bronto)表示不捕获，就会说$1任然是(steak|burger)的内容
+
+
+
+$1是hello，$2是there，$3是neighbor。
+
+
+
+
+
+
+use 5.010;
+
+my $names = 'Fred Flinstone and Wilma Flinstone';
+
+
+
+if ($names =~ m/(\w+) (and|or) (\w+)/) {
+
+        say "I saw $1,$2";
+}
+
+I saw Flinstone,and
+
+看上述结果，（and|or）这里是$2了，实际上我们是要显示$1为Fred Flinstone，$2显示Wilma Flinstone，如果使用$1,$2...这种方式，Wilma Flinstone实际上是$3
+
+
+为了避免上述问题，5.10的版本引入了（?<label>pattern）的模式
+
+
+
+#!/opt/ActivePerl-5.12/bin/perl
+
+use 5.010;
+
+my $names = 'Fred Flinstone and Wilma Flinstone';
+
+if ($names =~ (m/(?<name1>\w+) (and|or) (?<name2>\w+)/)) {
+
+        say "$+{name2},$+{name1}";
+}
+
+Wilma,Flinstone
+
+通过引入label的方式解决上述问题
+
+
+
+my $names = 'hi ok Hello there,neighbor';
+
+if ($names =~  /\s(\w+),/) {
+
+        say "$`";
+        say "$&";
+        say "$'";
+	say $1;
+}
+
+hi ok Hello
+ there,
+neighbor
+there
+
+$&实际上是存储的是匹配模式的部分
+$`匹配起始位置之前的字符串存储地方
+$'则保持了字符串中剩下的，从来没匹配到的部分
+
+如果把三个串起来，将得到整个字符串
+这3个标量是perl的内置变量
+
+
+/a{5,15}/匹配重复5到15次的字母a，当出现匹配20次时，只匹配前15个
+/(fred){3,}/匹配3次以上的，没有上限
+/\w{8}/匹配8个字符的字符串
+
+
+
+my %a = <>;
+
+
+foreach $k (sort keys %a){
+
+        $v = $a{$k};
+        chomp $k;
+        print "$k $v";
+}
+
+文件内容为
+a
+100
+b
+200
+c
+300
+
+将得到结果
+a 100
+b 200
+c 300
+
+
+my %a = <>;
+
+
+while (($k,$v) = each %a) {
+
+        chomp $k;
+        
+        print "$k $v";
+}
+
+得到的结果
+b 200
+a 100
+c 300
+
+可以看出上述结果没有排序，如果需要排序，使用第一种方式
+
+
+my $_ = <STDIN>;
+
+chomp;
+
+if (/match/) {
+
+        print "Matched:|$`<$&>$'|\n";
+}
+else {
+        print "No Matched\n";
+
+}
+
+使用内置的变量来测试是否匹配
+
+
+\b和$的区别，这里的2个符号都是边界符，\b是单词边界，$是字符串边界，
+/a\b/  这个模式可以匹配wilma及wilma&fred
+/a$/   这个模式可以匹配wilma不能匹配wilma&fred，因为这里wilma&fred是字符串，$会匹配到最后
+
+
+
+$_ = "he's out bowling with barney tonight.";
+s/barney/fred/;
+print "$_\n";
+
+这里使用的s///的模式，是对默认的$_变量进行替换操作，换成其他的变量是不行的
+
+s///g 全局
+
+s#^https://#http://#  用#做定界符
+
+s#wilma#Wilma#gi 把所有的WiLmA或者类似的wilma替换掉，i在这里忽略被替换内容的大小写
+
+$file_name =~ s#.*/##s;删除掉$file_name中的所有unix风格的路径
+
+$_ = "I saw Barney with Fred";
+
+s/(fred|barney)/\U$1/gi; #$_现在是"I saw BARNEY with FRED".
+\U把后边的所有字符装换为大写。
+\L则是把后边所有的字符转换成小写。
+
+s/(w+) with (w+)/\U$2\E with $1/i; #$_现在是"I saw FRED with Barney"
+\E用来关闭\U及\L的影响，这里只是$2改变成了大写
+
+$_ = "I saw FRED with Barney";
+s/(fred|barney)/\u$1/ig #$_现在是"I saw Fred with Barney" 
+\u 其后第一个字符大写
+\l 其后第一个字符小写
+
+$_ = "I saw barney with fred."
+s/(barney|fred)/\u\L/gi #$_现在是"I saw Barney with Fred"
+改变匹配的第一个字符为大写，其后全部小写
+需要注意的是\u\L的次序没有影响
+
+$_ = "fred";
+print "Hello,\u\L$_\E,would you like to play a game?\n";
+大小写转换也使用于所有带双引号的字符串
+
+@fields = split /:/,"::def::h::";
+
+print "@fields\n";
+
+  def  h
+这里会发现开头的空白符有，最后的空白符省掉了
+split函数的默认方式是这样
+
+$_ = "this is a         test.\n";
+@fields = split /\s+/,$_;
+print "@fields\n";
+使用空白分隔来处理
+
+my @fields = split #等效于split /\s+/,$_;
+
+split ' ',$other_string作为一种特殊用法
+
+
+my $x = join ":",4,5,6,8,10,12;
+
+print $x,"\n";
+
+4:5:6:8:10:12
+
+join函数与split正好相反，第一个参数理解为胶水，可以是任意字符串，剩余参数是一串片段，join把胶水涂进每个片段之间
+并返回字符串。
+
+my $x = join ":",4,5,6,8,10,12;
+my @fields = split /:/,$x;
+my $z = join "-",@fields;
+
+print $z,"\n";
+
+4-5-6-8-10-12
+
+split和join的第一个参数，很大不同，需要注意，split第一个参数是模式，join则是字符串
+
+
+
+my $x = "a b 5 c";
+my @fields = ($x =~ /[a-z]+/ig);
+print "@fields\n";
+
+a b c
+/g在这里体现出在多处匹配
+
+
+
+my $x = "a e b e c e";
+my %fields = ($x =~ /(\w+)\s+(\w+)/ig);
+
+while(($k,$v) = each %fields) {
+
+        print "$k $v\n";
+}
+
+可以把字符串拆成哈希
+
+
+
+
+s#<BOLD>(.*)</BOLD>#$1#g;
+
+上述的替换表达式在如下情况能很好处理
+
+I'm talking about the cartoon with Fred and <BOLD>Wilma</BOLD>!
+
+但是，如果是如下情况，则会出现结果第一个<BOLD>匹配到最后一个</BOLD>的情况
+
+I thought you said Fred and <BOLD>Velma</BOLD>,not <BOLD>Wilma</BOLD>
+
+这样的* 是一种贪婪模式，尽量多得匹配字符串的长度
+
+我们用*?来解决上述的问题，类似的还有+?，{5,10}？，？？虽然会匹配到0或者1次，但是这里会优先考虑匹配0次的情况
+
+
+$_ = "I'm much better
+than Wilma is
+at bowling,
+Wilma.\n";
+
+print "Fount it\n" if /^Wilma\b/im;
+
+正常的正则表达式都是匹配单行，这里Wilma不是在一行上，所以为了匹配多行，需要使用/m这个修饰符
+
+
+
+看如下一段代码
+
+use strict;
+
+chomp(my $date =`date`);
+$^I = ".bak";
+
+while(<>) {
+
+        s/^Author:.*/Author:Randal L. Schwartz/;
+        s/^Phone:.*\n//;
+        s/^Date:.*/Date:$date/;
+        print;
+}
+
+这段内容会把如下的文件内容替换成后段的内容
+Program name:granite
+Author:Gilbert Bates
+Company:RockSoft
+Department:R&D
+Phone:+1 503 555-0095
+Date:Tues March 9,2004
+Version:2.1
+Size:21k
+Status:Final beta
+
+Program name:granite
+Author:Randal L. Schwartz
+Company:RockSoft
+Department:R&D
+Date:2012 15:42:18 CST
+Version:2.1
+Size:21k
+Status:Final beta
+
+
+执行的时候./t.pl a.*会处理好所有的a.*文件，这里有个变量$^I = ".bak"，这个是系统变量，
+它的作用就是把原文件备份，这里的扩展名是.bak，然后把修改后的内容写进新的文件中。
+
+这里$^I的作用就是先备份原文件，同时新建一个文件，并且把最后的结果写入这个文件，如果$^I不赋值，则不会建立备份，直接新建文件，把内容写入($^I="";)，这样的结果是不可挽回的。
+
+
+$ perl -p -i.bak -w -e 's/Randall/Randal/g' fred*.dat
+
+命令行模式处理
+等同于
+while (<>) {
+	print;
+}
+-p perl生成一小段程序
+-n 可以不打印
+-i 等同于$^I设置为.bak，如果不备份，就直接写-i
+-w 打开警告
+-e 告知perl后边跟的是程序代码，如果是多行程序，如下写，最后一个-e内容不用写；
+
+perl -p -i.bak -w -e 's/#/ /g;' -e 's/root/ROOT/g' passwd 
+
+
+$^I = ".out";
+while (<>) {
+        chomp;
+        s/Fred/\n/ig;
+        s/Wilma/Fred/ig;
+        s/\n/Wilma/ig;
+        print "$_\n";
+}
+
+这里是一个对换的过程，把fred和wilma兑换，因为使用了chomp，因此中间过程使用\n来临时占位，最后打印的时候加上“”，不然会出现都打印在一行的情况。
+
+
+$^I = ".out";
+
+while (<>) {
+
+        $_ .= "## Copyright (C) 20xx by Yours Truly\n"
+                if(/^#!/);
+        print;
+}
+
+这里会在以#!开始的行下一行加上上述的##...文字
+
+
+unless和if相反，这个假的时候执行代码
+until和while相反，假的时候执行代码
+
+print "$n is a negative number.\n" if $n < 0;
+这种写法简略的写法
+
+
+{
+
+	body；
+	body；
+}
+没有关键字的裸块，像while或者foreach，但是只是执行一次。
+
+
+if 
+elsif
+else
+
+类似c中的if/elseif/else，但是，这里的elsif少一个e
+
+
+
+$perl Makefile.PL
+$make install 
+安装perl模块
+
+特定的安装目录
+$perl Makefle.PL PREFIX=/usrs/fred/lib
+
+
+use File::Basename
+
+my $name = "/home/vlinko/src/";
+my $basename = basename $name;
+
+将返回src
+
+模块File::Basename是5.16版本自带
+
+
+use File::Basename qw/basename/;
+
+只提供basename函数
+
+use File::Basename qw/ /;
+或者
+use File::Basenmae ();
+
+不要引入任何函数
+
+
+use File::Basename qw/ /;      #不导入函数名称
+
+my $betty = &dirname($wilma);  #使用我们自己的子程序&dirname（略去子程序的具体内容）
+
+my $name = "/usr/local/bin/perl";
+my $dirname = File::Basename::dirname $name;  #使用模块中的dirname函数
+
+模块里的dirname函数全名是File::Basename::dirname。加载模块后，无论是否导入dirname这种简短名称，我们都可以随时使用函数全名的方式来调用。$dirname返回/usr/loca/bin
+
+
+DBI的模块不是自带的，需要安装
+perl -MCPAN -e "install DBI"
+perl -MCPAN -e "install DBD::mysql"
+
+
+if (-r $file and -w _) {
+	..
+}
+
+_表示用上次查询过的文件信息来当做当前的测试，这里就表示可读可写
+
+如下方式也是合法的
+
+if  (-r $file) {
+
+	..
+}
+if (-w _) {
+	..
+}
+
+但是必须明确清楚最后一次查询的是否是最后一个文件，如下这段代码显然最后一次查询的文件改变了
+
+
+if (-r $file) {
+
+	..
+}
+
+lookup ( $other_file);
+
+if (-w _) {
+..
+}
+
+sub lookup {
+
+ return -w $_[0];
+}
+
+5.10以前的版本，只能用上述的-r $file and -w _方式
+
+5.10以后的版本，可以支持-w -r $file方式，只是靠近文件名的测试会先执行
+
+
+
+if ((-d $file and -s <512 ){
+
+...
+}
+
+测试是否是一个目录，并且大小小于512 bytes
+
+
+foreach $arg (@ARGV) {
+	
+	print "one arg is $arg\n";
+}
+
+./t.pl * 
+
+将显示当前目录下所有的文件名称
+
+
+perl中有个内置的操作符glob能替代上述的功能
+
+my @all_files = glob ".* *";
+
+foreach $a (@all_files) {
+
+        print "file is $a\n";
+}
+
+显示当前目录下以.开头的文件，及所有文件，注意中间有空格分开，如下也是合法方式
+my @all_files = glob "*";
+my @conf = glob "/etc/*.conf"
+
+上述目录方式下，并不能分辨目录和文件的区别，只是按照字母排序得到列表
+
+
+my $dir = "/etc";
+my @dir_files = <$dir/* $dir/.*>;
+
+foreach $a (@dir_files) {
+
+        print "file is $a\n";
+}
+
+这里的<*> <$dir/* $dir/.*>和上述的方式相同
+
+
+perl的尖括号既可以表示从文件句柄读取，也代表文件名通配符（比如上述内容），如何决定，如果尖括号内满足perl标示符条件的，就作为文件句柄处理，否则就是文件名通配符
+
+my @files = <fred/*>; ## gold
+my @files = <fred>;   ## 从文件句柄读取
+my $name = "fred";
+my @files = <$name/*>; ## glob
+
+my $name = "fred";
+my @lines = <$name>; ##对文件句柄fred进行间接文件句柄读取
+
+my $name = "fred";
+my @lines = readline fred;    ## 从fred读取
+my @lines = readline $name;   ## 从fred读取
+
+readline操作符可以执行间接文件句柄读取和上述功能一样
+
+
+my $dir = "/home/vlinko";
+opendir DH,$dir or die "can't open $dir:$!";
+
+foreach $a (readdir DH) {
+
+        print "one file in $dir is $a\n";
+}
+
+closedir DH;
+
+
+opendir打开目录句柄，readdir读取目录中内容，不过读到的是目录里的文件名，这里opendir打开的目录，把里边的文件名存储到一个列表里，这个列表是目录的句柄，上述的例子中，明显的把目录句柄DH当做了一个列表来处理
+
+
+while($name = readdir DIR) {
+	next unless $name =~ /\.pm$/;
+	...
+}
+只处理以pm结尾的文件，这里使用的是正则表达式的方式
+
+next if $name =~ /^\./;
+取出不以.开头的文件
+
+next if $name eq "." or $name eq "..";
+排除.(当前目录）和..（上层目录)2个条目
+
+
+readdir返回的是目录下的文件名，但是不包括路径名称，如下，如果需要表示全路径，可以使用的方式
+
+
+my $dir = "/home/vlinko";
+
+opendir DH,$dir or die "can't open $dir:$!";
+
+
+while (my $name = readdir DH) {
+
+        next if $name =~ /^\./;               ## 跳过以.开头的文件
+        $name = "$dir/$name";
+        next unless -f $name and -r $name;    ## 只需要文件，具有读属性
+
+        print "file is $name\n";
+}
+
+
+
+unlink glob "*.o"；
+删除目录下所有以.o结尾的文件，unlink返回的成功删除文件的个数
+
+my $successful = unlink "slate","bedrock","lava";
+print "I delete $successful file(s) just now\n";
+
+
+
+rename "over/some/place/file","some_file"
+移动文件
+
+rename　"old","new"
+重命名
+
+foreach my $file (glob "*.o") {
+
+        $new = $file;
+        $new =~ s/\.o$/.h/;             ## 把.o结尾的文件替换成.h的文件，得到起文件名，但是这里并没有进行实际的重命名
+
+        if (-e $new) {			##测试是否已经有重名的文件
+                warn "can't rename $old to $new:$new exists\n";
+        }
+        elsif (rename $file,$new) {
+	
+        }
+        else {
+                warn "rename $file to $new failed:$!\n";
+        }
+}
+
+
+link “chicken","egg"
+	or warn"can't link chicken to egg:$!";
+
+类似unix中的ln chicken egge效果
+
+symlink "dodgson","carroll"
+	or warn "can't symlink:$!";
+类似ln -s dodgson carroll
+
+
+my $where = readlink "/usr/local/bin/perl" 方式读到符号链接指向哪里，即这个链接源文件是什么s
+
+mkdir "fred", 0755 or warn "cannot make fred directory:$!\n";
+mkdir "fred", or warn "cannot make fred directory:$!\n"
+建立目录，初始权限是0755，第二行，省略了第二个参数的，实际建立的目录初始权限0755，就是说默认建立的目录权限是0755
+
+
+
+重命名.o文件为.h文件，
+
+
+chmod 0755,"fred","barney"; chmod函数类似unix中的chmod
+
+
+%a ~~ %b 		哈希的键是否一致
+%a ~~ @b 		至少%a中的一个键在列表@b中
+%a ~~ /Fred/ 		至少一个键匹配给定的模式
+%a ~~ 'Fred'		哈希中某一指定键$a{Fred}是否存在
+
+@a ~~ @b		数组是否相同
+@a ~~ /Fred/ 		有一个元素匹配给定的模式
+@a ~~ 123		至少有一个元素转化为数字后是123
+@a ~~ 'Fred'		至少有一个元素转化为字符串后是'Fred'
+
+$name ~~ undef 		$name 确实尚未定义
+$name ~~ /Fred/ 	模式匹配
+123 ~~ '123.0'		数字和字符串是否大小相等
+'Fred' ~~ 'Fred'	字符串是否完全相等
+123 ~~ 456		是否完全相等
+
+
+
+use 5.010001;
+
+given($ARGV[0]){
+        when( 'Fred'  ) { say 'name is Fred'; continue}
+        when( /^Fred/ ) { say 'name starts with Fred'; continue }
+        when( /fred/i ) { say 'name has fred in it'; }
+        default         { say "I don't see a Fred" }
+}
+
+这里的('Fred')实际上是（$_ =~ /^Fred$/）
+
+
+given-when做法类似于C中的switch语句，原始的
+
+given(){
+	when(){}
+	when(){}
+	default {}
+}
+显式的应该是如下
+
+given(){
+	when(){..;break}
+	when(){..;break}
+	default {}
+}
+
+就是说和switch语句一样，有个条件符合，后续的条件就不在测试，在这种情况下，实际和if-elsif-else相同
+但是这里有更灵活的用法，加入一个条件同时符合几个条件选择，按照上述的方式，匹配到第一个以后，后续的都忽略了
+如果按照例子中的写法，所有符合条件的选项代码都将执行一遍，关键字为continue，但是最后一个when中没添加continue是
+因为，防止default在任何时候都会执行
+
+./t.pl Fred
+name is Fred
+name starts with Fred
+name has fred in it
+
+看这里执行的结果，Fred同时符合3个条件，因此3个结果都会显示
+
+另外需要特别注意的是测试条件，越小范围的要放到最前边，越大的放最后，上述测试条件如果该成如下
+/fred/i
+/^Fred/
+/'Fred'/
+default 
+你会发现当输入 ./t.pl FredABC的时候，最后default结果总会显示
+
+本书第五版就有这个问题
+
+
+use 5.010001;
+
+@names = qw/ fred barney alice jack/;
+
+foreach ( @names ) {
+        when ( 'Fred'  ){say 'Name is Fred';continue}
+        when ( /^Fred/ ){say 'Name starts with Fred';continue}
+        when ( /fred/i ){say 'Name has fred in it'}
+        default         {say "I don't see a Fred"}
+}
+
+given只能一次接受一个参数，如果需要测试多个元素，用上述的方式，遍历多个元素，这里没有用全变量模式，是因为这里的变量是$_，如果不是这个，必须使用全变量模式
+
+
+这里说下替换操作tr///和s／／／的区别
+
+s///是一个正则表达式的表示方式
+tr///普通的表达方式
+
+s///替换的时候，只会是替换一次，如果需要全部的替换，则需要s///g这样的模式
+tr///则是全文替换
+
+s/slist/dlist/ 这里的替换是把slist替换成dlist
+tr/abc/123/  这里的替换则是按照a->1,b->2,c->3的方式替换，就是说，tr/abc/1234/这样的替换方式，只会把abc替换成123，最后1个数字忽略掉了
+
+比如要用a->abc,b->bcd,c->cde这样的模式，tr是没法实现的，需要使用s///的模式
+
+
+
+
+
+
+
+
+
+可以使用
+$msg = q{};
+替代
+$msg = '';
+的空字符串
+
+使用$a = q{ };
+替代
+$a = ' '
+的单一空格
+
+
+使用
+$a = "\t"
+$a = "\t\t\t";
+代替单个制表符及多个制表符
+
+
+
+$usage = <<"END_USAGE";
+
+Usage:$0 <file> [-full] [-o] [-beans]
+Options:
+    -full    : produce a full dump
+    -o       : dump in octal
+    -beans   : source is java
+END_USAGE
+
+
+$usage = "Usage: $0 <file> [-full] [-o] [-beans]\n"
+        . "Options:\n"
+        . "     -full   : produce a full  dump\n"
+        . "     -o      : dump in octal\n"
+        . "     -beans  : source is Java\n"
+        ;
+
+使用第一种方式表示多行字符串，是最好的方式，不要使用第二种方式
+以下是结果
+
+Usage:./t.pl <file> [-full] [-o] [-beans]
+Options:
+    -full    : produce a full dump
+    -o       : dump in octal
+    -beans   : source is java
+
+
+print <<'END_LIST';
+get name
+get size
+put next
+END_LIST
+
+上述内容打印到下面的结果，这是打印多行的方式，上述方式和这里的方式可以是heredoc方式
+
+get name
+get size
+put next
+
+使用END_是比较好的方式
+
+
+
+批量注释
+=pod
+
+=cut

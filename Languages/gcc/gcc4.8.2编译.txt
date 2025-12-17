@@ -1,0 +1,70 @@
+yum install -y gcc* make libstdc*
+
+binutils-2.23.2
+./configure --prefix=/usr/local/binutils-2.23.2 && make && make install
+
+gmp-5.1.2
+./configure --prefix=/usr/local/gmp-5.1.2 --enable-cxx && make && make install
+
+cloog-0.18.0
+./configure --prefix=/usr/local/cloog-0.18.0 --with-gmp-prefix=/usr/local/gmp-5.1.2
+make && make install
+
+libiconv-1.14
+./configure --prefix=/usr/local/libiconv-1.14 && make && make install
+
+mpfr-3.1.2
+./configure --prefix=/usr/local/mpfr-3.1.2 --with-gmp=/usr/local/gmp-5.1.2 && make && make install
+
+mpc-1.0.1
+./configure --prefix=/usr/local/mpc-1.0.1 --with-mpfr=/usr/local/mpfr-3.1.2/ --with-gmp=/usr/local/gmp-5.1.2/ && make && make install
+
+ppl-1.1
+./configure --prefix=/usr/local/ppl-1.1 --with-gmp=/usr/local/gmp-5.1.2/ && make && make install
+
+开始使用1.0版本，似乎有BUG，会有错误提示无法编译成功，换1.1版本
+
+gcc
+错误：
+ppl checking for the gmp library version 4.1.3 or above no
+在编译gmp时候添加--enable-cxx参数
+
+ln -s /usr/local/gmp-5.1.2/include/gmp.h /usr/include/
+ln -s /usr/local/gmp-5.1.2/include/gmpxx.h /usr/include/
+ln -s /usr/local/gmp-5.1.2/lib/libgmp.so.10.1.2 /lib/libgmp.so
+ln -s /usr/local/gmp-5.1.2/lib/libgmp.so.10.1.2 /lib/libgmp.so.10
+ln -s /usr/local/mpc-1.0.1/lib/libmpc.so.3.0.0 /lib/libmpc.so
+ln -s /usr/local/mpc-1.0.1/lib/libmpc.so.3.0.0 /lib/libmpc.so.3
+ln -s /usr/local/mpfr-3.1.2/lib/libmpfr.so.4.1.2 /lib/libmpfr.so
+ln -s /usr/local/mpfr-3.1.2/lib/libmpfr.so.4.1.2 /lib/libmpfr.so.4
+
+添加
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/mpc-1.0.1/lib:/usr/local/gmp-5.1.2/lib:/usr/local/mpfr-3.1.2/lib
+到/etc/profile
+
+tar -xjf gcc-4.8.2.tar.bz2
+cd gcc-4.8.2 
+mkdir build
+cd build
+../configure --prefix=/usr --with-mpc=/usr/local/mpc-1.0.1/ --with-mpfr=/usr/local/mpfr-3.1.2/ --with-gmp=/usr/local/gmp-5.1.2/ --with-cloog=/usr/local/cloog-0.18.0/ --enable-threads=posix --disable-checking --disable-multilib --enable-languages=c,c++,fortran
+make
+make install
+
+结束后显示：
+
+If you ever happen to want to link against installed libraries
+in a given directory, LIBDIR, you must either use libtool, and
+specify the full pathname of the library, or use the `-LLIBDIR'
+flag during linking and do at least one of the following:
+   - add LIBDIR to the `LD_LIBRARY_PATH' environment variable
+     during execution
+   - add LIBDIR to the `LD_RUN_PATH' environment variable
+     during linking
+   - use the `-Wl,-rpath -Wl,LIBDIR' linker flag
+   - have your system administrator add LIBDIR to `/etc/ld.so.conf'
+
+See any operating system documentation about shared libraries for
+more information, such as the ld(1) and ld.so(8) manual pages.
+
+
+

@@ -1,0 +1,90 @@
+LOG_EVERY_N(INFO, 10) << "Got the " << COUNTER << "th cookie";
+上面的语句表示，在程序中周期性的记录日志信息，在该语句第1、11、21……次被执行的时候，记录日志信息。COUNTER变量表示该语句被执行的次数。
+
+源程序
+**********************************************************
+#include <iostream>
+#include <vector>
+#include <glog/logging.h>
+
+void Add(int num) {
+  std::cout << "num + num = " << num + num << std::endl;
+}
+
+int main(int argc, char* argv[]) {
+  google::InitGoogleLogging(argv[0]);
+  
+  int num_cookies = 12;
+  for(int num = 0; num <= 50; num++) {
+    Add(num); 
+    LOG_EVERY_N(INFO, 10) << "Got the " << num << "the cookie";
+  }
+}
+**********************************************************
+编译:g++ b.cc -lglog
+
+输出文件:/tmp/a.out.jack-home.jack.log.INFO.20161011-165805.11222
+
+Log file created at: 2016/10/11 16:58:05
+Running on machine: jack-home
+Log line format: [IWEF]mmdd hh:mm:ss.uuuuuu threadid file:line] msg
+I1011 16:58:05.354486 11222 b.cc:16] Got the 0the cookie
+I1011 16:58:05.354797 11222 b.cc:16] Got the 10the cookie
+I1011 16:58:05.354895 11222 b.cc:16] Got the 20the cookie
+I1011 16:58:05.354986 11222 b.cc:16] Got the 30the cookie
+I1011 16:58:05.355077 11222 b.cc:16] Got the 40the cookie
+I1011 16:58:05.355166 11222 b.cc:16] Got the 50the cookie
+
+
+LOG_IF_EVERY_N(INFO, (size > 1024), 10) << "Got the " << num << "th big cookie";
+上面的语句为1，2项功能的合并，size>1024的条件连续成立10次的时候记录日志信息。COUNTER变量表示该条件成立的次数。
+
+源程序
+**********************************************************
+#include <iostream>
+#include <vector>
+#include <glog/logging.h>
+
+int Add(int num) {
+  return num + num;
+}
+
+int main(int argc, char* argv[]) {
+  google::InitGoogleLogging(argv[0]);
+  
+  int num_cookies = 12;
+  for(int num = 0; num <= 50; num++) {
+    int result = Add(num); 
+    LOG_IF_EVERY_N(INFO, (result > 5), 10) << "Got the " << num << " the cookie";
+  }
+}
+**********************************************************
+编译:g++ b.cc -lglog
+
+输出文件:/tmp/a.out.jack-home.jack.log.INFO.20161011-170911.11459
+
+Log file created at: 2016/10/11 17:09:11
+Running on machine: jack-home
+Log line format: [IWEF]mmdd hh:mm:ss.uuuuuu threadid file:line] msg
+I1011 17:09:11.167922 11459 b.cc:15] Got the 3 the cookie
+I1011 17:09:11.168151 11459 b.cc:15] Got the 13 the cookie
+I1011 17:09:11.168160 11459 b.cc:15] Got the 23 the cookie
+I1011 17:09:11.168164 11459 b.cc:15] Got the 33 the cookie
+I1011 17:09:11.168166 11459 b.cc:15] Got the 43 the cookie
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

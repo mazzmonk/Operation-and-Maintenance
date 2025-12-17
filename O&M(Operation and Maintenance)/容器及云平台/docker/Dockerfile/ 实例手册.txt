@@ -1,0 +1,84 @@
+通过dockerfile来制作镜像，通常会碰到各种问题，其中，最麻烦的一种就是镜像启动的时候，启动相应的命令或者shell之类的东西
+如下是一些实例
+
+启动tomcat,sshd,crontab
+*********************************************
+# setup images to use common project with Alpine Linux
+# add USER blue and setup USER root/blue password
+# install sshd,jdk7,crontab package 
+FROM alpine:v0.12
+MAINTAINER blue <abc@abc.com>
+
+RUN apk update
+
+ENV JAVA_HOME /usr/lib/jvm/java-1.7-openjdk
+ENV CLASSPATH $JAVA_HOME/lib/dt.jar:$JAVA_HOME/lib/tools.jar
+ENV CATALINA_HOME /home/blue/apps/tomcat
+ENV CATALINA_BASE /home/blue/apps/tomcat
+ENV PATH $PATH:$JAVA_HOME/bin:$CATALINA_HOME/lib:$CATALINA_HOME/bin
+
+WORKDIR $CATALINA_HOME
+ENTRYPOINT /usr/sbin/crond && /usr/sbin/sshd && catalina.sh run
+#CMD ["catalina.sh", "run"]      这里也可以启动
+*********************************************
+
+启动nginx,ssh,crontab
+*********************************************
+# setup images to use common project with Alpine Linux
+# add USER blue and setup USER root/blue password
+# install sshd,crontab,nginx package 
+FROM alpine:v0.13
+MAINTAINER blue <abc@abc.com>
+
+RUN apk update
+
+ENTRYPOINT /usr/sbin/crond && /usr/sbin/sshd && /home/blue/apps/nginx/sbin/nginx
+*********************************************
+注意：nginx的配置文件nginx.conf中，必须加入daemon off; 这里很重要
+
+
+初始化数据库，同时设置用户和密码相关信息
+重要:
+1.上述的操作可以在Dockerfile文件中定义RUN实现
+2.在Dockerfile文件中定义的ENV将在容器启动以后存在，同时在使用docker run时候，使用-e参数，将会覆盖Dockerfile中的ENV
+
+*********************************************
+# setup images to use mariadb-server-10.0 service
+FROM ubuntu:v0.1  
+
+MAINTAINER blue.blue <abc@abc.com>
+
+ENV MYSQL_USER=root
+
+RUN apt-get -y update 
+RUN apt-get -y install mariadb-server-10.0
+
+COPY 50-server.cnf /etc/mysql/mariadb.conf.d/
+
+RUN /etc/init.d/mysql start && \
+mysql -e "grant all privileges on *.* to root@'localhost' identified by 'blue_*0987';" && \
+mysql -uroot -pblue_*0987 -e "grant all privileges on *.* to root@'127.0.0.1' identified by 'blue_*0987';" && \
+mysql -uroot -pblue_*0987 -e "grant all privileges on *.* to blue@'localhost' identified by 'blue_*0987';" && \
+mysql -uroot -pblue_*0987 -e "grant all privileges on *.* to blue@'127.0.0.1' identified by 'blue_*0987';" && \
+mysql -uroot -pblue_*0987 -e "grant all privileges on *.* to blue@'172.17.%' identified by 'blue_*0987';"
+
+COPY start.sh /usr/local/bin
+RUN chmod +x /usr/local/bin/start.sh
+
+ENTRYPOINT sh /usr/local/bin/start.sh
+*********************************************
+
+start.sh
+*********************************************
+/etc/init.d/mysql start && \
+/usr/sbin/sshd -D
+*********************************************
+
+
+
+
+
+
+
+
+

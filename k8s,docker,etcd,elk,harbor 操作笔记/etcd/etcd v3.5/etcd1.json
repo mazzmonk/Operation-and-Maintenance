@@ -1,0 +1,22 @@
+{
+    "CN": "etcd1",
+    "hosts": [
+        "127.0.0.1",
+        "192.168.1.101",
+	"etcd1",
+	"etcd1.local"
+    ],
+    "key": {
+        "algo": "rsa",
+        "size": 2048
+    },
+    "names": [
+        {
+	    "C": "US",
+            "L": "CA",
+            "O": "My Company",
+            "ST": "San Francisco",
+            "OU": "K8s Fans Club"
+        }
+    ]
+}

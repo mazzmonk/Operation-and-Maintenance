@@ -1,0 +1,338 @@
+centos6.7
+关闭selinux
+
+###### 安装 ######
+1.安装新内核
+启动docker服务时，有提示docker已死，子系统还在
+使用docker -d时候有错误提示，需要3.10.0以上内核，因此在此编译内核
+centos6.7 -> 3.18.24
+
+make -j4 bzImage  //生成内核文件
+make -j4 modules  //编译模块
+make -j4 modules_install  //编译安装模块
+-j后面的数字是线程数，用于加快编译速度，一般的经验是，逻辑CPU，就填写那个数字，例如有8核，则为-j8。
+安装
+make
+make install
+编译完成以后提示有关于iptables相关模块的丢失，因此，当使用此内核时有报错
+
+
+因此使用yum方式升级
+rpm --import https://www.elrepo.org/RPM-GPG-KEY-elrepo.org
+rpm -Uvh http://www.elrepo.org/elrepo-release-6-6.el6.elrepo.noarch.rpm
+
+因为 Docker 推荐使用 3.8 以上内核，所以我们选择使用 YUM 方式来升级内核。
+导入 KEY ,安装软件源。在 YUM 的 ELRepo 源中，有 mainline（3.13.1）、long-term（3.10.28）这 2 个内核版本，考虑到 long-term 更稳定，会长期更新，选择这个版本。
+主要：
+yum的时候要带上--enablerepo=elrepo-kernel参数
+yum --enablerepo=elrepo-kernel install kernel-lt
+
+然后修改grup.conf文件
+
+当启动docker服务时，有如下的报错，手动执行命令也会失败，但是通过lsmod |grep nf_nat时，则模块已经加载成功。
+level=warning msg="Running modprobe bridge nf_nat failed with message: insmod /lib/modules/3.10.93-1.el6.elrepo.x86_64/kernel/net/netfilter/nf_nat.ko \n, error: exit status 1" 
+
+2.安装docker
+curl -sSL https://get.docker.com/ | sh
+
+usermod -aG docker your-user
+
+su - blue
+mkdir -p /home/blue/apps/docker/var/run/docker
+mkdir -p /home/blue/apps/docker/var/lib/docker
+
+修改
+/etc/sysconfig/docker
+这里是docker引擎启动的参数
+保证如下内容：
+other_args="--exec-root=/home/blue/apps/docker/var/run/docker --graph=/home/blue/apps/docker/var/lib/docker --pidfile=/home/blue/apps/docker/var/run/docker.pid -s=devicemapper --storage-opt dm.basesize=30G --host=unix:///home/blue/apps/docker/var/run/socket -b=br0"
+
+最后一项表示是建立容器时默认的根分区为30G，必须和-s选项一起使用
+
+
+启动
+service docker start
+
+ln -s /home/blue/apps/docker/var/run/socket /var/run/docker.sock
+
+
+3.网络设置
+
+这里建立一个网桥，给网桥设立一个地址，然后给容器绑定一个固定地址，同时，设置网桥的地址给容器，使得容器之间可以通过网桥通讯。
+
+$$$$$$$$$$$$$$$$$$$$$$$
+3.1.建立网桥，并设置ip
+#ip link set dev docker0 down   //停掉原来的网桥
+#brctl delbr docker0            //删除原来的网桥   
+#brctl addbr br0
+#ip addr add 192.168.0.1/24 dev br0  //删除使用ip addr del 192.168.0.1/24 dev br1
+
+注意这里有个命令brctl addif br1 eth0 //千万不要用，这个会把本地网卡加入到网桥br1中，将导致本地网络不能使用。
+
+3.2.设置策略，保证网桥与外界的通讯，同时，容器也能与外界通信
+iptables -t nat -A POSTROUTING -s 192.168.0.0/24 -d 0.0.0.0/0 -j MASQUERADE
+这一步是让192.168.0.0段的地址可以与外界通讯，同时也是容器中地址可以访问外网的关键。
+
+3.3.建立容器
+为了能使用pipework建立容器的ip地址，必须使用如下类似的方式建立容器，主要是参数--net=none，意思是建立容器的时候不建立网络
+docker run --name="test" -dti --net=none centos:6.7 /bin/bash
+这里是关键，很多文档都按照一个默认的情况下建立容器，这种情况下建立的容器有地址，后续更改是不行的，因此必须建立无网络的容器。
+
+3.4.给容器添加固定地址
+[root@master sysconfig]# pipework br1 test2 192.168.0.10/24@192.168.0.1    //添加地址192.168.0.10网关为192.168.0.1
+Docker inspect returned invalid PID 0
+容器test2没有启动
+先启动容器docker start test2
+然后执行上述命令，网关地址为br1的地址。
+
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+###### pipework ######
+https://github.com/jpetazzo/pipework
+设置docker网络大杀器
+解压后，放置pipework到/usr/bin下
+
+使用pipework的过程中，有如下提示
+Object "netns" is unknown, try "ip help
+缺少netns支持，因此，采用如下方式安装
+
+yum install http://rdo.fedorapeople.org/rdo-release.rpm
+
+修改生成的rdo-release.repo文件为如下内容：
+
+[openstack-juno]
+name=OpenStack Juno Repository
+baseurl=https://repos.fedorapeople.org/repos/openstack/EOL/openstack-icehouse/epel-6/
+enabled=1
+skip_if_unavailable=0
+gpgcheck=0
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-RDO-Juno
+
+yum install iproute
+
+这里的url原来是不正确的的，有时候需要具体的访问以确认是存在
+从浏览器上查看这里https://repos.fedorapeople.org/repos/openstack
+
+5.docker启动设置
+这次序很重要，1.添加网桥 2.启动docker关联网桥
+
+ip link set dev docker0 down
+brctl delbr docker0
+brctl addbr br0
+ip link set br0 up
+ip addr add 192.168.5.1/24 dev br0 
+
+/etc/sysconfig/docker中保证有如下的部分
+
+#other_args="--exec-root=/home/blue/apps/docker/var/run/docker --graph=/home/blue/apps/docker/var/lib/docker --pidfile=/home/blue/apps/docker/var/run/docker.pid -s=devicemapper --storage-opt dm.basesize=30G --host=unix:///home/blue/apps/docker/var/run/socket --insecure-registry 10.8.15.21:5000 -b=br0"
+
+other_args="--exec-root=/home/blue/apps/docker/var/run/docker --graph=/home/blue/apps/docker/var/lib/docker --pidfile=/home/blue/apps/docker/var/run/docker.pid -s=devicemapper --storage-opt dm.basesize=30G --host=unix:///home/blue/apps/docker/var/run/socket -b=br0"
+
+service docker start
+
+ln -s /home/blue/apps/docker/var/run/socket /var/run/docker.sock
+
+建立容器
+
+docker run --name="base_centos6.7" -dit --net=none centos:6.7 /bin/bash
+pipework br0 base_centos6.7 192.168.5.11/24@192.168.5.1
+
+
+
+############## 私有仓库 ######
+#############################
+root账户
+rpm -ivh http://dl.fedoraproject.org/pub/epel/6/x86_64/epel-release-6-8.noarch.rpm
+yum install -y python-devel libevent-devel python-pip gcc xz-devel git
+yum -y install swig*
+
+官方地址
+https://github.com/docker/docker-registry
+下载版本为0.9.1 （0.8.1版本有bug）
+
+方法一：
+cd docker-registry
+pip install docker-registry
+gunicorn --access-logfile - --debug -k gevent -b 0.0.0.0:5000 -w 1 docker_registry.wsgi:application
+失败
+此种方式可以在本地使用
+
+方法二：
+$cd docker-registry
+$docker build -t registry .
+$docker run -d -p 5000:5000 registry   #端口随便自己定义，一般用5000.
+
+默认情况下，会将仓库存放于容器内的/tmp/registry目录下，这样如果容器被删除，则存放于容器中的镜像也会丢失，所以我们一般情况下会指定本地一个目录挂载到容器内的/tmp/registry下，如下：
+
+docker run -d -p 5000:5000 -v /home/blue/apps/docker/data/registry:/tmp/registry registry
+
+在浏览器输入http://IP:5000 会有正确的返回信息
+
+这个实际需要从网上down东西
+目前使用的此种方式
+
+方法三：
+docker run -d -p 5000:5000 --name registry registry:0.9.1
+这个是直接从docker官方down下来，打包镜像
+
+
+$$$$$$$$$$$$$$$$$
+使用私有仓库
+
+[root@docker data]# curl 10.8.15.21:5000/v1/search
+{"num_results": 0, "query": "", "results": []}
+
+因为我们还没有像私有容器提交镜像，所以这里返回空，下面我们提交一个镜像试试，上面可以看到我本地有一个registry的镜像
+使用docker tag 将我本地的id为7322fb474aa5的这个镜像标记为 10.8.15.21:5000/centos
+
+命令格式为 docker tag IMAGE[:TAG] [REGISTRYHOST/][USERNAME/]NAME[:TAG]
+
+[root@docker data]# docker tag 7322fbe74aa5 10.8.15.21:5000/centos
+[root@docker data]# docker images
+REPOSITORY              TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
+docker.io/registry      latest              ddfbba49d0b6        21 hours ago        423.6 MB
+docker.io/centos        latest              7322fbe74aa5        3 weeks ago         172.2 MB
+127.0.0.1:5000/centos   latest              7322fbe74aa5        3 weeks ago         172.2 MB
+[root@docker data]#
+
+镜像的 ID 唯一标识了镜像，注意到 docker.io/centos和 10.8.15.21:5000/centos具有相同的镜像 ID，说明它们实际上是同一镜像。
+
+PUSH 镜像
+然后我们将这个镜像push到私有镜像库
+这里有这样的一个错误提示，是说需要证书
+
+[blue@master contains]$ docker push 10.8.15.21/centos6.7
+Error response from daemon: invalid registry endpoint https://10.8.15.21/v0/: unable to ping registry endpoint https://10.8.15.21/v0/
+v2 ping attempt failed with error: Get https://10.8.15.21/v2/: dial tcp 10.8.15.21:443: connection refused
+ v1 ping attempt failed with error: Get https://10.8.15.21/v1/_ping: dial tcp 10.8.15.21:443: connection refused. If this private registry supports only HTTP or HTTPS with an unknown CA certificate, please add `--insecure-registry 10.8.15.21` to the daemon's arguments. In the case of HTTPS, if you have access to the registry's CA certificate, no need for the flag; simply place the CA certificate at /etc/docker/certs.d/10.8.15.21/ca.crt
+
+有2种解决方法
+一个是按照提示安装一个前端的代理，比如nginx等，
+第二种在/etc/sysconfig/docker中添加--insecure-registry 10.8.15.21:5000参数，这里使用第二种
+
+注意这里提供私有仓库的docker和使用docker仓库的机器都需要添加上述的选项。
+
+[root@docker data]# docker push 10.8.15.21:5000/centos
+这里有个需要注意的地方，push的格式，必须是ip:port/name的方式
+
+The push refers to a repository [10.8.15.21:5000/centos] (len: 1)
+Sending image list
+Pushing repository 127.0.0.1:5000/centos (1 tags)
+f1b10cd84249: Image successfully pushed 
+c852f6d61e65: Image successfully pushed 
+7322fbe74aa5: Image successfully pushed 
+Pushing tag for rev [7322fbe74aa5] on {http://10.8.15.21:5000/v1/repositories/centos/tags/latest}
+
+然后我么拿在看下私有仓库中有没有镜像
+
+[root@docker data]# curl 10.8.15.21:5000/v1/search
+{"num_results": 1, "query": "", "results": [{"description": "", "name": "library/centos"}]}
+
+可以看到一家有个叫centos的镜像存在了，就是我刚刚上传的镜像。然后你的其他服务器就可以来下载这个镜像使用了
+[root@slave01 ~]#docker  pull 10.8.15.21:5000/centos6.7
+
+如果本地有很多镜像想批量上传怎么办，可以用这个脚本
+$ wget https://github.com/yeasy/docker_practice/raw/master/_local/push_images.sh; sudo chmod a+x push_images.sh
+$ ./push_images.sh ubuntu:latest centos:centos7
+
+这里大家可以看到，访问我们私有库的时候，没有任何权限控制，也就是说别人知道这个仓库地址也可以push 和pull镜像，这样很不安全，大家可以在网络层面，也可以前面加层nginx，然后nginx反向代理本地的5000端口
+
+
+#####################################################################################
+#####################################################################################
+自定义网桥，容器可以通过网桥通讯，详细的情况见后边的描述
+基本原理是删除原来的网桥，新建一个网桥，然后使用docker启动的配置选项，连接到此网桥
+这里有个小细节，启动docker的时候，会自动的启动iptables及相关的功能，用于容器机器映射到宿主机器。
+有类似如下的策略
+[root@master sysconfig]# iptables -nL
+Chain INPUT (policy ACCEPT)
+target     prot opt source               destination         
+
+Chain FORWARD (policy ACCEPT)
+target     prot opt source               destination         
+DOCKER     all  --  0.0.0.0/0            0.0.0.0/0           
+ACCEPT     all  --  0.0.0.0/0            0.0.0.0/0           ctstate RELATED,ESTABLISHED 
+ACCEPT     all  --  0.0.0.0/0            0.0.0.0/0           
+DOCKER     all  --  0.0.0.0/0            0.0.0.0/0           
+ACCEPT     all  --  0.0.0.0/0            0.0.0.0/0           ctstate RELATED,ESTABLISHED 
+ACCEPT     all  --  0.0.0.0/0            0.0.0.0/0           
+ACCEPT     all  --  0.0.0.0/0            0.0.0.0/0           
+ACCEPT     all  --  0.0.0.0/0            0.0.0.0/0           
+
+Chain OUTPUT (policy ACCEPT)
+target     prot opt source               destination         
+
+Chain DOCKER (2 references)
+target     prot opt source               destination         
+[root@master sysconfig]# iptables -nL -t nat
+Chain PREROUTING (policy ACCEPT)
+target     prot opt source               destination         
+DOCKER     all  --  0.0.0.0/0            0.0.0.0/0           ADDRTYPE match dst-type LOCAL 
+
+Chain INPUT (policy ACCEPT)
+target     prot opt source               destination         
+
+Chain OUTPUT (policy ACCEPT)
+target     prot opt source               destination         
+DOCKER     all  --  0.0.0.0/0           !127.0.0.0/8         ADDRTYPE match dst-type LOCAL 
+
+Chain POSTROUTING (policy ACCEPT)
+target     prot opt source               destination         
+MASQUERADE  all  --  192.168.5.0/24       0.0.0.0/0           
+MASQUERADE  all  --  172.17.0.0/16        0.0.0.0/0           
+
+Chain DOCKER (2 references)
+target     prot opt source               destination         
+
+
+查看上述的策略，可以看到，实际上有2个网段被映射，192.168.5.0/24 以及172.17.0.0/16段
+172的这个网段是没有设置网桥时，自动生成，192网段则是手动生成，这里防火墙策略添加了2次，原来的策略不会被删除。
+
+
+
+
+##########   FAQ    ###########
+##########   FAQ    ###########
+
+ping程序
+yum -y install iputils*
+
+docker inspect bd05cc11f8b2 查看容器的信息
+
+添加网桥及设置启动的步骤如下：
+docker 1.7.1
+
+如果服务已经运行，那需要先停止服务，并删除旧的网桥。
+
+#service docker stop
+#ip link set dev docker0 down
+#brctl delbr docker0
+#iptables -t nat -F POSTROUTING          //这解决上述关于防火墙策略的问题
+
+
+然后创建一个网桥 bridge0，网桥的名称可以随便取
+
+#brctl addbr bridge0
+#ip addr add 192.168.5.1/24 dev bridge0   这只网桥的地址是192.168.5.1
+#ip link set dev bridge0 up
+查看确认网桥创建并启动。
+
+#ip addr show bridge0
+
+然后修改/etc/sysconfig/docer文件，添加选项
+-b=bridge0
+
+启动docker
+
+如此，启动的容器能自动分配到192.168.5.0/24的地址。
+
+
+
+
+
+
+
+
+
+
+

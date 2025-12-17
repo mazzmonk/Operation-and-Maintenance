@@ -1,0 +1,301 @@
+syntax = "proto3";
+
+message SearchRequest {
+  string query = 1;
+  int32 page_number = 2;
+  int32 result_per_page = 3;
+}
+
+
+message SearchRequest {
+  string query = 1;
+  int32 page_number = 2;
+  int32 result_per_page = 3;
+}
+
+message SearchResponse {
+ ...
+}
+
+
+/* SearchRequest represents a search query, with pagination options to
+ * indicate which results to include in the response. */
+
+message SearchRequest {
+  string query = 1;
+  int32 page_number = 2;  // Which page number do we want?
+  int32 result_per_page = 3;  // Number of results to return per page.
+}
+
+
+message Foo {
+  reserved 2, 15, 9 to 11;
+  reserved "foo", "bar";
+}
+
+
+message SearchRequest {
+  string query = 1;
+  int32 page_number = 2;
+  int32 result_per_page = 3;
+  enum Corpus {
+    UNIVERSAL = 0;
+    WEB = 1;
+    IMAGES = 2;
+    LOCAL = 3;
+    NEWS = 4;
+    PRODUCTS = 5;
+    VIDEO = 6;
+  }
+  Corpus corpus = 4;
+
+
+
+
+message MyMessage1 {
+  enum EnumAllowingAlias {
+    option allow_alias = true;
+    UNKNOWN = 0;
+    STARTED = 1;
+    RUNNING = 1;
+  }
+}
+message MyMessage2 {
+  enum EnumNotAllowingAlias {
+    UNKNOWN = 0;
+    STARTED = 1;
+    // RUNNING = 1;  // Uncommenting this line will cause a compile error inside Google and a warning message outside.
+  }
+}
+
+
+enum Foo {
+  reserved 2, 15, 9 to 11, 40 to max;
+  reserved "FOO", "BAR";
+}
+
+
+message SearchResponse {
+  repeated Result results = 1;
+}
+
+message Result {
+  string url = 1;
+  string title = 2;
+  repeated string snippets = 3;
+}
+
+
+// new.proto
+// All definitions are moved here
+
+// old.proto
+// This is the proto that all clients are importing.
+import public "new.proto";
+import "other.proto";
+
+// client.proto
+import "old.proto";
+// You use definitions from old.proto and new.proto, but not other.proto
+
+
+
+
+service SearchService {
+  rpc Search (SearchRequest) returns (SearchResponse);
+}
+
+
+option java_package = "com.example.foo";
+
+option java_multiple_files = true;
+
+option java_outer_classname = "Ponycopter";
+
+option optimize_for = CODE_SIZE;
+
+int32 old_field = 6 [deprecated = true];
+
+protoc --proto_path=IMPORT_PATH --cpp_out=DST_DIR --java_out=DST_DIR --python_out=DST_DIR --go_out=DST_DIR --ruby_out=DST_DIR --objc_out=DST_DIR --csharp_out=DST_DIR path/to/file.proto
+
+
+IMPORT_PATH指定.proto解析import指令时要在其中查找文件的目录。如果省略，则使用当前目录。可以通过--proto_path多次传递选项来指定多个导入目录。将按顺序搜索它们。 可以用作的简写形式。 -I=IMPORT_PATH--proto_path
+您可以提供一个或多个输出指令：
+--cpp_out在中生成C ++代码DST_DIR。有关更多信息，请参见C ++生成的代码参考。
+--java_out在中生成Java代码DST_DIR。有关更多信息，请参见Java生成的代码参考。
+--python_out在中生成Python代码DST_DIR。有关更多信息，请参见Python生成的代码参考。
+--go_out在中生成Go代码DST_DIR。有关更多信息，请参见Go生成的代码参考。
+--ruby_out在中生成Ruby代码DST_DIR。Ruby生成的代码参考即将推出！
+--objc_out在中生成Objective-C代码DST_DIR。有关更多信息，请参见Objective-C生成的代码参考。
+--csharp_out在中生成C＃代码DST_DIR。有关更多信息，请参见C＃生成的代码参考。
+--php_out在中生成PHP代码DST_DIR。有关更多信息，请参见PHP生成的代码参考。
+为了更加方便，如果DST_DIR结尾为.zip 或.jar，编译器会将输出写入具有给定名称的单个ZIP格式的存档文件。 .jar根据Java JAR规范的要求，还将为输出提供清单文件。请注意，如果输出存档已经存在，它将被覆盖；编译器不够智能，无法将文件添加到现有存档中。
+您必须提供一个或多个.proto文件作为输入。.proto可以一次指定多个文件。尽管这些文件是相对于当前目录命名的，但是每个文件都必须位于IMPORT_PATHs 之一中，以便编译器可以确定其规范名称。
+
+
+
+syntax = "proto2";
+
+package tutorial;
+
+message Person {
+  required string name = 1;
+  required int32 id = 2;
+  optional string email = 3;
+
+  enum PhoneType {
+    MOBILE = 0;
+    HOME = 1;
+    WORK = 2;
+  }
+
+  message PhoneNumber {
+    required string number = 1;
+    optional PhoneType type = 2 [default = HOME];
+  }
+
+  repeated PhoneNumber phones = 4;
+}
+
+message AddressBook {
+  repeated Person people = 1;
+}
+
+
+#include <iostream>
+#include <fstream>
+#include <string>
+#include "addressbook.pb.h"
+using namespace std;
+
+// This function fills in a Person message based on user input.
+void PromptForAddress(tutorial::Person* person) {
+  cout << "Enter person ID number: ";
+  int id;
+  cin >> id;
+  person->set_id(id);
+  cin.ignore(256, '\n');
+
+  cout << "Enter name: ";
+  getline(cin, *person->mutable_name());
+
+  cout << "Enter email address (blank for none): ";
+  string email;
+  getline(cin, email);
+  if (!email.empty()) {
+    person->set_email(email);
+  }
+
+  while (true) {
+    cout << "Enter a phone number (or leave blank to finish): ";
+    string number;
+    getline(cin, number);
+    if (number.empty()) {
+      break;
+    }
+
+    tutorial::Person::PhoneNumber* phone_number = person->add_phones();
+    phone_number->set_number(number);
+
+    cout << "Is this a mobile, home, or work phone? ";
+    string type;
+    getline(cin, type);
+    if (type == "mobile") {
+      phone_number->set_type(tutorial::Person::MOBILE);
+    } else if (type == "home") {
+      phone_number->set_type(tutorial::Person::HOME);
+    } else if (type == "work") {
+      phone_number->set_type(tutorial::Person::WORK);
+    } else {
+      cout << "Unknown phone type.  Using default." << endl;
+    }
+  }
+}
+
+// Main function:  Reads the entire address book from a file,
+//   adds one person based on user input, then writes it back out to the same
+//   file.
+int main(int argc, char* argv[]) {
+  // Verify that the version of the library that we linked against is
+  // compatible with the version of the headers we compiled against.
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  if (argc != 2) {
+    cerr << "Usage:  " << argv[0] << " ADDRESS_BOOK_FILE" << endl;
+    return -1;
+  }
+
+  tutorial::AddressBook address_book;
+
+  {
+    // Read the existing address book.
+    fstream input(argv[1], ios::in | ios::binary);
+    if (!input) {
+      cout << argv[1] << ": File not found.  Creating a new file." << endl;
+    } else if (!address_book.ParseFromIstream(&input)) {
+      cerr << "Failed to parse address book." << endl;
+      return -1;
+    }
+  }
+
+  // Add an address.
+  PromptForAddress(address_book.add_people());
+
+  {
+    // Write the new address book back to disk.
+    fstream output(argv[1], ios::out | ios::trunc | ios::binary);
+    if (!address_book.SerializeToOstream(&output)) {
+      cerr << "Failed to write address book." << endl;
+      return -1;
+    }
+  }
+
+  // Optional:  Delete all global objects allocated by libprotobuf.
+  google::protobuf::ShutdownProtobufLibrary();
+
+  return 0;
+}
+
+
+
+service Foo {
+  rpc Bar(FooRequest) returns(FooResponse);
+}
+
+
+virtual void Bar(RpcController* controller, const FooRequest* request,
+                 FooResponse* response, Closure* done);
+
+
+
+service RouteGuide {
+   ...
+}
+
+
+// Obtains the feature at a given position.
+rpc GetFeature(Point) returns (Feature) {}
+
+// Obtains the Features available within the given Rectangle.  Results are
+// streamed rather than returned at once (e.g. in a response message with a
+// repeated field), as the rectangle may cover a large area and contain a
+// huge number of features.
+rpc ListFeatures(Rectangle) returns (stream Feature) {}
+
+// Accepts a stream of Points on a route being traversed, returning a
+// RouteSummary when traversal is completed.
+rpc RecordRoute(stream Point) returns (RouteSummary) {}
+
+// Accepts a stream of RouteNotes sent while a route is being traversed,
+// while receiving other RouteNotes (e.g. from other users).
+rpc RouteChat(stream RouteNote) returns (stream RouteNote) {}
+
+// Points are represented as latitude-longitude pairs in the E7 representation
+// (degrees multiplied by 10**7 and rounded to the nearest integer).
+// Latitudes should be in the range +/- 90 degrees and longitude should be in
+// the range +/- 180 degrees (inclusive).
+message Point {
+  int32 latitude = 1;
+  int32 longitude = 2;
+}
+ 

@@ -1,0 +1,19 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: txxy-zookeeper
+  labels:
+    name: txxy-zookeeper
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        name: txxy-zookeeper
+    spec:
+      containers:
+      - name: txxy-zookeeper
+        image: 192.168.6.83:5000/tyyx/zookeeper:latest
+        ports:
+        - containerPort: 2181
+

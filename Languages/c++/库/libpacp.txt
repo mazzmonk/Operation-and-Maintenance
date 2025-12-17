@@ -1,0 +1,184 @@
+安装：
+sudo apt-get install flex
+sudo apt-get install byacc
+
+pcap应用格式 
+1.确定sniff的接口，Linux类似eth0，BSD类似Xl1
+2.初始化pcap。告知pcap哪个设备sniffing，可以同时sniff多个设备，使用file handle的方式，就像打开文件读写一样，必须命名sniffing session
+3.sniff特殊的通讯时，需要创建一个rule set，然后compile，然后应用。rule set保存在string中，必须转换成pcap能读取的格式，告知pcap应用到需要过滤的session上
+4.开始主循环。此时，pcap等待直到接收到我们想要的数据包。每次有新的数据包进来的时候，调用事先定义好的函数，这个函数用于处理我们想要做的任何事，分析包，打印，保存在文件中或者什么也不处理等等。
+5.完成sniff以后，关闭session，结束。
+
+获取设备名，errbuf存储返回错误
+char *dev,errbuf[PCAP_ERRBUF_SIZE];
+        dev = pcap_lookupdev(errbuf);
+
+        if (dev == NULL) {
+                fprintf(stderr,"Couldn't find default device:%s\n",errbuf);
+                return 2;
+        }
+        printf("Device:%s\n",dev);
+
+
+
+pcap_t* pcap_open_live(char* device,int snaplen,int promisc,int to_ms,char* ebuf)
+char* device 设备
+int snaplen 定义的捕获的最大字节
+int promisc 设置成true的话，设置设备为混杂模式（即使设置成false，在某些情况下，也会设置成混杂模式）
+int to_ms 读延时（毫秒），0 表示没有延时，在某些平台上，意味着必须等待到有足够的数据包到达，所以必须用一个非0数值）
+char* ebuf 存储任意的错误信息
+函数返回session handler
+
+int pcap_compile(pcap* p,struct bpf_program* fp,char* str,int optimize,bpf_u_int32 netmask)
+
+pcap* p 上述的pcap_t* handle
+struct bpf_program* fp
+char* str 过滤器的参数，正则表达式等等比如：char filter_exp[] = "port 23";
+int optimize 0表示失败，1表示真
+bpf_u_int32 netmask 过滤器应用的网络的网络掩码
+返回-1表示失败，其他指成功
+
+int pcap_setfilter(pcap_t* p,struct bpf_program* fp)
+
+pcap_t* p session handler
+struct bpf_program* fp，同上述函数第二参数
+
+pcap_lookupnet() 过滤器应用的网络的掩码和网络号
+
+捕获包分为2种方式，1.一个时间只捕获一个包，2.使用一个循环等待直到n个包被捕获
+
+u_char* pcap_next(pcap_t* p,struct pcap_pkthdr* h)
+
+pcap_t* p session handler
+struct pcap_pkthdr* h 指针指向一个结构，保存关于特殊时候被sniffed的数据包的信息，包括包长度等等。
+
+回调函数，每次sniff包以后需要处理的回调函数
+
+int pcap_loop(pcap_t* p,int cnt,pcap_handler callback,u_char* user)
+
+pcap_t* p session handle
+int cnt 返回之前多少数据包sniff，负数表示直到错误
+pcap_handler callback 回调函数名
+u_char* user 多数设置为NULL
+
+pcap_dispatch()和上述的函数相同用处，区别在于，本函数尽处理第一批包，上述函数持续处理直到定义数量的包完成。
+
+回调函数格式类似如下：
+
+void got_packet(u_char* args,const struct pcap_pkthdr* header,const u_char* packet)
+char* args 对应于pcap_loop的最后一个参数，即*user,就是说从pcap_loop传过来的，如果想要给callback传递自己的参数，需要用这里的部分
+第二参数是pcap header，包含是被sniffed的包的内容信息，大小等等，定义如下:
+const u_char* packet 指向被sniffed的数据包中数据块的第一个字节
+
+struct pcap_pkthdr {
+		struct timeval ts; /* time stamp */
+		bpf_u_int32 caplen; /* length of portion present */
+		bpf_u_int32 len; /* length this packet (off wire) */
+	};
+
+函数原型中的packet包含很多属性，其实就是结构集，比如TCP/IP包有Ethernet header,IP header,TCP header,lastly,packet's payload。
+这些结构使用前需要做类型转换
+
+/* ethernet headers are always exactly 14 bytes [1] */
+#define SIZE_ETHERNET 14
+
+/* Ethernet addresses are 6 bytes */
+#define ETHER_ADDR_LEN	6
+
+	/* Ethernet header */
+	struct sniff_ethernet {
+		u_char ether_dhost[ETHER_ADDR_LEN]; /* Destination host address */
+		u_char ether_shost[ETHER_ADDR_LEN]; /* Source host address */
+		u_short ether_type; /* IP? ARP? RARP? etc */
+	};
+
+	/* IP header */
+	struct sniff_ip {
+		u_char ip_vhl;		/* version << 4 | header length >> 2 */
+		u_char ip_tos;		/* type of service */
+		u_short ip_len;		/* total length */
+		u_short ip_id;		/* identification */
+		u_short ip_off;		/* fragment offset field */
+	#define IP_RF 0x8000		/* reserved fragment flag */
+	#define IP_DF 0x4000		/* dont fragment flag */
+	#define IP_MF 0x2000		/* more fragments flag */
+	#define IP_OFFMASK 0x1fff	/* mask for fragmenting bits */
+		u_char ip_ttl;		/* time to live */
+		u_char ip_p;		/* protocol */
+		u_short ip_sum;		/* checksum */
+		struct in_addr ip_src,ip_dst; /* source and dest address */
+	};
+	#define IP_HL(ip)		(((ip)->ip_vhl) & 0x0f)
+	#define IP_V(ip)		(((ip)->ip_vhl) >> 4)
+
+	/* TCP header */
+	typedef u_int tcp_seq;
+
+	struct sniff_tcp {
+		u_short th_sport;	/* source port */
+		u_short th_dport;	/* destination port */
+		tcp_seq th_seq;		/* sequence number */
+		tcp_seq th_ack;		/* acknowledgement number */
+		u_char th_offx2;	/* data offset, rsvd */
+	#define TH_OFF(th)	(((th)->th_offx2 & 0xf0) >> 4)
+		u_char th_flags;
+	#define TH_FIN 0x01
+	#define TH_SYN 0x02
+	#define TH_RST 0x04
+	#define TH_PUSH 0x08
+	#define TH_ACK 0x10
+	#define TH_URG 0x20
+	#define TH_ECE 0x40
+	#define TH_CWR 0x80
+	#define TH_FLAGS (TH_FIN|TH_SYN|TH_RST|TH_ACK|TH_URG|TH_ECE|TH_CWR)
+		u_short th_win;		/* window */
+		u_short th_sum;		/* checksum */
+		u_short th_urp;		/* urgent pointer */
+};
+
+使用如下：
+/* ethernet headers are always exactly 14 bytes */
+#define SIZE_ETHERNET 14
+
+	const struct sniff_ethernet *ethernet; /* The ethernet header */
+	const struct sniff_ip *ip; /* The IP header */
+	const struct sniff_tcp *tcp; /* The TCP header */
+	const char *payload; /* Packet payload */
+
+	u_int size_ip;
+	u_int size_tcp;
+
+类型转换：
+ethernet = (struct sniff_ethernet*)(packet);
+	ip = (struct sniff_ip*)(packet + SIZE_ETHERNET);
+	size_ip = IP_HL(ip)*4;
+	if (size_ip < 20) {
+		printf("   * Invalid IP header length: %u bytes\n", size_ip);
+		return;
+	}
+	tcp = (struct sniff_tcp*)(packet + SIZE_ETHERNET + size_ip);
+	size_tcp = TH_OFF(tcp)*4;
+	if (size_tcp < 20) {
+		printf("   * Invalid TCP header length: %u bytes\n", size_tcp);
+		return;
+	}
+	payload = (u_char *)(packet + SIZE_ETHERNET + size_ip + size_tcp);
+
+u_char是个包含内存地址的变量，内存中包含的是数据包的布局。
+
+Variable			Location (in bytes)
+sniff_ethernet		X
+sniff_ip			X + SIZE_ETHERNET  
+sniff_tcp			X + SIZE_ETHERNET + {IP header length}
+payload				X + SIZE_ETHERNET + {IP header length} + {TCP header length}
+
+假设X为sniff_ethernet的地址，其他结构的地址如上，偏移为SIZE_ETHERNET或者14 bytes
+
+
+
+
+
+
+
+
+

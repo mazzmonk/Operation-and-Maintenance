@@ -1,0 +1,173 @@
+# 使用 python 的 fabric 来进行本地和远程操作
+# 由于 fabric 2.x 才支持 python 3.4+ 的版本,所以,需要安装fabric 2.x的版本
+# 而原 fabric 1.x 中的部分功能已经不能在 2.x 的版本中在使用了
+
+
+
+***************************************************************************************
+fabfile.py 文件内容,针对 fabric 1.x 的版本
+##########################################
+
+from fabric.api import local, run, env
+
+def prepare_deploy():
+    local("cd /home/jack/workspace/typeidea-env && . bin/activate" )
+    local("cd /home/jack/workspace/typeidea-env/typeidea/typeidea && \
+            python manage.py test")
+
+##########################################
+注意: 
+这里有个比较有意思的地方,就是 . bin/activate 这个命令,实际上是 source bin/activate 这个命令,实际上根本没法查到 source 这个命令的路径信息,其实就是 "." 这个符号
+
+***************************************************************************************
+
+## 安装 fabric 2.x
+$ pip uninstall 'fabric<2.0'
+$ pip install 'fabric>2.0'
+
+详细的文档信息:
+https://docs.fabfile.org/en/2.6/
+
+
+# 如下主要针对 fabric 2.x 版本 
+## ssh 连接
+c = Connection(
+    host="hostname",
+    user="admin",
+    connect_kwargs={
+        "key_filename": "/home/myuser/.ssh/private.key",
+    },
+)
+
+## Connection的所有参数
+def __init__(
+        self,
+        host,                                    # 主机 ip
+        user=None,                        # 用户名
+        port=None,                         # ssh 端口,默认 22
+        config=None,                     # 登录配置文件
+        gateway=None,                 # 连接网关
+        forward_agent=None,       # 是否开启 agent forwarding
+        connect_timeout=None,   # 设置超时
+        connect_kwargs=None,    # 设置密码登录 connect_kwargs={"password": "123456"}
+                                                    # 还是密钥登录 connect_kwargs={"key_filename": "/home/myuser/.ssh/id_rsa"}
+        inline_ssh_env=None,
+    )
+
+例子:
+##########################################
+from fabric2 import Connection
+
+def deploy():
+    # 如果服务器配置了ssh免密码登录,就不需要 connect_kwargs 来指定密码
+    conn = Connection("root@192.168.44.13", connect_kwargs={"password": "123456"})
+    conn.run("ls")                                                                                                                               
+##########################################
+
+
+## conn对象属性
+
+run        # 执行远程命令,如:run('uname -a')
+cd          # 切换远程目录,如:cd('/root'); with conn.cd('/root'),继承这个状态
+put        # 上传本地文件到远程主机,如:put('/root/test.py','/root/test.py')
+get        # 获取服务器上文件,如:get('/root/test.py')
+sudo      # sudo方式执行远程命令,如: sudo('service docker start')
+local      # 执行本地命令,如:conn.local('ls')
+
+
+## 对多台机器使用时,Connection 
+##########################################
+from fabric2 import Connection
+
+for host in ('root@192.168.44.20','root@192.168.44.21','root@192.168.44.22'):
+    result = Connection(host,connect_kwargs={'password':'123456'}).run('uname -s')               
+    print("{}: {}".format(host,result.stdout.strip()))
+##########################################
+
+
+## 对多台机器使用时,SerialGroup 
+##########################################
+from fabric2 import SerialGroup
+
+pool = SerialGroup('root@192.168.44.20','root@192.168.44.21','root@192.168.44.22',connect_kwargs={'password':'123456'})
+print(pool)
+pool.run('uname -s')
+for conn in pool:
+    conn.run('mkdir testfiles')
+    with conn.cd('/home'):
+        conn.run("mkdir testdir")
+    with conn.cd('/home/testdir'):
+        conn.run('mkdir aaa')
+        conn.put('test', '/home/testdir')  # 上传文件
+##########################################
+
+## 多线程版本,ThreadingGroup
+## class fabric.group.ThreadingGroup(*hosts, **kwargs)
+##########################################
+from fabric2 import ThreadingGroup
+
+pool = ThreadingGroup('generaluser@192.168.1.20:22', connect_kwargs={'password':'123456'})
+pool.run('ls -l /tmp')
+
+##########################################
+
+
+# 从 fabric 2.x 开始,分成了fabric 和 invoke 2个部分,fabric 用于连接, invoke 用于任务及具体的工作
+详细的文档内容: 
+https://docs.pyinvoke.org/en/stable/getting-started.html#defining-and-running-task-functions
+
+注意:
+对于大规模执行任务,及去除耦合很有用
+1. invoke 需要定义个 @task 的装饰器,然后定义任务
+2. task 的函数中第一个参数必须是 c/ctx/context,这个参数对应于Connection的返回值,或者其他的上下文,比如是多个任务之间的共享返回值,变量等等,
+https://docs.pyinvoke.org/en/stable/api/context.html#invoke.context.Context.run
+这里有详细的描述,是一个很有意思的东西
+
+比如:
+##########################################
+with c.prefix('workon myenv'):
+    c.run('ls')
+    with c.prefix('source /some/script'):
+        c.run('touch a_file')
+The result:
+
+$ workon myenv && ls
+$ workon myenv && source /some/script && touch a_file
+##########################################
+
+
+
+
+
+
+##########################
+from fabric2 import Connection
+from invoke import task
+
+
+@task
+def hello(c):
+    c.run('ip -4 a')
+
+for host in ('generaluser@192.168.1.20',):
+    conn = Connection(host,connect_kwargs={'password':'123456'})
+    hello(conn)
+
+##########################
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

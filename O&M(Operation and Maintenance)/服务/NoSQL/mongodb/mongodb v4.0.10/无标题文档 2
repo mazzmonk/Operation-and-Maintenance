@@ -1,0 +1,25 @@
+mk:19 ml:5397020672 mm:0 mn:6504316928 mo:-1 mp:-1 mq:-1 mr:-1 ms:-1 mt:-1 mu:-1 mv:-1 mw:0 mx:157 my:21 mz:1 ng:75 nh:1659 ni:-1
+
+      'MONGODB_connected_clients'         =>  'mk',
+      'MONGODB_used_resident_memory'      =>  'ml',
+      'MONGODB_used_mapped_memory'        =>  'mm',
+      'MONGODB_used_virtual_memory'       =>  'mn',
+
+      'MONGODB_index_accesses'            =>  'mo',	#null
+      'MONGODB_index_hits'                =>  'mp',			#null
+      'MONGODB_index_misses'              =>  'mq',		#null
+      'MONGODB_index_resets'              =>  'mr',		#null
+      'MONGODB_back_flushes'              =>  'ms',		#null
+      'MONGODB_back_total_ms'             =>  'mt',		#null
+      'MONGODB_back_average_ms'           =>  'mu',#null
+      'MONGODB_back_last_ms'              =>  'mv',		#null
+
+      'MONGODB_op_inserts'                =>  'mw',
+      'MONGODB_op_queries'                =>  'mx',
+      'MONGODB_op_updates'                =>  'my',
+      'MONGODB_op_deletes'                =>  'mz',
+      'MONGODB_op_getmores'               =>  'ng',
+      'MONGODB_op_commands'               =>  'nh',
+
+      'MONGODB_slave_lag'                 =>  'ni',	# null
+

@@ -1,0 +1,1573 @@
+×××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××
+ngx_memzero(&init_cycle,sizeof(ngx_cycle_t));
+
+/* define ngx_memzero(buf, n) (void) memset(buf, 0, n) 
+ * 填充init_cycle为0，init_cycle是一个ngx_cycle_t的struct
+ */
+
+原型：
+void *memset(void *s, int ch, unsigned n);
+
+功能：
+将s所指向的某一块内存中的每个字节的内容全部设置为ch指定的ASCII值,
+块的大小由第三个参数指定,这个函数通常为新申请的内存做初始化工作,其返回值为指向S的指针。
+它对较大的结构体或数组进行清零操作的一种最快方法。
+
+[==========
+/* ngx_cycle_t是ngx_cycle_s的别名，如下是定义
+struct ngx_cycle_s {
+    void                  ****conf_ctx;
+    ngx_pool_t               *pool;
+
+    ngx_log_t                *log;
+    ngx_log_t                 new_log;
+
+    ngx_connection_t        **files;
+    ngx_connection_t         *free_connections;
+    ngx_uint_t                free_connection_n;
+
+    ngx_queue_t               reusable_connections_queue;
+
+    ngx_array_t               listening;
+    ngx_array_t               paths;
+    ngx_list_t                open_files;
+    ngx_list_t                shared_memory;
+
+    ngx_uint_t                connection_n;
+    ngx_uint_t                files_n;
+
+    ngx_connection_t         *connections;
+    ngx_event_t              *read_events;
+    ngx_event_t              *write_events;
+
+    ngx_cycle_t              *old_cycle;
+
+    ngx_str_t                 conf_file;
+    ngx_str_t                 conf_param;
+    ngx_str_t                 conf_prefix;
+    ngx_str_t                 prefix;
+    ngx_str_t                 lock_file;
+    ngx_str_t                 hostname;
+};
+×/
+==========]
+
+
+××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××
+
+log = ngx_log_init(ngx_prefix);
+init_cycle.log = log;
+
+************************************************************************************
+
+init_cycle.pool = ngx_create_pool(1024,log);
+/*创建一个1024字节的动态内存，用来存放一个ngx_pool_t的struct以及可以用于分配的部分内存，
+ *内存首地址是ngx_pool_t的地址，可以用于分配内存的首地址应该是ngx_pool_t的首地址+ngx_pool_t的size
+ *简单的说，1024字节的内存空间中，存放了一个ngx_pool_t的结构和可以用于分配的地址
+ */
+/*核心函数是posix_memalign，主要作用是分配一块动态内存，返回值是错误代码，这里用的ngx_memalign是对此函数的包裹，
+ *同时返回一个ngx_pool_t的指针
+ */
+/*这里还有计算此块内存可用于分配的起始地址 p->d.last=(u_char *)p + sizeof(ngx_pool_t)，d的结构是一个链，
+ *此块内存的结束地址 p->d.end = (u_char *)p + size;
+ */
+
+[==========
+type struct {
+	u_char *last;
+	u_char *end;
+	ngx_pool_t *next;
+	ngx_uint_t failed;
+} ngx_pool_data_t;
+==========]
+
+ngx_pool_t * ngx_create_pool(size_t size, ngx_log_t *log)
+{
+    ngx_pool_t  *p;
+
+    p = ngx_memalign(NGX_POOL_ALIGNMENT, size, log);
+    if (p == NULL) {
+        return NULL;
+    }
+
+    p->d.last = (u_char *) p + sizeof(ngx_pool_t);
+    p->d.end = (u_char *) p + size;
+    p->d.next = NULL;
+    p->d.failed = 0;
+
+    
+    size = size - sizeof(ngx_pool_t);       //这里理论上应该是一个固定值，就是此块内存能被用于其他作用的最大值
+    /* 这里做了一个很细致的处理，用上述的值和操作系统的一个分页大小进行了比较，取小值，最大化的减少内存消耗 
+     * 但是不知道是否会出现整个ngx_pool_t结构比一个内存分页更小的情况
+     */
+    p->max = (size < NGX_MAX_ALLOC_FROM_POOL) ? size : NGX_MAX_ALLOC_FROM_POOL;
+    // #define NGX_MAX_ALLOC_FROM_POOL  (ngx_pagesize - 1) 
+    //  ngx_pagesize = getpagesize();
+    /* 定义函数：size_t getpagesize(void)
+    /* 函数说明：返回一个分页的大小，单位为字节(Byte)。该值为系统的分页大小，不一定会和硬件分页大小相同。
+    /* 返回值：内存分页大小。
+    /* 附加说明：在Intel x86上其返回值应为4096Bytes = 4KB。
+
+    p->current = p;
+    p->chain = NULL;
+    p->large = NULL;
+    p->cleanup = NULL;
+    p->log = log;
+
+    return p;
+}
+
+[==========
+void * ngx_memalign(size_t alignment, size_t size, ngx_log_t *log)
+{
+    void  *p;
+    int    err;
+
+    err = posix_memalign(&p, alignment, size);
+
+    if (err) {
+        ngx_log_error(NGX_LOG_EMERG, log, err,
+                      "posix_memalign(%uz, %uz) failed", alignment, size);
+        p = NULL;
+    }
+
+    ngx_log_debug3(NGX_LOG_DEBUG_ALLOC, log, 0,
+                   "posix_memalign: %p:%uz @%uz", p, size, alignment);
+    return p;
+}
+
+原型：
+int posix_memalign (void **memptr,size_t alignment,size_t size);
+
+调用posix_memalign( )成功时会返回size字节的动态内存，并且这块内存的地址是alignment的倍数。参数alignment必须是2的幂，还是void指针的大小的倍数。返回的内存块的地址放在了memptr里面，函数返回值是0.
+
+调用失败时，没有内存会被分配，memptr的值没有被定义，返回如下错误码之一：
+EINVAL
+参数不是2的幂，或者不是void指针的倍数。
+ENOMEM
+没有足够的内存去满足函数的请求。
+要注意的是，对于这个函数，errno不会被设置，只能通过返回值得到。
+由posix_memalign( )获得的内存通过free( )释放。用法很简单：
+char *buf;
+int ret;
+/* allocate 1 KB along a 256-byte boundary */
+ret = posix_memalign (&buf, 256, 1024);
+if (ret) {
+    fprintf (stderr, "posix_memalign: %s\n",
+             strerror (ret));
+    return -1;
+}
+/* use 'buf'... */
+free (buf);
+==========]
+
+
+原型：
+struct ngx_pool_s { 
+	ngx_pool_data_t d; //数据块 
+	size_t max;	   //数据块的大小，即小块内存的最大值 
+	ngx_pool_t *current;	//保存当前内存池 
+	ngx_chain_t *chain;	//可以挂一个chain结构 
+	ngx_pool_large_t *large;	//分配大块内存用，即超过max的内存请求 
+	ngx_pool_cleanup_t *cleanup;	//挂载一些内存池释放的时候，同时释放的资源。 
+	ngx_log_t *log; 
+};
+
+ngx_pool_large_t原型：
+struct ngx_pool_large_s {
+    ngx_pool_large_t     *next;
+    void                 *alloc;
+};
+
+原型：
+typedef struct { 
+	u_char *last; //当前内存分配结束位置，即下一段可分配内存的起始位置 
+	u_char *end; //内存池结束位置 
+	ngx_pool_t *next; //链接到下一个内存池 
+	ngx_uint_t failed; //统计该内存池不能满足分配请求的次数 
+} ngx_pool_data_t;
+************************************************************************************
+
+******************************************************************
+static ngx_int_t ngx_process_options(ngx_cycle_t *cycle)
+{
+    u_char  *p;
+    size_t   len;
+
+    if (ngx_prefix) {
+        len = ngx_strlen(ngx_prefix);
+        p = ngx_prefix;
+
+        if (len && !ngx_path_separator(p[len - 1])) {
+            p = ngx_pnalloc(cycle->pool, len + 1);
+            if (p == NULL) {
+                return NGX_ERROR;
+            }
+
+            ngx_memcpy(p, ngx_prefix, len);
+            p[len++] = '/';
+        }
+
+        cycle->conf_prefix.len = len;
+        cycle->conf_prefix.data = p;
+        cycle->prefix.len = len;
+        cycle->prefix.data = p;
+
+    } else {
+
+#ifndef NGX_PREFIX
+
+        p = ngx_pnalloc(cycle->pool, NGX_MAX_PATH);
+        if (p == NULL) {
+            return NGX_ERROR;
+        }
+
+        if (ngx_getcwd(p, NGX_MAX_PATH) == 0) {
+            ngx_log_stderr(ngx_errno, "[emerg]: " ngx_getcwd_n " failed");
+            return NGX_ERROR;
+        }
+
+        len = ngx_strlen(p);
+
+        p[len++] = '/';
+
+        cycle->conf_prefix.len = len;
+        cycle->conf_prefix.data = p;
+        cycle->prefix.len = len;
+        cycle->prefix.data = p;
+
+#else
+
+#ifdef NGX_CONF_PREFIX
+        ngx_str_set(&cycle->conf_prefix, NGX_CONF_PREFIX);
+#else
+        ngx_str_set(&cycle->conf_prefix, NGX_PREFIX);
+#endif
+        ngx_str_set(&cycle->prefix, NGX_PREFIX);
+
+#endif
+    }
+
+    if (ngx_conf_file) {
+        cycle->conf_file.len = ngx_strlen(ngx_conf_file);
+        cycle->conf_file.data = ngx_conf_file;
+
+    } else {
+        ngx_str_set(&cycle->conf_file, NGX_CONF_PATH);
+    }
+
+    if (ngx_conf_full_name(cycle, &cycle->conf_file, 0) != NGX_OK) {
+        return NGX_ERROR;
+    }
+
+    for (p = cycle->conf_file.data + cycle->conf_file.len - 1;
+         p > cycle->conf_file.data;
+         p--)
+    {
+        if (ngx_path_separator(*p)) {
+            cycle->conf_prefix.len = p - ngx_cycle->conf_file.data + 1;
+            cycle->conf_prefix.data = ngx_cycle->conf_file.data;
+            break;
+        }
+    }
+
+    if (ngx_conf_params) {
+        cycle->conf_param.len = ngx_strlen(ngx_conf_params);
+        cycle->conf_param.data = ngx_conf_params;
+    }
+
+    if (ngx_test_config) {
+        cycle->log->log_level = NGX_LOG_INFO;
+    }
+
+    return NGX_OK;
+}
+
+ngx_cycle_t是核心结构
+
+[==========
+原型：
+void * ngx_pnalloc(ngx_pool_t *pool, size_t size)
+{
+    u_char      *m;
+    ngx_pool_t  *p;
+
+    if (size <= pool->max) {
+        p = pool->current;
+        do {
+            m = p->d.last;
+            if ((size_t) (p->d.end - m) >= size) {
+                p->d.last = m + size;
+                return m;
+            }
+            p = p->d.next;
+        } while (p);
+        return ngx_palloc_block(pool, size);
+    }
+    return ngx_palloc_large(pool, size);
+}
+
+分配新的内存块，然后判断
+
+if size <= pool->max;return ngx_palloc_block
+else return ngx_palloc_large
+
+意思是判断pool中可用内存是否够用，这里pool是同时传入的参数，如果够用，就调用ngx_palloc_block
+否则调用ngx_palloc_large
+
+ngx_palloc_block原型：
+
+static void * ngx_palloc_block(ngx_pool_t *pool, size_t size)
+{
+    u_char      *m;
+    size_t       psize;
+    ngx_pool_t  *p, *new, *current;
+
+    psize = (size_t) (pool->d.end - (u_char *) pool); //计算pool的大小
+
+    m = ngx_memalign(NGX_POOL_ALIGNMENT, psize, pool->log); //动态分配一块psize大小的内存，首地址为m
+    if (m == NULL) {
+        return NULL;
+    }
+
+    new = (ngx_pool_t *) m;  //新内存块的首地址
+
+    new->d.end = m + psize; //新内存块的末地址
+    new->d.next = NULL;
+    new->d.failed = 0;
+
+    m += sizeof(ngx_pool_data_t);  //将m的地址设置为地址的起始地址后1个ngx_pool_data_t的地方
+				   //这里有个问题是，为什么m的地址要设置为1个ngx_pool_data_t的地方，
+				   //而不是一个ngx_pool_t的地方
+    m = ngx_align_ptr(m, NGX_ALIGNMENT); //对齐地址
+    new->d.last = m + size; //新内存池可用的起始地址
+
+    current = pool->current;
+
+    for (p = current; p->d.next; p = p->d.next) {  //这里的步骤不知道为什么，
+        if (p->d.failed++ > 4) {
+  	 current = p->d.next;
+        }
+    }
+
+    p->d.next = new;                   //关键的地方在这里，p是指向pool首地址的指针，p->d.next指向了new，就是
+				 																		      //新的内存池，返回也是新的可用内存块的首地址
+    pool->current = current ? current : new;
+
+    return m;
+}
+
+ngx_palloc_large原型：
+static void * ngx_palloc_large(ngx_pool_t *pool, size_t size)
+{
+    void              *p;
+    ngx_uint_t         n;
+    ngx_pool_large_t  *large;
+
+    p = ngx_alloc(size, pool->log);
+    if (p == NULL) {
+        return NULL;
+    }
+
+    n = 0;
+
+    for (large = pool->large; large; large = large->next) {    //不知道为什么这样操作
+        if (large->alloc == NULL) {
+            large->alloc = p;
+            return p;
+        }
+        if (n++ > 3) {
+            break;
+        }
+    }
+    large = ngx_palloc(pool, sizeof(ngx_pool_large_t));  //调用ngx_palloc分配内存，同时在pool后形成新的内存池
+    if (large == NULL) {                                 //链表
+        ngx_free(p);
+        return NULL;
+    }
+
+    large->alloc = p;
+    large->next = pool->large;
+    pool->large = large;
+
+    return p;
+}
+
+ngx_alloc原型：
+void * ngx_alloc(size_t size, ngx_log_t *log)
+{
+    void  *p;
+
+    p = malloc(size);
+    if (p == NULL) {
+        ngx_log_error(NGX_LOG_EMERG, log, ngx_errno,
+                      "malloc(%uz) failed", size);
+    }
+
+    ngx_log_debug2(NGX_LOG_DEBUG_ALLOC, log, 0, "malloc: %p:%uz", p, size);
+
+    return p;
+}
+
+malloc原型：
+extern void *malloc(unsigned int num_bytes);
+
+分配长度为num_bytes字节的内存块
+如果分配成功则返回指向被分配内存的指针(此存储区中的初始值不确定)，否则返回空指针NULL。当内存不再使用时，应使用free()函数将内存块释放。函数返回的指针一定要适当对齐，使其可以用于任何数据对象。
+==========]
+
+***********************************************************************
+
+这里开始是nginx的核心函数
+
+static ngx_int_t ngx_add_inherited_sockets(ngx_cycle_t *cycle)
+{
+    u_char           *p, *v, *inherited;
+    ngx_int_t         s;
+    ngx_listening_t  *ls;
+
+    inherited = (u_char *) getenv(NGINX_VAR);
+
+    if (inherited == NULL) {
+        return NGX_OK;
+    }
+
+    ngx_log_error(NGX_LOG_NOTICE, cycle->log, 0,
+                  "using inherited sockets from \"%s\"", inherited);
+
+    if (ngx_array_init(&cycle->listening, cycle->pool, 10,
+                       sizeof(ngx_listening_t)) != NGX_OK)  //初始话listening这个数组中的所有元素为0,在pool中分配10个大小为
+    {                                                       //ngx_listening_t大小的内存块
+        return NGX_ERROR;
+    }
+
+    for (p = inherited, v = p; *p; p++) {
+        if (*p == ':' || *p == ';') {
+            s = ngx_atoi(v, p - v);
+            if (s == NGX_ERROR) {
+                ngx_log_error(NGX_LOG_EMERG, cycle->log, 0,
+                              "invalid socket number \"%s\" in " NGINX_VAR
+                              " environment variable, ignoring the rest"
+                              " of the variable", v);
+                break;
+            }
+
+            v = p + 1;
+
+            ls = ngx_array_push(&cycle->listening);    //把listening这个数组元素全部存储到listening结构中的pool中
+            if (ls == NULL) {                          //ls则是listening这个数组的末地o址，就是新的数组可用首地址
+                return NGX_ERROR;
+            }
+
+            ngx_memzero(ls, sizeof(ngx_listening_t));  //从ls起分配一个大小和ngx_listening_t的内存，并且清0初始化
+
+            ls->fd = (ngx_socket_t) s;
+        }
+    }
+
+    ngx_inherited = 1;
+
+    return ngx_set_inherited_sockets(cycle);
+}
+
+ngx_int_t
+ ngx_atoi(u_char *line, size_t n)
+ {
+     ngx_int_t  value;
+ 
+     if (n == 0) {
+         return NGX_ERROR;
+     }
+ 
+     for (value = 0; n--; line++) {
+         if (*line < '0' || *line > '9') {
+             return NGX_ERROR;
+         }
+ 
+         value = value * 10 + (*line - '0');
+     }
+ 
+     if (value < 0) {
+         return NGX_ERROR;
+ 
+     } else {
+         return value;
+     }
+ }
+
+[==========
+ngx_array_init原型：
+这里是定义一个动态数组，具体需要研究，使用struct定义动态数组如何使用？
+http://www.cnblogs.com/ifantastic/p/4034948.html 这里有一个类似的定义
+
+typedef struct {   
+    void         *elts; //数组数据区起始位置
+    ngx_uint_t   nelts; //实际存放的元素个数
+    size_t       size;  //每个元素大小  
+    ngx_uint_t   nalloc;  //数组所含空间个数，即实际分配的小空间的个数
+    ngx_pool_t   *pool;  //该数组在此内存池中分配
+} ngx_array_t;
+
+typedef intptr_t        ngx_int_t;
+typedef uintptr_t       ngx_uint_t;
+typedef intptr_t        ngx_flag_t;
+
+因为其所值的原因, C99 标准定义了 intptr_t 和 uintptr_t 类型给一个可以持有一个指针值的整型变量. 但是, 这些类型几乎没在 2.6 内核中使用.
+
+分配一个n倍size大小的动态内存块，初始化array中元素个数为0，每个元素大小为size，在pool中分配n个大小为size的内存块
+
+static ngx_inline ngx_int_t 
+ngx_array_init(ngx_array_t *array, ngx_pool_t *pool, ngx_uint_t n, size_t size)
+{
+    /*
+     * set "array->nelts" before "array->elts", otherwise MSVC thinks
+     * that "array->nelts" may be used without having been initialized
+     */
+
+    array->nelts = 0;
+    array->size = size;
+    array->nalloc = n;
+    array->pool = pool;
+
+    array->elts = ngx_palloc(pool, n * size);
+    if (array->elts == NULL) {
+        return NGX_ERROR;
+    }
+
+    return NGX_OK;
+}
+==========]
+
+
+/* 把整个数组存放到ngx_array_t结构中pool这个内存池中去。
+ * 我猜ngx_array_t这个结构中有ngx_pool_t这个成员的作用应该是把数组和存放整个数组的内存池关联起来
+ × 返回指针类型
+*/
+void *
+ngx_array_push(ngx_array_t *a)
+{
+    void        *elt, *new;
+    size_t       size;
+    ngx_pool_t  *p;
+
+    if (a->nelts == a->nalloc) {  //判断数组是否已经满
+
+        /* the array is full */
+        size = a->size * a->nalloc;   //整个数组的大小
+        p = a->pool;
+                   
+				//数组的末地址等于内存池的可分配内存的开始地址同时内存池中至少能存放一个数组元素
+        if ((u_char *) a->elts + size == p->d.last
+            && p->d.last + a->size <= p->d.end)
+			        {
+		            /*
+             * the array allocation is the last in the pool
+             * and there is space for new allocation
+	             */
+
+            p->d.last += a->size;            //开始分配内存，以每个数组元素的大小递进
+            a->nalloc++;
+
+        } else {                             //如果内存池中无法在分配至少1个数组元素的内存，则重新分配2倍整个数组的
+            /* allocate a new array */
+
+            new = ngx_palloc(p, 2 * size);   //在新的内存池中分配2倍数组大小的空间
+            if (new == NULL) {
+                return NULL;
+            }
+
+            ngx_memcpy(new, a->elts, size);  //#define ngx_memcpy(dst, src, n)   (void) memcpy(dst, src, n)
+            a->elts = new;                   //从src的地址开始拷贝n个字节到dst开始的地址
+            a->nalloc *= 2;                  //把数组拷贝到新的内存池中，数组的空间是个数组的2倍，并且数组的其实地址设置为new
+        }
+    }
+
+    elt = (u_char *) a->elts + a->size * a->nelts;  //elt地址是数组实际末元素的末地址
+    a->nelts++;
+
+    return elt;                                 //返回的应该是新的数组可用地址
+}
+
+ void *
+ ngx_palloc(ngx_pool_t *pool, size_t size)
+ {
+     u_char      *m;
+     ngx_pool_t  *p;
+ 
+     if (size <= pool->max) {
+ 
+         p = pool->current;
+ 
+         do {
+             m = ngx_align_ptr(p->d.last, NGX_ALIGNMENT);
+ 
+             if ((size_t) (p->d.end - m) >= size) {
+                 p->d.last = m + size;
+ 
+                 return m;
+             }
+ 
+             p = p->d.next;
+ 
+         } while (p);
+ 
+         return ngx_palloc_block(pool, size);
+     }
+ 
+     return ngx_palloc_large(pool, size);
+ }
+
+
+ngx_int_t
+ngx_set_inherited_sockets(ngx_cycle_t *cycle)
+{
+    size_t                     len;
+    ngx_uint_t                 i;
+    ngx_listening_t           *ls;                           
+    socklen_t                  olen;
+#if (NGX_HAVE_DEFERRED_ACCEPT || NGX_HAVE_TCP_FASTOPEN)
+    ngx_err_t                  err;
+#endif
+#if (NGX_HAVE_DEFERRED_ACCEPT && defined SO_ACCEPTFILTER)
+    struct accept_filter_arg   af;                                   //  struct  accept_filter_arg {
+#endif                                                               //           char    af_name[16];
+#if (NGX_HAVE_DEFERRED_ACCEPT && defined TCP_DEFER_ACCEPT)           //           char    af_arg[256-16];
+    int                        timeout;                              //    };        
+#endif
+
+    ls = cycle->listening.elts;                                //listening是ngx_array_t结构，elts 数据起始位置
+    for (i = 0; i < cycle->listening.nelts; i++) {             //nelts 是ngx_array_t实际元素个数
+                                                               //ls应当是一个数组，每个元素都是一个ngx_listening_t结构
+        ls[i].sockaddr = ngx_palloc(cycle->pool, NGX_SOCKADDRLEN);
+        if (ls[i].sockaddr == NULL) {
+            return NGX_ERROR;
+        }
+
+        ls[i].socklen = NGX_SOCKADDRLEN;
+        if (getsockname(ls[i].fd, ls[i].sockaddr, &ls[i].socklen) == -1) {
+            ngx_log_error(NGX_LOG_CRIT, cycle->log, ngx_socket_errno,
+                          "getsockname() of the inherited "
+                          "socket #%d failed", ls[i].fd);
+            ls[i].ignore = 1;
+            continue;
+        }
+
+        switch (ls[i].sockaddr->sa_family) {
+
+#if (NGX_HAVE_INET6)
+        case AF_INET6:
+             ls[i].addr_text_max_len = NGX_INET6_ADDRSTRLEN;
+             len = NGX_INET6_ADDRSTRLEN + sizeof("[]:65535") - 1;
+             break;
+#endif
+
+#if (NGX_HAVE_UNIX_DOMAIN)
+        case AF_UNIX:
+             ls[i].addr_text_max_len = NGX_UNIX_ADDRSTRLEN;
+             len = NGX_UNIX_ADDRSTRLEN;
+             break;
+#endif
+
+        case AF_INET:
+             ls[i].addr_text_max_len = NGX_INET_ADDRSTRLEN;
+             len = NGX_INET_ADDRSTRLEN + sizeof(":65535") - 1;
+             break;
+
+        default:
+            ngx_log_error(NGX_LOG_CRIT, cycle->log, ngx_socket_errno,
+                          "the inherited socket #%d has "
+                          "an unsupported protocol family", ls[i].fd);
+            ls[i].ignore = 1;
+            continue;
+        }
+
+        ls[i].addr_text.data = ngx_pnalloc(cycle->pool, len);
+        if (ls[i].addr_text.data == NULL) {
+            return NGX_ERROR;
+        }
+
+        len = ngx_sock_ntop(ls[i].sockaddr, ls[i].socklen,
+                            ls[i].addr_text.data, len, 1);
+        if (len == 0) {
+            return NGX_ERROR;
+        }
+
+        ls[i].addr_text.len = len;
+
+        ls[i].backlog = NGX_LISTEN_BACKLOG;
+
+        olen = sizeof(int);
+
+        if (getsockopt(ls[i].fd, SOL_SOCKET, SO_RCVBUF, (void *) &ls[i].rcvbuf,
+                       &olen)
+            == -1)
+        {
+            ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_socket_errno,
+                          "getsockopt(SO_RCVBUF) %V failed, ignored",
+                          &ls[i].addr_text);
+
+            ls[i].rcvbuf = -1;
+        }
+
+        olen = sizeof(int);
+
+        if (getsockopt(ls[i].fd, SOL_SOCKET, SO_SNDBUF, (void *) &ls[i].sndbuf,
+                       &olen)
+            == -1)
+        {
+            ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_socket_errno,
+                          "getsockopt(SO_SNDBUF) %V failed, ignored",
+                          &ls[i].addr_text);
+
+            ls[i].sndbuf = -1;
+        }
+
+#if 0
+        /* SO_SETFIB is currently a set only option */
+
+#if (NGX_HAVE_SETFIB)
+
+        olen = sizeof(int);
+
+        if (getsockopt(ls[i].fd, SOL_SOCKET, SO_SETFIB,
+                       (void *) &ls[i].setfib, &olen)
+            == -1)
+        {
+            ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_socket_errno,
+                          "getsockopt(SO_SETFIB) %V failed, ignored",
+                          &ls[i].addr_text);
+
+            ls[i].setfib = -1;
+        }
+
+#endif
+#endif
+
+#if (NGX_HAVE_TCP_FASTOPEN)
+
+        olen = sizeof(int);
+
+        if (getsockopt(ls[i].fd, IPPROTO_TCP, TCP_FASTOPEN,
+                       (void *) &ls[i].fastopen, &olen)
+            == -1)
+        {
+            err = ngx_socket_errno;
+
+            if (err != NGX_EOPNOTSUPP && err != NGX_ENOPROTOOPT) {
+                ngx_log_error(NGX_LOG_NOTICE, cycle->log, err,
+                              "getsockopt(TCP_FASTOPEN) %V failed, ignored",
+                              &ls[i].addr_text);
+            }
+
+            ls[i].fastopen = -1;
+        }
+
+#endif
+
+#if (NGX_HAVE_DEFERRED_ACCEPT && defined SO_ACCEPTFILTER)
+
+        ngx_memzero(&af, sizeof(struct accept_filter_arg));
+        olen = sizeof(struct accept_filter_arg);
+
+        if (getsockopt(ls[i].fd, SOL_SOCKET, SO_ACCEPTFILTER, &af, &olen)
+            == -1)
+        {
+            err = ngx_socket_errno;
+
+            if (err == NGX_EINVAL) {
+                continue;
+            }
+
+            ngx_log_error(NGX_LOG_NOTICE, cycle->log, err,
+                          "getsockopt(SO_ACCEPTFILTER) for %V failed, ignored",
+                          &ls[i].addr_text);
+            continue;
+        }
+
+        if (olen < sizeof(struct accept_filter_arg) || af.af_name[0] == '\0') {
+            continue;
+        }
+
+        ls[i].accept_filter = ngx_palloc(cycle->pool, 16);
+        if (ls[i].accept_filter == NULL) {
+            return NGX_ERROR;
+        }
+
+        (void) ngx_cpystrn((u_char *) ls[i].accept_filter,
+                           (u_char *) af.af_name, 16);
+#endif
+
+#if (NGX_HAVE_DEFERRED_ACCEPT && defined TCP_DEFER_ACCEPT)
+
+        timeout = 0;
+        olen = sizeof(int);
+
+        if (getsockopt(ls[i].fd, IPPROTO_TCP, TCP_DEFER_ACCEPT, &timeout, &olen)
+            == -1)
+        {
+            err = ngx_socket_errno;
+
+            if (err == NGX_EOPNOTSUPP) {
+                continue;
+            }
+
+            ngx_log_error(NGX_LOG_NOTICE, cycle->log, err,
+                          "getsockopt(TCP_DEFER_ACCEPT) for %V failed, ignored",
+                          &ls[i].addr_text);
+            continue;
+        }
+
+        if (olen < sizeof(int) || timeout == 0) {
+            continue;
+        }
+
+        ls[i].deferred_accept = 1;
+#endif
+    }
+
+    return NGX_OK;
+}
+
+×××××××××××××××××××××
+将二进制的地址结构转换为文本的形式  
+size_t
+ngx_sock_ntop(struct sockaddr *sa, socklen_t socklen, u_char *text, size_t len,ngx_uint_t port)
+{
+    u_char               *p;
+    struct sockaddr_in   *sin;
+#if (NGX_HAVE_INET6)
+    size_t                n;
+    struct sockaddr_in6  *sin6;
+#endif
+#if (NGX_HAVE_UNIX_DOMAIN)
+    struct sockaddr_un   *saun;
+#endif
+
+    switch (sa->sa_family) {
+
+    case AF_INET:
+
+        sin = (struct sockaddr_in *) sa;
+        p = (u_char *) &sin->sin_addr;
+
+        if (port) {
+            p = ngx_snprintf(text, len, "%ud.%ud.%ud.%ud:%d",
+                             p[0], p[1], p[2], p[3], ntohs(sin->sin_port));
+        } else {
+            p = ngx_snprintf(text, len, "%ud.%ud.%ud.%ud",
+                             p[0], p[1], p[2], p[3]);
+        }
+
+        return (p - text);
+
+#if (NGX_HAVE_INET6)
+
+    case AF_INET6:
+
+        sin6 = (struct sockaddr_in6 *) sa;
+
+        n = 0;
+
+        if (port) {
+            text[n++] = '[';
+        }
+
+        n = ngx_inet6_ntop(sin6->sin6_addr.s6_addr, &text[n], len);
+
+        if (port) {
+            n = ngx_sprintf(&text[1 + n], "]:%d",
+                            ntohs(sin6->sin6_port)) - text;
+        }
+
+        return n;
+#endif
+
+#if (NGX_HAVE_UNIX_DOMAIN)
+
+    case AF_UNIX:
+        saun = (struct sockaddr_un *) sa;
+
+        /* on Linux sockaddr might not include sun_path at all */
+
+        if (socklen <= (socklen_t) offsetof(struct sockaddr_un, sun_path)) {
+            p = ngx_snprintf(text, len, "unix:%Z");
+
+        } else {
+            p = ngx_snprintf(text, len, "unix:%s%Z", saun->sun_path);
+        }
+
+        /* we do not include trailing zero in address length */
+
+        return (p - text - 1);
+
+#endif
+
+    default:
+        return 0;
+    }
+}
+
+×××××××××××××××××××××
+
+
+
+××××××××××××××××××××××
+getsockname原型：
+int getsockname(int sockfd, struct sockaddr *localaddr, socklen_t *addrlen);
+
+getsockname函数返回与套接口关联的本地协议地址。
+
+使用场合：
+在不调用bind的TCP客户，当connect成功返回后，getsockname返回分配给此连接的本地IP地址和本地端口号；
+在以端口号为0调用bind后，使用getsockname返回内核分配的本地端口号；
+getsockname可用来获取某套接口的地址族；
+在捆绑了通配IP地址的TCP服务器上，当连接建立后，可以使用getsockname获得分配给此连接的本地IP地址；
+当一个服务器调用exec启动后，他获得客户身份的唯一途径是调用getpeername函数。
+
+
+getsockopt原型：
+int getsockopt(int sock, int level, int optname, void *optval, socklen_t *optlen);
+
+功能描述： 
+获取或者设置与某个套接字关联的选 项。选项可能存在于多层协议中，它们总会出现在最上面的套接字层。当操作套接字选项时，选项位于的层和选项的名称必须给出。为了操作套接字层的选项，应该 将层的值指定为SOL_SOCKET。为了操作其它层的选项，控制选项的合适协议号必须给出。例如，为了表示一个选项由TCP协议解析，层应该设定为协议 号TCP。
+
+参数：   
+sock：将要被设置或者获取选项的套接字。
+level：选项所在的协议层。
+optname：需要访问的选项名。
+optval：对于getsockopt()，指向返回选项值的缓冲。
+optlen：对于getsockopt()，作为入口参数时，选项值的最大长度。作为出口参数时，选项值的实际长度。
+××××××××××××××××××××××
+
+
+
+
+
+
+
+###### 核心结构 ######
+struct ngx_listening_s {
+    ngx_socket_t        fd;     //typedef int ngx_socket_t
+
+    struct sockaddr    *sockaddr;
+    socklen_t           socklen;    /* size of sockaddr */
+    size_t              addr_text_max_len;
+    ngx_str_t           addr_text;
+
+    int                 type;
+
+    int                 backlog;
+    int                 rcvbuf;
+    int                 sndbuf;
+#if (NGX_HAVE_KEEPALIVE_TUNABLE)
+    int                 keepidle;
+    int                 keepintvl;
+    int                 keepcnt;
+#endif
+
+    /* handler of accepted connection */
+    ngx_connection_handler_pt   handler;
+
+    void               *servers;  /* array of ngx_http_in_addr_t, for example */
+
+    ngx_log_t           log;
+    ngx_log_t          *logp;
+
+    size_t              pool_size;
+    /* should be here because of the AcceptEx() preread */
+    size_t              post_accept_buffer_size;
+    /* should be here because of the deferred accept */
+    ngx_msec_t          post_accept_timeout;
+
+    ngx_listening_t    *previous;
+    ngx_connection_t   *connection;
+
+    unsigned            open:1;
+    unsigned            remain:1;
+    unsigned            ignore:1;
+
+    unsigned            bound:1;       /* already bound */
+    unsigned            inherited:1;   /* inherited from previous process */
+    unsigned            nonblocking_accept:1;
+    unsigned            listen:1;
+    unsigned            nonblocking:1;
+    unsigned            shared:1;    /* shared between threads or processes */
+    unsigned            addr_ntop:1;
+
+#if (NGX_HAVE_INET6 && defined IPV6_V6ONLY)
+    unsigned            ipv6only:1;
+#endif
+    unsigned            keepalive:2;
+
+#if (NGX_HAVE_DEFERRED_ACCEPT)
+    unsigned            deferred_accept:1;
+    unsigned            delete_deferred:1;
+    unsigned            add_deferred:1;
+#ifdef SO_ACCEPTFILTER
+    char               *accept_filter;
+#endif
+#endif
+#if (NGX_HAVE_SETFIB)
+    int                 setfib;
+#endif
+
+};
+
+###### 核心结构 ######
+struct ngx_connection_s {
+    void               *data;
+    ngx_event_t        *read;
+    ngx_event_t        *write;
+
+    ngx_socket_t        fd;    //typedef int ngx_socket_t
+
+    ngx_recv_pt         recv;  //typedef ssize_t (*ngx_recv_pt)(ngx_connection_t *c, u_char *buf, size_t size);
+    ngx_send_pt         send; //typedef ssize_t (*ngx_send_pt)(ngx_connection_t *c, u_char *buf, size_t size);
+    ngx_recv_chain_pt   recv_chain; //typedef ssize_t (*ngx_recv_chain_pt)(ngx_connection_t *c, ngx_chain_t *in);
+    ngx_send_chain_pt   send_chain; //typedef ssize_t (*ngx_send_pt)(ngx_connection_t *c, u_char *buf, size_t size);
+
+    ngx_listening_t    *listening;
+    off_t               sent;
+    ngx_log_t          *log;
+    ngx_pool_t         *pool;
+    struct sockaddr    *sockaddr;
+    socklen_t           socklen;
+    ngx_str_t           addr_text;
+
+#if (NGX_SSL)
+    ngx_ssl_connection_t  *ssl;
+#endif
+
+    struct sockaddr    *local_sockaddr;
+    ngx_buf_t          *buffer;
+    ngx_queue_t         queue;
+    ngx_atomic_uint_t   number;
+    ngx_uint_t          requests;
+    unsigned            buffered:8;
+    unsigned            log_error:3;     /* ngx_connection_log_error_e */
+
+    unsigned            unexpected_eof:1;
+    unsigned            timedout:1;
+    unsigned            error:1;
+    unsigned            destroyed:1;
+
+    unsigned            idle:1;
+    unsigned            reusable:1;
+    unsigned            close:1;
+
+    unsigned            sendfile:1;
+    unsigned            sndlowat:1;
+    unsigned            tcp_nodelay:2;   /* ngx_connection_tcp_nodelay_e */
+    unsigned            tcp_nopush:2;    /* ngx_connection_tcp_nopush_e */
+
+#if (NGX_HAVE_IOCP)
+    unsigned            accept_context_updated:1;
+#endif
+
+#if (NGX_HAVE_AIO_SENDFILE)
+    unsigned            aio_sendfile:1;
+    ngx_buf_t          *busy_sendfile;
+#endif
+
+#if (NGX_THREADS)
+    ngx_atomic_t        lock;
+#endif
+};
+
+struct ngx_buf_s {
+    u_char          *pos;
+    u_char          *last;
+    off_t            file_pos;
+    off_t            file_last;
+
+    u_char          *start;         /* start of buffer */
+    u_char          *end;           /* end of buffer */
+    ngx_buf_tag_t    tag;        //typedef void *            ngx_buf_tag_t;
+    ngx_file_t      *file;
+    ngx_buf_t       *shadow;
+
+
+    /* the buf's content could be changed */
+    unsigned         temporary:1;
+
+    /*
+     * the buf's content is in a memory cache or in a read only memory
+     * and must not be changed
+     */
+    unsigned         memory:1;
+
+    /* the buf's content is mmap()ed and must not be changed */
+    unsigned         mmap:1;
+
+    unsigned         recycled:1;
+    unsigned         in_file:1;
+    unsigned         flush:1;
+    unsigned         sync:1;
+    unsigned         last_buf:1;
+    unsigned         last_in_chain:1;
+
+    unsigned         last_shadow:1;
+    unsigned         temp_file:1;
+
+    /* STUB */ int   num;
+};
+
+
+struct ngx_file_s {
+     ngx_fd_t                   fd;            //typedef int ngx_fd_t;
+     ngx_str_t                  name;
+     ngx_file_info_t            info;          //typedef struct stat  ngx_file_info_t;
+ 
+     off_t                      offset;
+     off_t                      sys_offset;
+ 
+     ngx_log_t                 *log;
+ 
+ #if (NGX_HAVE_FILE_AIO)
+     ngx_event_aio_t           *aio;
+ #endif
+ 
+     unsigned                   valid_info:1;
+     unsigned                   directio:1;
+ };
+
+
+struct ngx_event_aio_s {
+     void                      *data;
+     ngx_event_handler_pt       handler;  //typedef void (*ngx_event_handler_pt)(ngx_event_t *ev);
+     ngx_file_t                *file;
+ 
+     ngx_fd_t                   fd;
+ 
+ #if (NGX_HAVE_EVENTFD)
+     int64_t                    res;
+ #if (NGX_TEST_BUILD_EPOLL)
+     ngx_err_t                  err;
+     size_t                     nbytes;
+ #endif
+ #else
+     ngx_err_t                  err;
+     size_t                     nbytes;
+ #endif
+ 
+ #if (NGX_HAVE_AIO_SENDFILE)
+     off_t                      last_offset;
+ #endif
+ 
+     ngx_aiocb_t                aiocb;  //typedef struct iocb  ngx_aiocb_t; 异步非阻塞IO
+     ngx_event_t                event;
+ };
+
+这里有个iocb结构，是一个异步io调用，讨论见最下边的描述
+
+typedef struct {
+     size_t      len;
+     u_char     *data;
+ } ngx_str_t;
+
+###### 核心结构 ######
+struct ngx_event_s {
+    void            *data;
+    unsigned         write:1;
+    unsigned         accept:1;
+
+    /* used to detect the stale events in kqueue, rtsig, and epoll */
+    unsigned         instance:1;
+
+    /*
+     * the event was passed or would be passed to a kernel;
+     * in aio mode - operation was posted.  //aio 异步IO
+     */
+    unsigned         active:1;
+    unsigned         disabled:1;
+
+    /* the ready event; in aio mode 0 means that no operation can be posted */
+    unsigned         ready:1;
+    unsigned         oneshot:1;
+
+    /* aio operation is complete */
+    unsigned         complete:1;
+    unsigned         eof:1;
+    unsigned         error:1;
+    unsigned         timedout:1;
+    unsigned         timer_set:1;
+    unsigned         delayed:1;
+    unsigned         read_discarded:1;
+    unsigned         unexpected_eof:1;
+    unsigned         deferred_accept:1;
+
+    /* the pending eof reported by kqueue or in aio chain operation */
+    unsigned         pending_eof:1;
+
+#if !(NGX_THREADS)
+    unsigned         posted_ready:1;
+#endif
+
+#if (NGX_WIN32)
+    /* setsockopt(SO_UPDATE_ACCEPT_CONTEXT) was successful */
+    unsigned         accept_context_updated:1;
+#endif
+
+#if (NGX_HAVE_KQUEUE)
+    unsigned         kq_vnode:1;
+
+    /* the pending errno reported by kqueue */
+    int              kq_errno;
+#endif
+
+    /*
+     * kqueue only:
+     *   accept:     number of sockets that wait to be accepted
+     *   read:       bytes to read when event is ready
+     *               or lowat when event is set with NGX_LOWAT_EVENT flag
+     *   write:      available space in buffer when event is ready
+     *               or lowat when event is set with NGX_LOWAT_EVENT flag
+     *
+     * iocp: TODO
+     *
+     * otherwise:
+     *   accept:     1 if accept many, 0 otherwise
+     */
+
+#if (NGX_HAVE_KQUEUE) || (NGX_HAVE_IOCP)
+    int              available;
+#else
+    unsigned         available:1;
+#endif
+
+    ngx_event_handler_pt  handler;   //typedef void (*ngx_event_handler_pt)(ngx_event_t *ev);
+
+
+#if (NGX_HAVE_AIO)
+
+#if (NGX_HAVE_IOCP)
+    ngx_event_ovlp_t ovlp;
+#else
+    struct aiocb     aiocb;
+#endif
+
+#endif
+
+    ngx_uint_t       index;
+    ngx_log_t       *log;
+    ngx_rbtree_node_t   timer;
+    unsigned         closed:1;
+
+    /* to test on worker exit */
+    unsigned         channel:1;
+    unsigned         resolver:1;
+
+#if (NGX_THREADS)
+
+    unsigned         locked:1;
+    unsigned         posted_ready:1;
+    unsigned         posted_timedout:1;
+    unsigned         posted_eof:1;
+
+#if (NGX_HAVE_KQUEUE)
+    /* the pending errno reported by kqueue */
+    int              posted_errno;
+#endif
+
+#if (NGX_HAVE_KQUEUE) || (NGX_HAVE_IOCP)
+    int              posted_available;
+#else
+    unsigned         posted_available:1;
+#endif
+
+    ngx_atomic_t    *lock;
+    ngx_atomic_t    *own_lock;
+
+#endif
+
+    /* the links of the posted queue */
+    ngx_event_t     *next;
+    ngx_event_t    **prev;
+
+
+#if 0
+
+    /* the threads support */
+
+    /*
+     * the event thread context, we store it here
+     * if $(CC) does not understand __thread declaration
+     * and pthread_getspecific() is too costly
+     */
+
+    void            *thr_ctx;
+
+#if (NGX_EVENT_T_PADDING)
+
+    /* event should not cross cache line in SMP */
+
+    uint32_t         padding[NGX_EVENT_T_PADDING];
+#endif
+#endif
+};
+
+
+typedef struct {
+    WSAOVERLAPPED    ovlp;
+    ngx_event_t     *event;
+    int              error;
+} ngx_event_ovlp_t;
+
+
+struct ngx_rbtree_node_s {
+    ngx_rbtree_key_t       key;
+    ngx_rbtree_node_t     *left;
+    ngx_rbtree_node_t     *right;
+    ngx_rbtree_node_t     *parent;
+    u_char                 color;
+    u_char                 data;
+};
+
+typedef long                        ngx_atomic_int_t;
+typedef AO_t                        ngx_atomic_uint_t;
+typedef volatile ngx_atomic_uint_t  ngx_atomic_t;
+
+
+
+**********************************************************************************
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+############## iocb 相关 ###############################
+转载自：
+1）http://www.cnblogs.com/aLittleBitCool/archive/2011/10/18/2216646.html
+2）http://rdc.taobao.com/blog/cs/?p=1583
+ 
+更多的描述：
+http://lse.sourceforge.net/io/aio.html
+http://www.ibm.com/developerworks/cn/linux/l-async/
+http://www.iteye.com/topic/868702
+http://blog.csdn.net/historyasamirror/article/details/5778378
+
+另外在文中描述的同步阻塞，同步非阻塞，异步阻塞，异步非阻塞，是针对不同对象的说法
+
+同步阻塞，用户进程发起read操作时候，会处于等待，直到内核调用IO完成，返回数据给用户进程，而内核打开IO的方式是阻塞方式，估计这里涉及到锁的问题
+同步非阻塞，用户经常发起read操作，会得到一个read错误的返回，用户进程干其他的事情，而内核打开IO用的是非阻塞方式，因为是非阻塞方式，所以读IO的操作不会马上有结果，因此，才有前边的返回read错误的情况，所以需要用户进程不断调用直到得到回复，非阻塞估计会涉及到队列操作
+异步阻塞，用户进程调用一个select/epoll这个系统调用，select会去管理多个read请求，而内核打开IO用的是非阻塞，select会检测自己的这些请求，如果有返回，会通知用户进程，此时用户进程会再次read操作，从而完成，整个过程中，其实用户进程是一直在等待。
+异步非阻塞，用户进程发起请求，不会等待返回，直接去干其他的事情，而内核采用非阻塞方式打开IO，直到操作完成，发给用户进程一个信号，已经完成。
+
+这里内核的操作包括接受到请求，打开IO，把结果从内核内存拷贝到用户内存
+
+
+在Direct IO模式下，异步是非常有必要的（因为绕过了pagecache，直接和磁盘交互）。
+linux Native AIO正是基于这种场景设计的，具体的介绍见：KernelAsynchronousI/O (AIO) Support for Linux。
+ 
+
+阻塞模式下的IO过程：
+
+int fd = open(const char *pathname, int flags, mode_t mode);
+
+ssize_t pread(int fd, void *buf, size_t count, off_t offset);
+ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset);
+int close(int fd);
+ 
+
+异步IO的思想:
+
+应用程序不能阻塞在昂贵的系统调用上让CPU睡大觉，而是将IO操作抽象成一个个的任务单元提交给内核，内核完成IO任务后将结果放在应用程序可以取到的地方。这样在底层做I/O的这段时间内，CPU可以去干其他的计算任务。但异步的IO任务批量的提交和完成，必须有自身可描述的结构，最重要的两个就是iocb和io_event。
+
+iocb
+
+iocb是提交IO任务时用到的，可以完整地描述一个IO请求：
+
+struct iocb {
+        void     *data;      /*data是留给用来自定义的指针：可以设置为IO完成后的callback函数*/
+        unsigned key;   /*r use in identifying io requests */
+        short           aio_lio_opcode;   /*操作的类型：IO_CMD_PWRITE | IO_CMD_PREAD*/
+        short           aio_reqprio;
+        int             aio_fildes;  /*要操作的文件：fd*/
+        union {
+                struct io_iocb_common           c;
+                struct io_iocb_vector           v;
+                struct io_iocb_poll             poll;
+                struct io_iocb_sockaddr saddr;
+        } u;
+};
+ 
+
+struct io_iocb_common {
+        void            *buf;                           /*IO请求的mem buffer*/
+        unsigned long   nbytes;               /*大小*/
+        long long       offset;                    /*偏移*/
+        unsigned        flags;
+        unsigned        resfd;
+};
+ 
+
+io_event
+
+io_event用来描述返回结果：
+
+struct io_event {
+        void *data;
+        struct iocb *obj;   /*obj就是之前提交IO任务时的iocb；*/
+        unsigned long res;  /*任务完成的状态*/
+        unsigned long res2; /*任务完成的状态*/
+};
+ 
+
+异步IO过程
+1.建立IO任务
+
+int io_setup (int maxevents, io_context_t *ctxp);
+创建一个异步IO上下文（最多支持”maxevents”个请求）
+ctxp指向一个已经存在的AIO上下文，在调用这个函数之前要将*ctxp内容清零。
+当创建成功后，*ctxp将会使用填充
+ 
+
+creates  an asynchronous I/O context capable of receiving at least nr_events.
+ctxp must not point to an AIO context that already exists, and must be initialized to 0 prior to the call.  On successful creation of the AIO context, *ctxp is filled  in  with the resulting handle.
+ 
+
+2.提交IO任务
+long io_submit (aio_context_t ctx_id, long nr, struct iocb **iocbpp);
+在AIO上下文ctx_id中加入”nr”个IO请求块，iocbpp是一个AIO控制块数组，将会被提交到ctx_id
+queues  nr  I/O  request  blocks  for processing in the AIO context ctx_id.  iocbpp should be an array of nr AIO control blocks, which will be submitted to context ctx_id.
+提交任务之前必须先填充iocb结构体，libaio提供的包装函数说明了需要完成的工作：
+void io_prep_pread(struct iocb *iocb, int fd, void *buf, size_t count, long long offset)
+{
+        memset(iocb, 0, sizeof(*iocb));
+        iocb->aio_fildes = fd;
+        iocb->aio_lio_opcode = IO_CMD_PREAD;
+        iocb->aio_reqprio = 0;
+        iocb->u.c.buf = buf;
+        iocb->u.c.nbytes = count;
+        iocb->u.c.offset = offset;
+}
+void io_prep_pwrite(struct iocb *iocb, int fd, void *buf, size_t count, long long offset)
+{
+        memset(iocb, 0, sizeof(*iocb));
+        iocb->aio_fildes = fd;
+        iocb->aio_lio_opcode = IO_CMD_PWRITE;
+        iocb->aio_reqprio = 0;
+        iocb->u.c.buf = buf;
+        iocb->u.c.nbytes = count;
+        iocb->u.c.offset = offset;
+}
+这里注意读写的buf都必须是按扇区对齐的，可以用posix_memalign来分配。
+ 
+
+3.获取完成的IO
+long io_getevents (aio_context_t ctx_id, long min_nr, long nr, struct io_event *events, struct timespec *timeout);
+尝试从ctx_id指定的AIO上下文指定的完成队列中，读取最少min_nr个事件，最多nr个事件；timeout==NULL表示等待至少min_nr个事件，
+attempts to read at least min_nr events and up to nr events from the completion queue of the AIO context specified by ctx_id.  timeout specifies the amount of time to wait for events, where a NULL timeout waits until at least min_nr events  have  been seen.  Note that timeout is relative and will be updated if not NULL and the operation blocks.
+ 
+
+4.销毁IO任务
+int io_destroy (io_context_t ctx);
+从I/O上下文的list中移除异步IO上下文，并销毁
+io_destroy()  removes  the asynchronous I/O context from the list of I/O contexts and then destroys it.  io_destroy() can also cancel
+any outstanding asynchronous I/O actions on ctx and block on completion.
+ 
+
+实例：
+
+#include <stdio.h>
+#include <fcntl.h>
+#include <string.h>
+#include <stdlib.h>
+#include <libaio.h>
+#include <errno.h>
+#include <unistd.h>
+
+int main(void)
+{
+  int fd;
+  char* content = “hello world”;
+  const char* file = “hello.txt”;
+
+  io_context_t ctx;
+  int io_event_cnt = 10;
+  memset(&ctx, 0, sizeof(ctx));
+
+  struct iocb io;
+  struct iocb* p = &io;
+
+  struct timespec timeout;
+
+  struct io_event event;
+
+  if (0 != io_setup(io_event_cnt, &ctx))
+  {
+    printf(“io_setup error”);
+    return -1;
+  }
+
+  if ((fd = open(file, O_CREAT|O_WRONLY, 0644)) < 0)
+  {
+    printf(“open error”);
+    io_destroy(ctx);
+    return -1;
+  }
+
+  io_prep_pwrite(&io, fd, content, strlen(content), 0);
+
+  if (1 != io_submit(ctx, 1, &p))
+  {
+    io_destroy(ctx);
+    printf(“io_submit error\n”);
+    return -1;
+  }
+
+  while(1)
+  {
+    timeout.tv_sec = 0;
+    timeout.tv_nsec = 500000000;
+    if (1 == io_getevents(ctx, 0, 1, &event, &timeout))
+    {
+      close(fd);
+      break;
+    }
+    printf(“havent’t done\n”);
+    sleep(1);
+  }
+
+  io_destroy(ctx);
+  return 0;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

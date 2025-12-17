@@ -1,0 +1,17 @@
+[Unit]
+Description=Kubernetes Scheduler
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/kube-scheduler \
+	--kubeconfig=/home/k8s-admin/apps/certificates/kubernetes/kube-scheduler.conf \
+	--leader-elect=true \
+	--v=4
+
+Restart=on-failure
+RestartSec=5
+User=k8s-admin
+Group=k8s-admin
+
+[Install]
+WantedBy=multi-user.target

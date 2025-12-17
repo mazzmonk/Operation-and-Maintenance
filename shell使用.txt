@@ -1,0 +1,145 @@
+1. 变量使用的时候,一定要使用
+
+"${var}"
+
+的方式," 是为了在某些时候,变量中包含空格,引号之类的符号时候,作为其他命令的参数时被分开解释,比如
+
+var=a b
+mkdir "${var}" 
+
+如果没有",则命令会变成mkdir a b(建立的2个目录),而上述的操作是要mkdir "a b"(建立一个名字为a b的目录)
+
+
+2. 删除带“-”的文件名的方法
+大部分是由于误操作的原因,产生了一些 特殊字符的文件 如 -foo
+rm --help
+用法: rm [选项]... 目录...
+Remove (unlink) the FILE(s).
+  -d, --directory       unlink FILE, even if it is a non-empty directory
+                          (super-user only; this works only if your system
+                           supports `unlink' for nonempty directories)
+  -f, --force           ignore nonexistent files, never prompt
+  -i, --interactive     prompt before any removal
+      --no-preserve-root do not treat `/' specially (the default)
+      --preserve-root   fail to operate recursively on `/'
+  -r, -R, --recursive   remove the contents of directories recursively
+  -v, --verbose         explain what is being done
+      --help     显示此帮助信息并离开
+      --version  显示版本信息并离开
+要删除第一个字符为‘-’的文件 (例如‘-foo’),请使用以下其中一种方法:
+
+  rm -- -foo
+  rm ./-foo
+请注意,如果使用 rm 来删除文件,通常仍可以将该文件恢复原状.如果想保证
+该文件的内容无法还原,请考虑使用 shred.
+
+上述参数也适用于mv, ls, cp等命令 
+
+3. 删除包含其它特殊字符的文件
+
+对于含有其它特殊字符的文件名,如<>!*等,可用
+“\”转义符或“”双引号引起控制
+如名为“>”或“*”
+rm \>
+rm “*”
+
+4. 删除系统打不出的乱码文件名
+
+系统中有一个文件名全是乱码的文件,根本无从下手进行删除(系统打不出乱码符号),我们可以尝试以下的歪招
+例如这个乱码的文件是luanma.txt,当然该例假设luanma便是各种奇形怪状的乱码,呵呵～～我们可以用rm *搞定
+#cd xxx
+进入乱码文件所在的目录
+#rm *
+这个命令表示删除该目录的所有文件,当然最终目的不是删除所有文件啦～～,输入命令回车后系统在删除每个文件都提示是否删除这个文件,其他不相关的文件全部都输入“n”回车跳过不删除,直到我们的目标出现
+rm: remove regular empty file `luanma.txt'?
+哈哈,这是我们果断地输入“y”,回车,将这个可恨的文件干掉！
+
+不过这个方法要视系统而定,要谨慎使用,上面例子使用的是 redhat,有些 linux 的发行版本 rm 命令没有提示功能,输入 rm * 就直接把所有文件干掉了,所以用之前先新建一个目录测试一下以防万一.
+
+5. test、[ 和 [[ 之间的区别
+test -f "/etc/passwd" && echo "File exists"
+[ -f "/etc/passwd" ] && echo "File exists"
+
+在这两种情况下,表达式都会检查文件是否 /etc/passwd 存在以及是否为常规文件.
+
+与 [ 和 test 不同,[[ 不是命令,而是 Shell 关键字.这种区别允许 [[ 引入特殊的解析规则,使其更易于使用且更不容易出错.
+
+主要特点 [[:
+. 无需大量引用: [[ 不会对其参数执行单词拆分或路径名扩展.这意味着包含空格或特殊字符的变量不需要像在 [ 或 test 中那样使用引号.
+. 增强运算符: [[ 支持附加运算符,例如 && 用于 || 逻辑 AND 和 OR 的运算符、< 和 > 字符串比较的运算符, 以及 =~ 用于正则表达式匹配的运算符.
+. 模式匹配: [[ 支持模式匹配,允许您直接在表达式中使用通配符,如 ``, ? ,和 [].
+. 错误处理: 在解析阶段被捕获 [[ 构造中的语法错误,这可以防止使用无效表达式时出现意外行为.
+
+以下是使用该[[语法的一些示例:
+
+# String comparison with [[
+if [[ "$a" > "$b" ]]; then
+  echo "$a comes after $b"
+fi
+
+# Regular expression matching with [[
+if [[ "$input" =~ ^[a-zA-Z]+$ ]]; then
+  echo "Input contains only letters"
+fi
+
+# Logical operations with [[
+if [[ -f "$file" && -r "$file" ]]; then
+  echo "File exists and is readable"
+fi
+
+这些功能使 [[ 成为 Bash 脚本中可读性和功能的首选,尤其是在处理复杂的条件表达式时.
+
+考虑以下两个执行相同逻辑但使用不同构造的代码片段:
+使用 [:
+
+if [ -d "$dir" ] && [ -n "$(grep "search_string" "$file")" ]; then
+  echo "Directory exists and file contains the search string"
+fi
+
+使用 [[:
+if [[ -d $dir && $(grep "search_string" "$file") ]]; then
+  echo "Directory exists and file contains the search string"
+fi
+
+[[ 版本更易于阅读,不需要在变量周围加引号,并且为组合条件提供了更直观的语法.
+
+可移植性: test 和 [ 更易于移植,因为它们符合 POSIX 标准.[[ 是特定于 shell 的(Bash、Zsh、KornShell).
+语法: [[ 由于其先进的语法和针对单词拆分和通配问题的内置安全性,因此更容易处理复杂的条件句.
+错误处理: [[ 提供更好的错误检测,使需要复杂条件处理的脚本更加安全.
+
+6. 特殊变量
+Bash 包含一组特殊变量,它们提供有关脚本、环境和正在执行的命令的宝贵信息.这些变量对于处理参数、跟踪进程和管理命令执行至关重要.
+
+$-: 显示当前 shell 的选项设置.这对于调试非常有用,因为它可以让你查看哪些 shell 选项处于启用状态.
+
+echo "Current shell options: $-"
+$!: 存储最后执行的后台命令的进程 ID.这对于监控或管理脚本中的后台任务非常有用.
+
+sleep 10 &
+echo "Background process PID: $!"
+$$: 包含当前 Shell 的进程 ID (PID).当您需要生成唯一标识符或在更复杂的脚本中跟踪 Shell 的执行情况时,这会很有帮助.
+
+echo "Current shell PID: $$"
+$?: 返回最后执行命令的退出状态0.状态为表示成功,非零值表示错误.这通常用于检查命令是否成功运行.
+
+ls /nonexistent_directory
+echo "Exit status: $?"
+$1to$9: 这些变量称为位置参数,用于存储传递给脚本的前九个命令行参数.$1例如, 保存第一个参数,$2保存第二个参数,依此类推.它们允许您直接访问特定的参数,从而轻松处理输入数据,而无需手动解析整个参数列表.
+
+echo "First argument: $1"
+echo "Second argument: $2"
+$@: 与 类似,但有一个关键区别——每个参数在数组$*中都被视为单独的单词.这在处理可能包含空格或特殊字符的参数时非常重要.
+
+for arg in "$@"; do
+  echo "Argument: $arg"
+done
+$*: 将所有传递给脚本的命令行参数以单个字符串的形式包含.当你想将所有参数放在一起处理时,可以使用此选项.
+
+echo "All arguments as a single string: $*"
+$#: 保存传递给脚本或函数的位置参数的数量.这对于检查是否提供了正确数量的参数特别有用.
+
+echo "Number of arguments: $#"
+$0: 存储当前正在执行的脚本的名称.当您需要在脚本代码中引用其名称时(例如在使用信息或日志中),这很有用.
+
+echo "Script name: $0"
+这些特殊变量是有效管理和控制脚本的重要工具.通过理解它们,你将能够编写更灵活、更顺畅地处理各种情况的 Bash 脚本.

@@ -1,0 +1,80 @@
+导出(Export)
+Export命令用于持久化容器（不是镜像）。所以，我们就需要通过以下方法得到容器ID：
+sudo docker ps -a
+接着执行导出：
+sudo docker export <CONTAINER ID> > /home/export.tar
+
+可以使用 docker import 来导入一个容器快照到本地镜像库
+现在开始导入刚刚导出的容器：
+# 导入export.tar文件
+cat /home/export.tar | sudo docker import - busybox-1-export:latest
+
+
+提交容器为镜像
+$ docker commit 3a09b2588478 mynewimage   //mynewimage是镜像名称
+
+保存(Save)
+Save命令用于持久化镜像（不是容器）。所以，我们就需要通过以下方法得到镜像名称：
+sudo docker images	
+接着执行保存：
+sudo docker save busybox-1 > /home/save.tar
+
+使用类似的步骤导入镜像：
+# 导入save.tar文件
+docker load < /home/save.tar
+
+使也可以用 docker load 来导入镜像存储文件到本地镜像库
+
+这两者的区别在于容器快照文件将丢弃所有的历史记录和元数据信息（即仅保存容器当时的快照状态），而镜像存储文件将保存完整记录，体积也要大。此外，从容器快照文件导入时可以重新指定标签等元数据信息。
+
+导出后再导入(exported-imported)的镜像会丢失所有的历史，而保存后再加载（saveed-loaded）的镜像没有丢失历史和层(layer)。这意味着使用导出后再导入的方式，你将无法回滚到之前的层(layer)，同时，使用保存后再加载的方式持久化整个镜像，就可以做到层回滚（可以执行docker tag <LAYER ID> <IMAGE NAME>来回滚之前的层）。
+
+
+# 检查是否导入成功，就是启动一个新容器，检查里面是否存在/home/test目录（是存在的）
+sudo docker run busybox-1-export [ -d /home/test ] && echo 'Directory found' || echo 'Directory not found'
+
+
+注意：
+1.使用export/import打包和导入的镜像，不会保存类似启动时候的命令和脚本等等信息，这个比较合适使用Dockfile文件，并且在最后有ENTRYPOINT内容
+2.如果save/load导入的不能有tag等等，同时原有镜像中的启动命令等等会保存。
+3.如果上述的命令窜着用，就会出现，启动时候找不到/bin/bash,/bin/sh等等提示信息
+
+################################################################################################################################################
+
+
+# 查看镜像
+sudo docker images
+
+# 检查是否导入成功，就是启动一个新容器，检查里面是否存在/home/test目录（是存在的）
+sudo docker run busybox-1 [ -d /home/test ] && echo 'Directory found' || echo 'Directory not found'
+那，它们之间到底存在什么不同呢？我们发现导出后的版本会比原来的版本稍微小一些。那是因为导出后，会丢失历史和元数据。执行下面的命令就知道了：
+
+# 显示镜像的所有层(layer)
+sudo docker images --tree
+执行命令，显示下面的内容。正你看到的，导出后再导入(exported-imported)的镜像会丢失所有的历史，而保存后再加载（saveed-loaded）的镜像没有丢失历史和层(layer)。这意味着使用导出后再导入的方式，你将无法回滚到之前的层(layer)，同时，使用保存后再加载的方式持久化整个镜像，就可以做到层回滚（可以执行docker tag <LAYER ID> <IMAGE NAME>来回滚之前的层）。
+
+    vagrant@ubuntu-13:~$ sudo docker images --tree
+    ├─f502877df6a1 Virtual Size: 2.489 MB Tags: busybox-1-export:latest
+    └─511136ea3c5a Virtual Size: 0 B
+      └─bf747efa0e2f Virtual Size: 0 B
+        └─48e5f45168b9 Virtual Size: 2.489 MB
+          └─769b9341d937 Virtual Size: 2.489 MB
+            └─227516d93162 Virtual Size: 2.489 MB Tags: busybox-1:latest
+
+***********************************************************************************************************************
+
+例子：
+从正运行的容器导出到镜像
+docker export 0aa5de804331 > centos6.6_apache2.4.4.tar     //0aa5de804331 容器ID
+
+从压缩文件中导入到镜像
+cat centos6.6_apache2.4.4.tar |docker import - centos6.6:apache2.4.4
+
+如下是导入后的镜像
+REPOSITORY          TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
+centos6.6           apache2.4.4         4d71baaa7731        12 minutes ago      1.998 GB
+
+然后从上述镜像运行成容器
+docker run -dit centos6.6:apache2.4.4 /bin/bash
+
+如此可以做迁移或者复制到新的容器

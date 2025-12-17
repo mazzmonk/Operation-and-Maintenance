@@ -1,0 +1,92 @@
+前置的pcre及libmcrypt安装
+tar zxvf pcre-8.32.tar.gz
+cd pcre-8.32 
+./configure && make && make install 
+
+tar zxvf libmcrypt-2.5.7.tar.gz 
+cd libmcrypt-2.5.7 && ./configure --prefix=/usr && make && make install
+
+google_perftools工具的安装
+google_perftools需要libunwind的支持，根据文档，安装0.99版本。
+如下:
+
+tar zxvf libunwind-0.99-beta.tar.gz
+cd libunwind-0.99-beta 
+./configure --prefix=/usr
+make
+make install
+
+unzip gperftools-master.zip
+cd gperftools-master
+./autogen.sh
+./configure --prefix=/usr --enable-frame-pointers
+make
+make install
+
+
+yum -y install gd-devel openssl-devel libxml2-devel libxslt-devel
+
+apt-get install libgd-dev
+
+
+这里使用的nginx是1.99版本，1.99可以负载tcp协议
+
+./configure --prefix=$HOME/apps/nginx --with-select_module --with-poll_module  --with-threads --with-file-aio --with-http_ssl_module  --with-http_v2_module  --with-http_realip_module  --with-http_addition_module  --with-http_xslt_module  --with-http_image_filter_module  --with-http_sub_module   --with-http_dav_module       --with-http_flv_module   --with-http_mp4_module   --with-http_gunzip_module  --with-http_gzip_static_module  --with-http_auth_request_module  --with-http_random_index_module  --with-http_secure_link_module   --with-http_degradation_module   --with-http_slice_module           --with-http_stub_status_module   --with-mail   --with-mail_ssl_module   --with-stream   --with-stream_ssl_module    --with-google_perftools_module   --with-pcre=$HOME/src/pcre-8.32   --with-pcre-jit   
+
+
+
+注意：
+这里有个比较有意思的场景
+当做方向代理的时候，没有域名，而通过ip地址的形式把请求转发到后端，当请求发过去以后，最终返回给客户端的时候，是nginx本地返回的，
+不是后端传回来的内容，因此需要修改配置。
+
+配置如下：
+
+upstream www {
+      ip_hash;
+      server 10.101.33.53:8090;
+    }
+
+server {
+        listen       8090;
+        server_name  10.101.33.53;
+
+        access_log  /home/blue/logs/nginx/www.access.log  main;
+
+        location / {
+	    proxy_pass http://www;
+            #proxy_set_header Host $host;                     //原域名的方式访问
+	     proxy_set_header Host $host:$server_port;	      //修改后通过IP地址访问
+            #proxy_set_header X-Real-IP  $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+    }
+
+如上客户端访问的时候通过ip:port的方式访问，如此将请求转发的到后端的时候，最终返回给客户端的是nginx本地的内容，
+不是从后端节点发过来的。因此修改如上的方式。
+
+
+
+
+
+安装libunwind的错误
+
+tcmalloc属于gperftools，安装比较简单，需要注意一下，在64bit系统上需要先安装libunwind（http://download.savannah.gnu.org/releases/libunwind/libunwind-0.99-beta.tar.gz，只能是这个版本），这个库为基于64位CPU和操作系统的程序提供了基本的堆栈辗转开解功能，其中包括用于输出堆栈跟踪的API、用于以编程方式辗转开解堆栈的API以及支持C++异常处理机制的API，32bit系统不需安装。在安装过程中，可能出现下列错误：
+
+gcc -DHAVE_CONFIG_H -I. -I../include -I../include -I../include/tdep-x86_64 -I. -D_GNU_SOURCE -DNDEBUG -g -O2 -fexceptions -Wall -Wsign-compare -MT setjmp/longjmp.lo -MD -MP -MF setjmp/.deps/longjmp.Tpo -c setjmp/longjmp.c -fPIC -DPIC -o setjmp/.libs/longjmp.o
+/usr/include/x86_64-linux-gnu/bits/setjmp2.h:26:13: error: 'longjmp' aliased to undefined symbol '_longjmp
+是因为缺少编译选项U_FORTIFY_SOURCE，解决方法有两种：
+
+
+1，尚未调用configure进行配置，则执行CPPFLAGS=-U_FORTIFY_SOURCE ./configure ... 会自动将编译选项添加到Makefile中。
+2，已经配置过，直接修改Makefile，查找CPPFLAGS然后添加上-U_FORTIFY_SOURCE。
+然后就是安装gperftools，这个正常安装即可，默认安装到/usr/local/lib下，完成后调用lddconfig添加到动态链接库缓存，然后就可以使用了。
+使用方法，很简单，在编译时加上tcmalloc动态链接库即可
+
+
+g++ test.cpp -ltcmalloc
+
+
+
+
+

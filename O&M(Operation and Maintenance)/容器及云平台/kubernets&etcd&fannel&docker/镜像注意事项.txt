@@ -1,0 +1,17 @@
+1.安装crontab，vsftpd，openssh，rsync，unzip 
+#yum install vsftpd* rsync* unzip crontabs opens*h
+
+2.修改时区
+#cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+
+3.修改crond的相关配置
+注销/etc/pam.d/crond
+#session    required   pam_loginuid.so
+
+
+
+
+
+
+
+

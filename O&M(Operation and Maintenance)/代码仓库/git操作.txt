@@ -1,0 +1,14 @@
+从github下载项目到Eclipse
+
+Window->Show View->Other
+
+Git Repositories,就有了Git Repositories页面
+
+选择Clone a Git repository and add the clone to this view图标
+
+然后填入github里的信息
+
+当选择本地目录的时候,记得选择建立项目目录的上级目录,项目目录会自动生成.
+
+比如:workspace/cpp为所有项目的目录,选择此目录,项目下载完毕以后会自动在此目录中生成项目目录
+

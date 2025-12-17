@@ -1,0 +1,1148 @@
+# 定位 Python
+找到并记住要用于运行 Ansible 的 Python 解释器的路径.
+
+# 确保 pip 可用
+要验证 pip 你的首选 Python 是否已安装:
+$ python3 -m pip -V
+/usr/bin/python3: No module named pip
+$ curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+$ apt install python3-pip
+$ python3 -m pip install --user ansible 
+ error: externally-managed-environme  # 如果有报错.执行如下命令
+# rm -rf /usr/lib/python3.11/EXTERNALLY-MANAGED
+$ python3 get-pip.py --user
+$ python3 -m pip install --upgrade --user ansible
+$ ansible --version
+$ ansible-community --version
+
+# 您可以通过安装名为 argcomplete 的可选依赖项来添加 Ansible 命令行实用程序的 shell 补全
+$ python3 -m pip install --user argcomplete
+
+# 配置 argcomplete,全局完成需要 bash 4.2.
+$ activate-global-python-argcomplete --user
+
+# 包括可用的插件以创建更完整的 Ansible 配置,如下所示:
+$ ansible-config init --disabled -t all > ansible.cfg
+
+# 即使你没有在 inventory 文件中定义任何组,Ansible 也会创建两个默认组: all和ungrouped.all组包含所有主机.组ungrouped包含除 all 之外没有其他组的所有主机.每个主机将始终属于至少 2 个组(all和ungrouped或all和其他组).
+
+# 您可以在组之间创建父/子关系.父组也称为嵌套组或组的组.例如,如果您的所有生产主机都已位于 atlanta_prod 和 denver_prod 等组中,则可以创建一个 production 包含这些较小组 的组.
+
+east:
+  hosts:
+    foo.example.com:
+    one.example.com:
+    two.example.com:
+west:
+  hosts:
+    bar.example.com:
+    three.example.com:
+prod:
+  children:
+    east:
+test:
+  children:
+    west:
+
+子组有几个属性需要注意: 
+
+.任何属于子组成员的主机都会自动成为父组的成员.
+.群组可以有多个父群组和子群组,但不能有循环关系.
+.主机也可以属于多个组,但在运行时,每个主机只有一个实例.Ansible 会合并来自多个组的数据.
+
+# 您可以将多个 inventory 源整合到一个目录中.最简单的版本是包含多个文件的目录,而不是单个 inventory 文件.
+以下 inventory 目录组合了一个 inventory 插件源、一个动态 inventory 脚本和一个带有静态主机的文件: 
+
+inventory/
+  openstack.yaml          # configure inventory plugin to get hosts from OpenStack cloud
+  dynamic-inventory.py   # add additional hosts with dynamic inventory script
+  on-prem                # add static hosts and groups
+  parent-groups          # add static hosts and groups
+
+您可以按如下方式定位该 inventory 目录: 
+ansible-playbook example.yaml -i inventory
+
+# Ansible 根据文件名以 ASCII 顺序加载 inventory 源.如果您在一个文件或目录中定义父组,而在其他文件或目录中定义子组,则必须先加载定义子组的文件.如果先加载父组,您将看到错误.Unable to parse /path/to/source_of_parent_groups as an inventory source
+
+例如,如果您有一个名为 的文件groups-of-groups,该文件定义了一个production组,而子组则定义在名为 的文件中on-prem,则 Ansible 无法解析该production组.为避免此问题,您可以通过向文件添加前缀来控制加载顺序: 
+
+inventory/
+  01-openstack.yaml          # configure inventory plugin to get hosts from OpenStack cloud
+  02-dynamic-inventory.py   # add additional hosts with dynamic inventory script
+  03-on-prem                # add static hosts and groups
+  04-groups-of-groups       # add parent groups
+
+# 您可以轻松地将变量分配给单个主机,然后稍后在 playbook 中使用它.您可以直接在 inventory 文件中执行此操作.
+
+在 INI 中: 
+
+[atlanta]
+host1 http_port=80 maxRequestsPerChild=808
+host2 http_port=303 maxRequestsPerChild=909
+在 YAML 中: 
+
+atlanta:
+  hosts:
+    host1:
+      http_port: 80
+      maxRequestsPerChild: 808
+    host2:
+      http_port: 303
+      maxRequestsPerChild: 909
+
+# 您还可以使用主机变量在 inventory 中定义别名: 
+
+在 INI 中: 
+
+jumper ansible_port=5555 ansible_host=192.0.2.50
+在 YAML 中: 
+
+# ...
+  hosts:
+    jumper:
+      ansible_port: 5555
+      ansible_host: 192.0.2.50
+
+在此示例中,针对主机别名“jumper”运行 Ansible 将连接到端口 5555 上的 192.0.2.50.
+
+# 如果一个组中的所有主机共享一个变量值,则可以一次将该变量应用于整个组.
+
+在 YAML 中: 
+
+atlanta:
+  hosts:
+    host1:
+    host2:
+  vars:
+    ntp_server: ntp.atlanta.example.com
+    proxy: proxy.atlanta.example.com
+
+# 您可以将变量应用于父组(嵌套组或组的组)以及子组.语法相同: :vars对于 INI 格式和vars:YAML 格式: 
+
+在 INI 中: 
+
+[atlanta]
+host1
+host2
+
+[raleigh]
+host2
+host3
+
+[southeast:children]
+atlanta
+raleigh
+
+[southeast:vars]
+some_server=foo.southeast.example.com
+halon_system_timeout=30
+self_destruct_countdown=60
+escape_pods=2
+
+[usa:children]
+southeast
+northeast
+southwest
+northwest
+
+在 YAML 中: 
+
+usa:
+  children:
+    southeast:
+      children:
+        atlanta:
+          hosts:
+            host1:
+            host2:
+        raleigh:
+          hosts:
+            host2:
+            host3:
+      vars:
+        some_server: foo.southeast.example.com
+        halon_system_timeout: 30
+        self_destruct_countdown: 60
+        escape_pods: 2
+    northeast:
+    northwest:
+    southwest:
+
+子组的变量比父组的变量具有更高的优先级(覆盖).
+
+# 主机和组变量文件必须使用 YAML 语法.有效的文件扩展名包括“.yaml”、“.yaml”、“.json”或无文件扩展名.
+Ansible 通过搜索相对于 inventory 文件或 playbook 文件的路径来加载主机和组变量文件.如果您的 inventory 文件/etc/ansible/hosts包含名为“foosball”的主机,该主机属于两个组“raleigh”和“webservers”,则该主机将在以下位置使用 YAML 文件中的变量: 
+
+/etc/ansible/group_vars/raleigh # can optionally end in '.yaml', '.yaml', or '.json'
+/etc/ansible/group_vars/webservers
+/etc/ansible/host_vars/foosball
+
+例如,如果您按数据中心对 inventory 中的主机进行分组,并且每个数据中心使用自己的 NTP 服务器和数据库服务器,则可以创建一个名为的文件/etc/ansible/group_vars/raleigh 来存储该组的变量raleigh: 
+
+---
+ntp_server: acme.example.org
+database_server: storage.example.org
+
+您还可以创建以您的组或主机命名的目录.Ansible 将按字典顺序读取这些目录中的所有文件.以“raleigh”组为例: 
+
+/etc/ansible/group_vars/raleigh/db_settings
+/etc/ansible/group_vars/raleigh/cluster_settings
+
+“raleigh”组中的所有主机都可以使用这些文件中定义的变量.当单个文件太大或您想要对某些组变量使用Ansible Vault时,这对于保持变量井然有序非常有用.
+
+ansible-playbook您还可以将group_vars/ 和 host_vars/ 目录添加到您的 playbook 目录中.其他 Ansible 命令(例如、ansible等ansible-console)将仅在 inventory 目录中查找 group_vars/和 host_vars/.如果您希望其他命令从 playbook 目录加载组和主机变量,则必须在命令行上提供该选项.如果您从 playbook 目录和 inventory 目录加载 inventory 文件,playbook 目录中的变量将覆盖 inventory 目录中设置的变量.
+
+# 默认情况下,在运行 playbook 之前,变量会合并/展开到特定主机.Ansible 会覆盖变量,包括为组和/或主机定义的变量
+顺序/优先级为(从低到高):
+
+.all group (because it is the ‘parent’ of all other groups)
+.parent group
+.child group
+.host
+
+默认情况下,Ansible 会按 ASCII 顺序合并同一父/子级别的组,最后加载的组中的变量将覆盖前一组的变量.例如, a_group 将与 b_group 合并
+,b_group 匹配的变量将覆盖 a_group 中的变量.
+
+ansible 会合并来自不同来源的变量,并根据一组规则对某些变量应用优先权.例如, inventory 中出现次数较高的变量可以覆盖 inventory 中出现次数较低的变量.
+您可以通过设置 group 变量 ansible_group_priority 来更改此行为,以更改同一级别组的合并顺序(在父/子顺序解析之后).数字越大,合并越晚,优先级越高.如果未设置,此变量默认为 1
+
+例如:
+
+a_group:
+  vars:
+    testvar: a
+    ansible_group_priority: 10
+b_group:
+  vars:
+    testvar: b
+
+在这个例子中,如果两个组具有相同的优先级,结果通常是 testvar == b,但由于我们赋予了 a_group 更高的优先级,所以结果将是 testvar == a .
+
+ansible_group_priority 只能在 inventory 源中设置,而不能在 group_vars/ 中设置,因为该变量用于 group_vars 的加载.
+
+# 当您在命令行中传递多个 inventory 源时,Ansible 会按照传递这些参数的顺序合并变量.如果 [all:vars] 在 staging inventory 中定义 myvar = 1 并且 production inventory 中定义 myvar = 2,则:
+.通过 -i staging -i production 使用  myvar = 2 来运行 playbook .
+.通过 -i production  -i staging 使用 myvar = 1 来运行 playbook .
+ 
+当你将多个 inventory 源放在一个目录中时,Ansible 会根据文件名以 ASCII 顺序合并它们.你可以通过向文件添加前缀来控制加载顺序:
+inventory/
+  01-openstack.yaml
+cloud
+  02-dynamic-inventory.py
+  03-static-inventory
+group_vars/
+  all.yaml
+
+如果 01-openstack.yaml 定义了 myvar = 1 为组 all, 02-dynamic-inventory.py 定义了 myvar = 2,并且 03-static-inventory 定义了 myvar = 3,则 playbook 将使用 myvar = 3 运行
+
+# 如上所述,设置以下变量可控制 Ansible 如何与远程主机交互.
+主机连接: 
+ansible_connection
+      与主机的连接类型.这可以是任何 Ansible 连接插件的名称.SSH 协议类型为 ssh 或 paramiko.默认值为 ssh .
+
+所有连接的通用功能:
+ansible_host
+    要连接的主机的名称(如果与您希望为其指定的别名不同).如果您使用委派,切勿将其设置为依赖于 inventory_hostname.
+ansible_port
+    连接端口号(如果不是默认值,则为 ssh 为 22)
+ansible_用户
+    连接主机时使用的用户名
+ansible_密码
+   用于对主机进行身份验证的密码(切勿以纯文本形式存储此变量；始终使用 vault .请参阅保持 vault 变量安全可见)
+
+具体到SSH连接:
+ansible_ssh_private_key_file
+  SSH使用的私钥文件.如果使用多个密钥并且不想使用 SSH 代理,则很有用.
+ansible_ssh_common_args
+      此设置始终附加到sftp scp 、 和ssh的默认命令行.用于 ProxyCommand 为特定主机(或组)配置.
+ansible_sftp_extra_args
+      此设置始终附加到默认的sftp命令行.
+ansible_scp_extra_args
+      此设置始终附加到默认的scp命令行.
+ansible_ssh_extra_args
+      此设置始终附加到默认的ssh命令行.
+ansible_ssh_pipelining
+      确定是否使用 SSH 管道.这可以覆盖 ansible.cfg 中 pipelining 的 设置
+ansible_ssh_executable(在 2.2 版中添加)
+      此设置将覆盖使用系统ssh 的默认行为.这可以覆盖 ansible.cfg 文件中 ssh_connection 下的 ssh_executable
+
+权限提升:
+ansible_become
+      相当于 ansible_sudo 或  ansible_su,允许强制提升权限
+ansible_become_method
+      允许设置特权升级方法
+ansible_become_user
+      相当于 ansible_sudo_user 或 ansible_su_user,允许您设置通过特权升级成为的用户
+ansible_become_password
+      相当于 ansible_sudo_password 或 ansible_su_password,允许您设置权限提升密码(切勿以纯文本形式存储此变量;请始终使用 vault .)
+ansible_become_exe
+      相当于 ansible_sudo_exe 或 ansible_su_exe,允许您设置所选升级方法的可执行文件
+ansible_become_flags
+      相当于 ansible_sudo_flags 或 ansible_su_flags 允许您设置传递给所选升级方法的标志.这也可以在 ansible.cfg 文件的 privilege_escalation下的 become_flags 选项中进行全局设置.
+
+远程主机环境参数:
+ansible_shell_type
+      目标系统的 shell 类型.除非您已将 ansible_shell_executable设置为非 Bourne (sh) 兼容,否则不应使用此设置.默认情况下,命令使用sh -style 语法进行格式化.将其设置为 csh 或 fish将导致在目标系统上执行的命令遵循这些 shell 的语法.
+ansible_python_interpreter
+      目标主机 Python 路径.这对于具有多个 Python 或不在/usr/bin/python中的系统(例如*BSD)或 /usr/bin/python 不是 2.X 系列 Python 的系统很有用.我们不使用/usr/bin/env机制,因为这需要正确设置远程用户的路径,并且还假定python可执行文件名为python,其中可执行文件可能名为python2.6之类的名称.
+ansible_*_interpreter
+      适用于 ruby​​ 或  perl等任何语言,工作方式与ansible_python_interpreter类似.这将取代将在该主机上运行的 shebang 模块 .
+
+2.1 版本中的新功能.
+
+ansible_shell_executable
+      这将设置 ansible控制节点将在目标计算机上使用的 shell,覆盖在 ansible.cfg 默认的 /bin/sh.仅当无法使用/bin/sh时才应更改此值(换句话说,如果目标计算机上未安装/bin/sh或无法从 sudo 运行).
+
+# 报错: Please add this host's fingerprint to your known_hosts file to manage this host."
+当第一次 ansible ssh 某个机器时的提示
+解决:
+設定 ansible.cfg 加入以下設定
+[defaults]
+host_key_checking = False
+
+# 如果 Ansible 中指定 -i 的位置是目录(或按照 ansible.cfg 中的配置),Ansible 可以同时使用多个 inventory 源.
+以以下任一结尾的文件将被忽略:
+~, .orig, .bak, .ini, .cfg, .retry, .pyc, .pyo
+您可以通过在 ansible.cfg 中配置 inventory_ignore_extensions 列表 或设置 ANSIBLE_INVENTORY_IGNORE 环境变量替换为您自己选择的列表.无论哪种情况,值都必须是以逗号分隔的模式列表,如上所示.
+
+inventory 目录中的任何 group_vars 和 host_vars 子目录都会按预期进行解释,这使得 inventory 目录成为组织不同配置集的强大方式.
+
+# 在静态 inventory 文件中定义组的组时,子组也必须在静态 inventory 文件中定义,否则 ansible 将返回错误.如果要定义动态子组的静态组,请在静态 inventory 文件中将动态组定义为空.例如:
+
+[tag_Name_staging_foo]
+
+[tag_Name_staging_bar]
+
+[staging:children]
+tag_Name_staging_foo
+tag_Name_staging_bar
+
+# 当您通过临时命令或运行 playbook 执行 Ansible 时,您必须选择要针对哪些托管节点或组执行.模式允许您针对 inventory 中的特定主机和/或组运行命令和 playbook .Ansible 模式可以引用单个主机、IP 地址、 inventory 组、一组组或 inventory 中的所有主机.模式非常灵活 - 您可以排除或要求主机子集、使用通配符或正则表达式等.
+
+几乎每次执行临时命令或 playbook 时,您都会使用模式.模式是临时命令中唯一没有标志的元素.它通常是第二个元素:
+ansible <pattern> -m <module_name> -a "<module options>"
+
+例如:
+ansible webservers -m service -a "name=httpd state=restarted"
+
+hosts:
+在 playbook 中,模式是每场戏的台词内容:
+- name: <play_name>
+hosts: <pattern>
+
+例如:
+- name: restart webservers
+hosts: webservers
+
+由于您经常需要同时针对多台主机运行命令或 playbook,因此模式通常指 inventory 组.上述 ad hoc 命令和 playbook 都将针对 webservers 组中的所有机器执行.
+
+下表列出了针对 inventory 主机和组的常见模式.
+
+描述                                                           模式                                                                                  目标
+All hosts	              all (or *)
+One host	              host1
+Multiple hosts	        host1:host2 (or host1,host2)
+One group	              webservers
+Multiple groups	        webservers:dbservers            webservers 中的所有主机加上 dbservers 中的所有主机
+Excluding groups	      webservers:!atlanta             除 atlanta 之外的所有 webservers 主机 
+Intersection of groups	webservers:&staging             任何在 staging 和 webservers 中的主机 (交集)
+
+$ ansible all -m 'ping' --limit 'master:&MM'  # 在组 master 和 MM 中都存在的主机
+
+您可以使用逗号(,)或冒号(:)来分隔主机列表.处理范围和 IPv6 地址时,最好使用逗号.
+
+了解了基本模式后,就可以将它们组合起来.此示例: 
+
+webservers:dbservers:&staging:!phoenix
+目标是组“webservers”和“dbservers”中以及组“staging”中的所有机器,但组“phoenix”中的任何机器除外.
+
+您可以将通配符模式与 FQDN 或 IP 地址一起使用,只要主机在您的 inventory 中以 FQDN 或 IP 地址命名即可: 
+192.0.*
+*.example.com
+*.com
+
+您可以同时混合通配符模式和组: 
+one*.com:dbservers
+
+模式取决于 inventory .如果 inventory 中未列出主机或组,则无法使用模式来定位它.如果您的模式包含 inventory 中未出现的 IP 地址或主机名,您将看到如下错误: 
+[WARNING]: No inventory was parsed, only implicit localhost is available
+[WARNING]: Could not match supplied host pattern, ignoring: *.not_in_inventory.com
+
+您的模式必须与您的 inventory 语法相匹配.如果您将主机定义为别名: 
+
+atlanta:
+  hosts:
+    host1:
+      http_port: 80
+      maxRequestsPerChild: 808
+      ansible_host: 127.0.0.2
+
+您必须在模式中使用别名.在上面的示例中,您必须host1在模式中使用.如果您使用 IP 地址,您将再次收到错误: 
+[WARNING]: Could not match supplied host pattern, ignoring: 127.0.0.2
+
+# 模式处理过程有些特殊,按照以下顺序进行
+1.: 和,
+2.&
+3.!
+
+a:b:&c:!d:!e 和 &c:a:!d:b:!e 和 !d:a:!e:&c:b 效果等同
+
+Host in/is (a or b) AND host in/is all(c) AND host NOT in/is all(d, e).
+主机 在/是 (a 或 b) 并且主机 在/是 全部(c) 并且主机 不在/是 全部(d,e).
+
+您可以使用变量来通过 ansible-playbook 的参数 -e 传递组说明符:
+webservers:!{{ excluded }}:&{{ required }}
+
+# 您可以根据主机在组中的位置来定义主机或主机子集.例如,给定以下组:
+[webservers]
+cobweb
+webbing
+weber
+
+您可以使用下标来选择 Web 服务器组内的单个主机或范围.
+
+对特定项目进行分割
+.操作:s[i]
+.结果:s中的 i,索引原点为 0 
+
+如果 i 为负数,则索引相对于序列 s 的末尾:  len(s) + i 被替换.然而-0就是0.
+webservers[0]       # 等于 cobweb
+webservers[-1]      # 等于 weber
+
+使用起点和终点进行分割
+操作:s[i:j] 
+结果:在s中从 i 到 j 的切片
+
+s从i到j的切片定义为索引为k(i <= k <= j)的项目序列,其中.如果省略i,则使用 0.如果省略j,则使用len(s) .省略i和j的切片会导致无
+效的主机模式.如果i大于j,则切片为空.如果i等于j,则用s[i]替换.
+
+webservers[0:2]   # 等于 webservers[0],webservers[1],webservers[2]
+                  # 等于 cobweb,webbing,weber
+webservers[1:2]   # 等于 webservers[1],webservers[2]
+                  # 等于 webbing,weber
+webservers[1:]    # 等于 webbing,weber
+webservers[:3]    # 等于 cobweb,webbing,weber
+
+您可以将模式指定为正则表达式,方法是使用 ~ 开头:
+~(web|db).*\.example\.com
+
+# 您可以使用命令行选项更改临时命令中定义的模式的行为.您还可以使用 --limit 标志限制在特定运行中定位的主机.
+
+限制为一个主机
+$ ansible all -m <module> -a "<module options>" --limit "host1"
+限制为多个主机
+$ ansible all -m <module> -a "<module options>" --limit "host1,host2"
+否定限制.请注意,必须使用单引号来防止 bash 插值.$ ansible all -m <module> -a "<module options>" --limit 'all:!host1'
+限制主机组
+$ ansible all -m <module> -a "<module options>" --limit 'group1'
+
+您可以使用命令行选项更改 playbook 中定义的模式的行为.例如,您可以通过指定(请注意尾随逗号)来运行在单个主机上定义的 playbook.即使您定位的主机未在您的 inventory 中定义,此方法也有效,但此方法不会读取与此主机绑定的变量的 inventory,并且 playbook 所需的任何变量都需要在命令行中手动指定.您还可以使用 --limit 标志限制您在特定运行中定位的主机,该标志将引用您的 inventory :
+ansible-playbook site.yaml --limit datacenter2
+
+最后,你可以通过在文件名前加上 @ 前缀来从文件中读取主机列表:
+ansible-playbook site.yaml --limit @retry_hosts.txt
+
+如果 retry_files_enabled 设置为 True,则 ansible-playbook 运行后将创建一个 .retry 文件,其中包含所有运行中失败的主机列表.每次
+ansible-playbook 运行 完成后都会覆盖此文件.
+ansible-playbook site.yaml --limit @site.retry
+
+# 默认情况下,Ansible 使用本机 OpenSSH,因为它支持 ControlPersist(一项性能功能)、Kerberos 以及在 ~/.ssh/config的选项比如 Jump Host 设置.如果您的控制机器使用不支持 ControlPersist 的旧版 OpenSSH,Ansible 将回退到名为“paramiko”的 OpenSSH Python 实现.
+
+默认情况下,Ansible 使用您在控制节点上使用的用户名连接到所有远程设备.如果远程设备上不存在该用户名,则可以为连接设置其他用户名.如果您只需要以其他用户身份执行某些任务,您可以在 playbook 中设置连接用户:
+
+---
+- name: update webservers
+  hosts: webservers
+  remote_user: admin
+
+  tasks:
+  - name: thing to do first in this playbook
+  ...
+
+作为 inventory 中的 host 变量:
+other1.example.com     ansible_connection=ssh        ansible_user=myuser
+other2.example.com     ansible_connection=ssh        ansible_user=myotheruser
+
+或者作为 inventory 中的 group 变量:
+cloud:
+  hosts:
+    cloud1: my_backup.cloud.com
+    cloud2: my_backup2.cloud.com
+  vars:
+    ansible_user: admin
+
+
+您可以设置在 play 或任务级别进行控制的指令become.您可以通过设置连接变量来覆盖这些指令,这些变量通常因主机而异.这些变量和指令是独立的.例如,设置become_user不会设置become.
+
+become
+设置为 true 以激活权限升级.
+
+become_user
+设置为具有所需权限的用户 - 您成为的用户,而不是您登录的用户.并不意味着 become: true,以允许在主机级别设置它.默认值为 root.
+
+become_method
+（在 play 或任务级别）覆盖ansible.cfg中设置的默认方法,设置为使用任何Become插件.
+
+become_flags
+（在 play 或任务级别）允许对任务或角色使用特定标志.一种常见用途是在 shell 设置为 nologin 时将用户更改为 nobody. Ansible 2.2 中添加.
+
+例如,要在以非 root 用户身份连接时管理系统服务（需要 root 权限）,可以使用 become_user (root) 的默认值: 
+- name: Ensure the httpd service is running
+  service:
+    name: httpd
+    state: started
+  become: true
+
+以 apache 用户身份运行命令: 
+- name: Run a command as the apache user
+  command: somecommand
+  become: true
+  become_user: apache
+
+当 shell 为 nologin 时,以 nobody 用户身份执行某些操作: 
+- name: Run a command as nobody
+  command: somecommand
+  become: true
+  become_method: su
+  become_user: nobody
+  become_flags: '-s /bin/sh'
+
+要指定 sudo 的密码,请使用 --ask-become-pass （简称 -K）运行 ansible-playbook.
+
+您可以为每个受管节点或组定义不同的 become 选项.您可以在 inventory 中定义这些变量或将它们用作普通变量.
+
+ansible_become
+覆盖 become 指令并决定是否使用权限升级.
+
+ansible_become_method
+应使用哪种权限提升方法
+
+ansible_become_user
+通过权限升级设置您成为的用户；并不意味着 ansible_become: true
+
+ansible_become_password
+设置提权密码.有关如何避免纯文本形式包含机密的详细信息,请参阅使用加密变量和文件
+
+ansible_common_remote_group
+确定如果 setfacl 和 chown 都失败,Ansible 是否应尝试将其临时文件 chgrp 到组.有关更多信息,请参阅成为非特权用户的风险. 2.10版本添加.
+
+例如,如果您想以 root 身份在名为 webserver 的服务器上运行所有任务,但只能以 manager 用户身份连接,则可以使用如下 inventory 条目: 
+webserver ansible_user=manager ansible_become=true
+
+# 传递单一密码
+如果您的任务或 playbook 中的所有加密变量和文件都需要使用单一密码,则可以使用--ask-vault-pass或--vault-password-filecli 选项.
+
+提示输入密码: 
+ansible-playbook --ask-vault-pass site.yaml
+
+要从文件中检索密码/path/to/my/vault-password-file: 
+ansible-playbook --vault-password-file /path/to/my/vault-password-file site.yaml
+
+要从 vault 密码客户端脚本 my-vault-password-client.py 获取密码: 
+ansible-playbook --vault-password-file my-vault-password-client.py
+
+^^^^^^^^^^^^^^^^^^^
+使用 VaultID 的模式加密/解密数据文件,密码等等需要加密的信息
+# 传递  VaultID 
+您还可以使用--vault-id选项传递带有 vault 标签的单个密码.当在单个库存中使用多个 vault 时,这种方法更清晰.
+
+提示输入“dev”  VaultID  的密码: 
+To prompt for the password for the ‘dev’  VaultID :
+ansible-playbook --vault-id dev@prompt site.yaml
+
+要从 dev-password 文件中检索“dev”  VaultID  的密码: 
+ansible-playbook --vault-id dev@dev-password site.yaml
+
+要从 vault 密码客户端脚本 my-vault-password-client.py 获取“dev” vault  ID 的密码: 
+ansible-playbook --vault-id dev@my-vault-password-client.py
+
+如果您的任务或 playbook 需要使用不同  VaultID  加密的多个加密变量或文件,则必须使用该--vault-id选项,传递多个--vault-id选项来指定  VaultID （“dev”、“prod”、“cloud”、“db”）和密码来源（提示、文件、脚本）.例如,要使用从文件读取的“dev”密码并提示输入“prod”密码: 
+ansible-playbook --vault-id dev@dev-password --vault-id prod@prompt site.yaml
+
+默认情况下,  VaultID  标签（dev、prod 等）仅作为提示.Ansible 会尝试使用每个密码解密 vault 内容.将首先尝试与加密数据具有相同标签的密码,然后按照在命令行中提供的顺序尝试每个 vault 密钥.
+
+如果加密数据没有标签,或者标签与任何提供的标签都不匹配,则将按照指定的顺序尝试密码.在上面的示例中,将首先尝试“dev”密码,然后在 Ansible 不知道使用哪个  VaultID  加密某些内容的情况下尝试“prod”密码.
+
+# 配置使用加密内容的默认设置
+设置默认  VaultID 
+如果您使用某个  VaultID  的频率高于其他任何  VaultID ,则可以设置配置选项DEFAULT_VAULT_IDENTITY_LIST来指定默认  VaultID  和密码源.只要您未指定,Ansible 就会使用默认  VaultID  和源--vault-id.您可以为此选项设置多个值.设置多个值相当于传递多个--vault-id 选项.
+
+设置默认密码源
+如果你不想在命令行上提供密码文件,或者你使用一个 vault 密码文件的频率高于其他文件,你可以设置DEFAULT_VAULT_PASSWORD_FILE(vault_password_file)配置选项或ANSIBLE_VAULT_PASSWORD_FILE环境变量来指定要使用的默认文件.例如,如果您设置ANSIBLE_VAULT_PASSWORD_FILE=~/.vault_pass.txt,Ansible 将自动在该文件中搜索密码.例如,如果您从 Jenkins 等持续集成系统使用 Ansible,这将非常有用.
+
+您引用的文件可以是包含密码的文件（纯文本）,也可以是返回密码的脚本（设置了可执行权限）.
+
+通常,使用 Ansible Vault 加密的内容在执行后仍保持加密状态.但是,有一个例外.如果您将加密文件作为src参数传递给copy、template、unarchive、script或assemble模块,则该文件将不会在目标主机上加密（假设您在运行 play 时提供了正确的 vault 密码）.此行为是有意为之且有用的.您可以加密配置文件或模板以避免共享配置的详细信息,但是当您将该配置复制到环境中的服务器时,您希望对其进行解密,以便本地用户和进程可以访问它.
+
+# 使用 Ansible Vault 加密的文件格式
+Ansible Vault 创建 UTF-8 编码的 txt 文件.文件格式包含以换行符结尾的标头.例如: 
+$ANSIBLE_VAULT;1.1;AES256
+
+或者
+
+$ANSIBLE_VAULT;1.2;AES256;vault-id-label
+标题最多包含 4 个元素,以分号 ( ;) 分隔.
+1. The format ID ($ANSIBLE_VAULT). Currently $ANSIBLE_VAULT is the only valid format ID. The format ID identifies content that is encrypted with Ansible Vault (with vault.is_encrypted_file()).
+格式 ID ($ANSIBLE_VAULT).当前 $ANSIBLE_VAULT 是唯一有效的格式 ID.格式 ID 标识使用 Ansible Vault 加密的内容（使用Vault.is_encrypted_file()）.
+
+2. The vault format version (1.X). All supported versions of Ansible will currently default to ‘1.1’ or ‘1.2’ if a labeled  VaultID  is supplied. The ‘1.0’ format is supported for reading only (and will be converted automatically to the ‘1.1’ format on write). The format version is currently used as an exact string compare only (version numbers are not currently ‘compared’).
+vault格式版本 (1.X).如果提供了带标签的  VaultID ,则所有受支持的 Ansible 版本当前将默认为“1.1”或“1.2”. “1.0”格式仅支持读取（写入时将自动转换为“1.1”格式）.格式版本当前仅用作精确字符串比较（当前不“比较”版本号）.
+
+3. The cipher algorithm used to encrypt the data (AES256). Currently AES256 is the only supported cipher algorithm. Vault format 1.0 used ‘AES’, but the current code always uses ‘AES256’.
+用于加密数据的密码算法 (AES256).目前 AES256 是唯一支持的密码算法. Vault 格式 1.0 使用“AES”,但当前代码始终使用“AES256”.
+
+4. The  VaultID  label used to encrypt the data (optional, vault-id-label) For example, if you encrypt a file with --vault-id dev@prompt, the vault-id-label is dev.
+用于加密数据的  VaultID  标签（可选,vault-id-label） 例如,如果您使用 --vault-id dev@prompt 加密文件,则Vault-id-label 为 dev.
+
+# 使用 ansible-vault 生成,解密等功能来处理密码文件
+$ ansible-vault --help
+
+positional arguments:
+    create              创建新的文件并加密
+    decrypt             解密已加密的文件
+    edit                编辑已加密文件的内容
+    view                查看已加密文件的内容
+    encrypt             加密已存在的未加密文件
+    encrypt_string      加密一段字符串
+    rekey               修改已加密文件的 VaultID 和凭据密码
+
+
+$ ansible-vault create --vault-id @prompt passwd_prompt.yaml
+New vault password (default):             # 提示用户输入的
+Confirm new vault password (default):     # 提示用户输入的
+
+                         # 自动打开编辑器,比如打开vim
+mypasswd: 123456         # 输入一个变量
+                         # 保存并退出
+
+上面使用了--vault-id @prompt作为ansible-vault的参数,当执行ansible-vault create时,这会以交互式的方式提示用户输入一个密码,这个密码是加密这个加密文件passwd_prompt.yaml所需的密码.简单地说,passwd_prompt.yaml 这个文件里保存了加密的数据,但要访问这个文件,也需要密码.为了区分,**本文之后将称该密码为”凭据密码”**.
+
+$ cat passwd_prompt.yaml
+$ANSIBLE_VAULT;1.1;AES256
+32343364646636363232666664333031386133633265386432323538386636656562643536343738
+3566353431343934326238326437633634333633356337310a356634383936663539626432366635
+65613462636435353236613139353731373032346165393466633031303765626139333161356330
+6161633865376632390a356234396365343038653633626437636434346334633236626636653061
+36656363666633306237666439316163383137313136333266336236663736623863303061656130
+3937646666663030616161393130326436653364643134386230
+
+如果想要查看该密文,可使用ansible-vault的view子命令,同样需要提供凭据密码.
+$ $ ansible-vault view --vault-id @prompt passwd_prompt.yaml
+Vault password (default):      # 输入凭据密码后将展示如下内容
+---
+mypasswd: 123456
+
+在上面的示例中,使用了选项--vault-id @prompt,它的行为是以交互式的方式提示用户输入凭据密码.
+
+实际上,--valut-id选项的完整用法是这样的: 
+(1) --vault-id  VaultID @prompt
+(2) --vault-id  VaultID @path_to_normal_txt_file
+(3) --vault-id  VaultID @path_to_script_file
+
+也可以省略 VaultID ,这时将统一使用默认的  VaultID , VaultID  则可以使用随意名称
+
+--vault-id label@xxx中的xxx是什么呢?它是凭据密码的来源.凭据密码的来源有三种: 
+(1).prompt: prompt是固定的值,表示以交互式的方式提示用户提供凭据密码
+(2).普通文件的文件名: 比如”a.txt”,表示从该文件中读取凭据密码
+(3).脚本文件名: 表示从该脚本执行结果中获取凭据密码
+
+例如有普通文件a.txt: 
+$ echo '123456' >a.txt
+
+有脚本文件a.sh内容如下(py脚本、perl脚本甚至是程序等都可以,只要密码会输出到标准输出并且有可执行权限即可): 
+#!/bin/bash
+echo 123456
+
+那么下面用三种不同的凭据密码源来创建三个加密文件: 
+$ ansible-vault create --vault-id id1@prompt 1.yaml    # 此种方式,会要求输入密码,即加密 1.yaml 的密码即"凭据密码"
+$ ansible-vault create --vault-id id2@a.txt  2.yaml    # a.txt 中存储的是"凭据密码"
+$ ansible-vault create --vault-id id3@a.sh   3.yaml    # a.sh 执行的结果是"凭据密码"
+
+$ cat ANSIBLE_VAULT;1.2;AES256;id1
+省略
+$ cat $ANSIBLE_VAULT;1.2;AES256;id2
+省略
+$ cat 3.yaml 
+$ANSIBLE_VAULT;1.2;AES256;id3
+省略
+
+提示: 上述的 1/2/3.yaml 则是加密的数据存储的文件
+
+如果省略 VaultID ,则: 
+$ ansible-vault create --vault-id @prompt 1-NoID.yaml
+
+$ ansible-vault create --vault-id a.txt  2-NoID-1.yaml    # 和下一条效果相同 
+$ ansible-vault create --vault-id @a.txt  2-NoID-2.yaml   # 和上一条效果相同
+
+$ ansible-vault create --vault-id a.sh   3-NoID-1.yaml    # 和下一条效果相同 
+$ ansible-vault create --vault-id @a.sh   3-NoID-2.yaml   # 和上一条效果相同
+
+$ cat 1-NoID.yaml
+$ANSIBLE_VAULT;1.1;AES256
+省略
+$ cat 2-NoID-1.yaml
+$ANSIBLE_VAULT;1.1;AES256
+38366565613061643766623136626139393231353762346637613634393264316337616537333865
+6335376338306635333165386437306438353762303539630a383866616465653834663962366362
+63333239323836626266616438363761366463353131623836623330303138653264663331383433
+6362393965623463340a316335653832376631353332356165396362623761656630656235393064
+30663732306566656363363163613863386230643736353630656238336261313234663531316366
+3133303861383165326235353966373237333437623762613037
+$ cat 2-NoID-2.yaml 
+$ANSIBLE_VAULT;1.1;AES256
+63363066616336383934333662373537393433313538636364363633343264323961616635323034
+3063386466643434623265623733653932613964376663620a333762646665663238633436656464
+31386631646137323964326433373033326337313234636438333835353865373738396431343532
+6531613233386336630a393961313932376130393235623632656231346431636638313262653764
+34343836666662333864353034653938343535363666656331666436303535336536343462626432
+3561363735656538633735343539623032386462366333663433
+
+注意: 2-NoID-1.yaml 和 2-NoID-2.yaml这 2 个文件虽然是用相同效果的命令生成,但是文件中的内容加密部分不同
+
+当需要访问加密数据时,比如ansible命令、ansible-playbook命令、ansible-vault命令等,需指定与加密时相同的 VaultID ,且可以指定多个.
+
+# 以文件的方式获取凭据密码
+ansible-vault view --vault-id id2@a.txt  2.yaml
+
+# 以交互式方式提供凭据密码
+ansible-vault view --vault-id id2@prompt  2.yaml
+
+# 指定多个凭据密码,通常用在ansible-playbook命令中,
+# 比如变量文件中多个敏感数据使用了不同的 VaultID 加密
+ansible-playbook --vault-id id1@a.txt --vault-id id2@a.sh main.yaml
+
+注意: 
+如果需要获取某个加密的数据,先查看加密数据的文件,比如 1.yaml
+$ cat 1.yaml 
+$ANSIBLE_VAULT;1.2;AES256;id1
+省略
+
+这里有个  VaultID  为 id1,因此解密的时候,需要用如下的方法
+$ ansible-vault view --vault-id id1@a.txt  1.yaml
+$ ansible-vault view --vault-id @a.txt  1.yaml
+$ ansible-vault view --vault-id a.txt  1.yaml
+$ ansible-vault view --vault-id @prompt  1.yaml
+
+中的任何一种,但是尝试使用 --vault-id @a.sh 或者 --vault-id a.sh 都无用
+
+# 加密已存在的文件
+使用ansible-vault encrypt,用法和 create 子命令几乎一样,三种方式也相同
+plain.yaml文件目前是明文的变量文件: 
+$ cat plain.yaml
+plain_passwd: 123456
+port: 2312
+
+加密
+$ ansible-vault encrypt --vault-id id1@a.txt plain.yaml
+$ cat plain.yaml    # 加密以后,原始的文件内容已经改变了
+$ANSIBLE_VAULT;1.2;AES256;TestID
+省略
+
+解密,使用 ansible-vault decrypt,与前面的 ansible-vault view 解密过程类似,解密以后,文件会回复到原始的没有加密明文的状态
+$ ansible-vault decrypt --vault-id id1@a.txt  plain.yaml
+or
+$ ansible-vault decrypt --vault-id @a.txt  plain.yaml
+or
+$ ansible-vault decrypt --vault-id a.txt  plain.yaml
+
+如果使用 
+ansible-vault view --vault-id id1@a.txt  plain.yaml
+or
+ansible-vault view --vault-id @a.txt  plain.yaml
+or
+ansible-vault view --vault-id a.txt  plain.yaml
+这种模式,可以查看加密文件的内容,但是不解密
+
+可以一次性加密多份数据,但是它们使用相同的 VaultID 和密码
+$ ansible-vault encrypt --vault-id idx@a.txt foo.yaml bar.yaml baz.yaml
+
+解密多个文件: 
+$ ansible-vault decrypt --vault-id idx@a.txt foo.yaml bar.yaml baz.yaml
+
+
+# 在每个已加密的文件中,都包含了一行头部数据.可使用cat命令查看,例如: 
+$ cat plain.yaml
+$ANSIBLE_VAULT;1.2;AES256;id1        #<==加密协议头
+336130623037643739633938313061336431
+363838333864616665623034336439316234
+643337663235366365316332643063653863
+3534303533633334340a6438326433616236
+383566346533653135313633633139613133
+353935653734363833616464326662336132
+
+有两种协议头: 
+$ANSIBLE_VAULT;1.1;AES256
+$ANSIBLE_VAULT;1.2;AES256;id1
+
+第一个字段目前只能是$ANSIBLE_VAULT.
+第二个字段1.1、1.2表示的是Vault格式的版本号,如果给定了 VaultID ,则版本号为1.2,如果使用默认的 VaultID ,则版本号为1.1.老版本还有1.0版本的,但现在不会设置成该版本号,1.0版本号的加密数据只能被读.
+第三个字段目前只支持AES256加密算法.
+第四个字段,如果加密时指定了 VaultID ,则第四个字段保存的是 VaultID ,否则不设置第四个字段.
+
+如果Ansible需要访问多个Vault加密的文件,将会自动根据 VaultID 去寻找用户提供的凭据密码.
+
+例如,对于如下命令来说,main.yaml中引用了两个加密的变量文件,那么自然需要两个 VaultID 和两个密码.当任务执行过程中需要解密第一个文件时,Ansible将自动获取其 VaultID 并从命令行中寻找对应的 VaultID 及其凭据密码来源.
+$ ansible-playbook --vault-id id1@a.txt --vault-id id2@b.txt main.yaml 
+
+# 修改 VaultID 和凭据密码
+对于一个已Vault加密的文件,可使用 ansible-vault rekey 修改其 VaultID 或其凭据密码.
+
+例如,first_passwd.yaml是一个已加密的文件: 
+$ cat first_encrypted.yaml
+$ANSIBLE_VAULT;1.2;AES256;id1
+6361623434363834363065643838346361383830
+3038366239353535663330653463376666346636
+6439663030643839623965613563343632343234
+3739313638363262390a62666466343864626466
+3235633862306366383161663765663962306132
+
+修改它的 VaultID 和凭据密码: 
+$ ansible-vault rekey --vault-id id1@a.txt \
+                      --new-vault-id id2@b.txt \
+                      first_encrypted.yaml
+Rekey successful
+
+再看加密后的内容,无论是 VaultID 还是密文都已经改变了: 
+$ cat first_encrypted.yaml
+$ANSIBLE_VAULT;1.2;AES256;id2
+366666343166313633396135346464653537373936
+343936653437616235316630333538343139336361
+656330646535656335376662623062343863306561
+3033383533306266620a3866396139663235303931
+313230666235303833633330653863323738623339
+
+当然,也可以只修改 VaultID 或只修改凭据密码,只需保持 label@xxx 中的其中一项不变即可.例如: 
+# VaultID 不变,只修改凭据密码
+$ ansible-vault rekey --vault-id id1@a.txt \
+                      --new-vault-id id1@b.txt \
+                      first_encrypted.yaml
+                      
+# 凭据密码,只修改 VaultID 
+$ ansible-vault rekey --vault-id id1@a.txt \
+                      --new-vault-id id2@a.txt \
+                      first_encrypted.yaml
+
+# 编辑已加密文件的内容
+如果想要编辑一个已Vault加密的文件内容,使用ansible-vault edit命令.
+$ ansible-vault edit --vault-id id2@a.txt first_encrypted.yaml
+
+它将自动打开默认的编辑器(如vim)让用户进行编辑.内部过程是先创建一个带有原始明文数据的临时文件(在打开vim时,vim底部状态栏看到临时文件名),用户修改的操作都在该临时文件中进行,当保存时,将自动加密并覆盖原文件.
+
+也可以采用先解密、再修改、再重新加密的方式,而且这种方式可以以非交互式的方式进行.
+$ ansible-vault decrypt xxx
+$ sed -i 'xx' xxx
+$ ansible-vault encrypt xxx
+
+# ansible-playbook任务中使用Vault加密文件
+对数据进行加密的原始目标是在playbook文件、task文件或变量文件中隐藏敏感数据.那么使用加密的文件呢?
+
+例如,名为test.yaml的playbook文件内容如下: 
+---
+- hosts: localhost
+  gather_facts: no
+  vars_files: 
+    - first_passwd.yaml
+    - second_passwd.yaml
+  tasks: 
+    - name: debug var in first_passwd
+      debug: 
+        var: passwd1
+    - name: debug var in second_passwd
+      debug: 
+        var: passwd2
+
+此playbook中引入了两个变量文件first_passwd.yaml和second_passwd.yaml,然后分别用两个任务去访问这两个变量文件中定义的两个变量passwd1和passwd2.
+
+这两个变量文件的内容如下: 
+$ cat first_passwd.yaml
+passwd1: "passwd in first_passwd"
+
+$ cat second_passwd.yaml
+passwd2: "passwd in second_passwd"
+
+# 使用不同的Vault ID和凭据密码加密这两个文件: 
+$ echo 'abcdef' >a.txt
+$ echo 'ABCDEF' >b.txt
+
+$ ansible-vault encrypt --vault-id passwd1@a.txt first_passwd.yaml
+$ ansible-vault encrypt --vault-id passwd2@b.txt second_passwd.yaml
+
+然后执行该playbook,因为涉及到了多个加密文件的访问,且Vault ID不同,凭据密码也不同,所以需要指定多个--vault-id选项.如下: 
+$ ansible-playbook --vault-id passwd1@a.txt --vault-id passwd2@b.txt test.yml
+......
+TASK [debug var in first_passwd] *********************
+ok: [localhost] => {
+    "passwd1": "passwd in first_passwd"
+}
+
+TASK [debug var in second_passwd] ********************
+ok: [localhost] => {
+    "passwd2": "passwd in second_passwd"
+}
+......
+
+# 加密字符串并嵌入YAML文件
+使用ansible-vault encrypt_string可以加密一段字符串.
+
+例如: 
+$ ansible-vault encrypt_string --vault-id id1@a.txt 'hello' --name 'mysql_pass' 
+mysql_pass: !vault |
+          $ANSIBLE_VAULT;1.2;AES256;id1
+          39623437656130313338613033383464376437
+          66303938343635623430353664303334623138
+          33353435366262653437663839316261623664
+          6362633233653237360a343439376437633733
+          6262
+Encryption successful
+
+其中hello是需要被加密的明文数据,--name mysql_pass是yaml中的key,比如可以作为变量的名称.也可以省略 --name 选项.
+$ ansible-vault encrypt_string --vault-id id1@a.txt 'hello'
+!vault |
+          $ANSIBLE_VAULT;1.2;AES256;id1
+          61336334663365656361316532356133623
+          62343863366463396338333933343635373
+          39656461643962643831653561313266366
+          6432316334653339340a336565333361346
+          3635
+Encryption successful
+
+加密一段字符串之后,就可以将这段加密后的字符串原样拷贝到yaml文件中.比如下面是MySQL Role的一个变量文件: 
+mysql_port: 3306
+mysql_user: root
+mysql_pass: !vault |
+          $ANSIBLE_VAULT;1.2;AES256;id1
+          39623437656130313338613033383464376437
+          66303938343635623430353664303334623138
+          33353435366262653437663839316261623664
+          6362633233653237360a343439376437633733
+          6262
+mysql_host: 192.168.200.27
+
+此外,ansible-vault encrypt_string 也可以从标准输入中获取要加密的明文数据: 
+$ ansible-vault encrypt_string --vault-id id1@a.txt --stdin-name 'mysql_pass' <<<"hello"
+mysql_pass: !vault |
+          $ANSIBLE_VAULT;1.2;AES256;id1
+          35386538393939633862626361323735306
+          63383966356265333336303231313735376
+          38346566373262663866363631373539313
+          6531643131306537350a363232656661303
+          6333
+Encryption successful
+
+# 或者
+$ echo -n 'hello' | ansible-vault encrypt_string --vault-id id1@a.txt --stdin-name 'mysql_pass'
+
+注意从标准输入获取待加密数据时,使用的选项是 --stdin-name,而不是 --stdin --name.
+
+解密的过程与前面所述的 decrypt 及 view 参数同样使用
+
+# Vault加密最佳实践
+Ansible Vault可以加密所有的yaml、json格式的文件,但是不建议直接加密一个包含很多数据的文件,因为加密后不方便查看和修改任务文件,建议加密只包含敏感数据的文件.
+
+比如,下面这个变量文件: 
+mysql_port: 3306
+mysql_user: root
+mysql_pass: xxxxxxxx
+mysql_host: 192.168.200.27
+
+其实该文件只有mysql_pass是想要隐藏的敏感数据,建议的做法是在此文件中使用jinja2再引用一次以vault_开头的变量,以vault_开头是为了一眼就能看到这是Vault加密的变量.例如: 
+mysql_port: 3306
+mysql_user: root
+mysql_pass: "{{vault_mysql_pass}}"
+mysql_host: 192.168.200.27
+
+然后单独在一个文件中定义被引用的变量vault_mysql_pass并加密该变量文件.例如,在mysql_pass.yml文件里定义vault_mysql_pass变量: 
+vault_mysql_pass: "abcdef"
+
+加密之: 
+$ ansible-vault encrypt --vault-id mysql@a.txt mysql_pass.yml
+
+特别注意: 使用 ansible-vault 及相关的命令是给文件或者数据加密,当需要使用文件中的数据时,还需要用户自己考虑使用方式.
+
+例子: 使用 ssh 远程连接时候,加密了远程用户的密码,这里使用的是在 group_vars 的变量文件中加密了 ansible_ssh_pass 这个字段的内容
+group_vars 文件 MM.yaml, MM 对应了 1 个组,包含 1 台服务器
+...
+MM:
+  hosts:
+    192.168.1.8:
+...
+
+$ cat MM.yaml 
+ansible_connection: ssh
+ansible_user: jack
+ansible_ssh_pass: !vault |
+          $ANSIBLE_VAULT;1.2;AES256;jack
+          36633031313536343362396338666433363766366339353438353639376465303561326163356532
+          6135323837306330396134663566663636396464626664390a616233386637663766303935323737
+          38633061303566303335303330326563383766333236646335363230386565386337303636333935
+          3533343261613130370a613232623432646262633261376561623362316538363336326435316562
+          6661
+
+# ansible_ssh_pass 字段内容通过如下产生,--name 及 jack 这个 2 个参数只是起到提示作用,没有也没有影响,在应用中并没有用处
+$ ansible-vault encrypt_string --vault-id jack@vault-password.txt 'admin$%^123' [--name password]
+命令作用是加密字段 admin$%^123,同时使用 vault-password.txt 作为凭据密码的文件
+Encryption successful
+password: !vault |
+          $ANSIBLE_VAULT;1.2;AES256;jack
+          36633031313536343362396338666433363766366339353438353639376465303561326163356532
+          6135323837306330396134663566663636396464626664390a616233386637663766303935323737
+          38633061303566303335303330326563383766333236646335363230386565386337303636333935
+          3533343261613130370a613232623432646262633261376561623362316538363336326435316562
+          6661
+
+# 使用 ansible 命令远程执行命令
+$ ansible MM -m shell -a 'ls -l /home/jack/'  --vault-password-file /root/ansible/vault/vault-password.txt
+连接  MM 组,使用 shell 模块,执行 ls -l /home/jack/,使用 /root/ansible/vault/vault-password.txt 中的密码来解密上述 MM.yaml 中的加密字段 ansible_ssh_pass
+
+$ ansible test -m shell -a 'ls -l /home/blue'  --vault-password-file /root/ansible/vault/vault-password.txt
+连接  test 组,使用 shell 模块,执行 ls -l /home/jack/,使用 /root/ansible/vault/vault-password.txt 中的密码来解密 group_vars 文件test.yaml 中的加密字段 ansible_ssh_pass
+
+另外:如果文件是加密的多个 key/value 对,使用时,需要能读取此文件,并且能在配置中解密,比如上面描述的在 playbook 中使用
+
+vvvvvvvvvvvvvvvvvvvv
+
+# ansible默认启用主机密钥检查.检查主机密钥可防止服务器欺骗和中间人攻击,但需要进行一些维护.如果重新安装主机,且“known_hosts”中有不同的密钥,则会导致出现错误消息,直到更正为止.如果新主机不在“known_hosts”中,您的控制节点可能会提示确认密钥,如果使用 Ansible(例如,来自 cron),则会产生交互式体验.您可能不希望出现这种情况.
+如果您理解其含义并希望禁用此行为,您可以通过编辑/etc/ansible/ansible.cfg或执行以下操作~/.ansible.cfg: 
+[defaults]
+host_key_checking = False
+
+或者,也可以通过ANSIBLE_HOST_KEY_CHECKING环境变量: 
+$ export ANSIBLE_HOST_KEY_CHECKING=False
+
+还要注意,模式中的主机密钥检查paramiko相当慢,因此使用此功能时也建议切换到“ssh”.
+
+# 命令行模式如下所示：
+$ ansible [pattern] -m [module] -a "[module options]"
+
+该 -a 选项通过 key=value语法或 JSON 字符串接受选项，以 开头{ and ending with}以实现更复杂的选项结构。
+
+* 重启服务器
+ansible命令行实用程序的默认模块是ansible.builtin.command 模块。您可以使用临时任务来调用命令模块并重新启动 Atlanta 中的所有 Web 服务器，每次重新启动 10 台。在 Ansible 执行此操作之前，您必须将 Atlanta 中的所有服务器列在清单中名为 [atlanta] 的组中，并且您必须拥有该组中每台机器的有效 SSH 凭据。要重新启动 [atlanta] 组中的所有服务器：
+$ ansible atlanta -a "/sbin/reboot"
+
+默认情况下，Ansible 仅使用五个同时运行的进程。如果您拥有的主机数量超过为 fork 计数设置的值，则可能会增加 Ansible 与主机通信所需的时间。要重新启动具有 10 个并行 fork 的 [atlanta] 服务器：
+$ ansible atlanta -a "/sbin/reboot" -f 10
+
+/usr/bin/ansible 将默认从您的用户帐户运行。要以其他用户身份连接：
+$ ansible atlanta -a "/sbin/reboot" -f 10 -u username
+
+重新启动可能需要提升权限。您可以用 username 连接到服务器，并使 become 关键字以 root 用户身份运行命令：
+$ ansible atlanta -a "/sbin/reboot" -f 10 -u username --become [--ask-become-pass]
+
+如果您添加--ask-become-pass或-K，Ansible 会提示您输入用于提升权限的密码（sudo/su/pfexec/doas/etc）。
+比如: 
+$ ansible test -a "/sbin/reboot" -u blue --become --ask-become-pass
+重启 test 组服务器,使用 root 用户执行,提示 blue 用户密码,注意这里不是 root 用户密码,就是说 --ask-become-pass 会提升 blue 用户的权限为 root
+
+命令模块不支持扩展的 shell 语法，如管道和重定向（尽管 shell 变量始终有效）。如果您的命令需要 shell 特定的语法，请改用shell模块。
+
+例子: 对比这里的 --ask-become-pass 是需要通过交互的方式提供 blue 用户的密码,在实际的运用中不通用
+               使用 --become-password-file xxx 的方式,在文件 xxx 中放入密码,但是密码必须是明文,加密的内容无法使用
+               为了不使用明文,就必须使用 ansible_become_password 变量,在 group_vars 目录中的相关的文件中使用加密的字段,
+比如: ansible-vault encrypt_string --vault-id root@vault-password.txt 'admin$%^123'
+加密了 admin$%^123 字段,将内容复制到需要的地方,如下的文件中有 2 段加密的数据,ansible_ssh_pass(远程 ssh 密码) 及 ansible_become_password(提升权限需要的密码) 都是通过 ansible-vault encrypt_string 模式产生.
+
+$cat MM.yaml 
+ansible_connection: ssh
+ansible_user: jack
+ansible_ssh_pass: !vault |
+          $ANSIBLE_VAULT;1.2;AES256;jack
+          36633031313536343362396338666433363766366339353438353639376465303561326163356532
+          6135323837306330396134663566663636396464626664390a616233386637663766303935323737
+          38633061303566303335303330326563383766333236646335363230386565386337303636333935
+          3533343261613130370a613232623432646262633261376561623362316538363336326435316562
+          6661
+ansible_become_password: !vault |
+          $ANSIBLE_VAULT;1.2;AES256;root
+          31613034316264323433623234653436353966373164643930343334656534366134396235666530
+          6463306463366237333032346464613833383737663362350a396162393862363735666164623138
+          61353665623963613263343437636561373737373264366238396139323466623235633734623435
+          3234623761373861350a613362643533313134356239373530343232656235326337653664623136
+          3038
+
+$ ansible MM -m shell -a 'ls ~/'  --vault-password-file /root/ansible/vault/vault-password.txt --become --become-password-file /root/ansible/vault/pwd.yaml # pwd.yaml 是明文密码,可以使用
+
+$ ansible MM -m shell -a 'ls ~/'  --vault-password-file /root/ansible/vault/vault-password.txt --become --become-password-file /root/ansible/vault/password.yaml # password.yaml 加密以后的文件,不可使用
+
+$ ansible MM -m shell -a 'ls -l /root/'  --vault-password-file /root/ansible/vault/vault-password.txt --become
+此时命令执行就没有问题了
+
+192.168.1.8 | CHANGED | rc=0 >>
+总计 20
+drwxr-xr-x 2 root root    6  8月 31  2020 Desktop
+...
+省略
+
+* 到目前为止，我们所有的示例都使用了默认的“命令command”模块。要使用其他模块，请传递 -m 模块名称。例如，要使用ansible.builtin.shell 模块：
+$ ansible raleigh -m ansible.builtin.shell -a 'echo $TERM' 
+
+* 临时任务可以利用 Ansible 和 SCP 的强大功能将许多文件并行传输到多台计算机。要将文件直接传输到 [atlanta] 组中的所有服务器:
+$ ansible atlanta -m ansible.builtin.copy -a "src=/etc/hosts dest=/tmp/hosts"
+
+如果您计划重复这样的任务,请在 playbook 中使用 ansible.builtin.template 模块
+
+* ansible.builtin.file 模块允许更改文件的所有权和权限。这些相同的选项也可以直接传递给 copy 模块:
+$ ansible webservers -m ansible.builtin.file -a "dest=/srv/foo/a.txt mode=600"
+$ ansible webservers -m ansible.builtin.file -a "dest=/srv/foo/b.txt mode=600 owner=mdehaan group=mdehaan"
+
+$ ansible atlanta -m ansible.builtin.copy -a "src=/etc/hosts dest=/tmp/hosts mode=600 "
+
+该 file 模块还可以创建目录,类似于: mkdir -p
+$ ansible webservers -m ansible.builtin.file -a "dest=/path/to/c mode=755 owner=mdehaan group=mdehaan state=directory"
+
+以及删除目录（递归）和删除文件：
+$ ansible webservers -m ansible.builtin.file -a "dest=/path/to/c state=absent"
+
+* 管理包
+您还可以使用临时任务，使用包管理模块（例如）在托管节点上安装、更新或删除包 yum。包管理模块支持安装、删除和一般管理包的常用功能。包管理器的某些特定功能可能不存在于 Ansible 模块中，因为它们不是一般包管理的一部分。
+
+要确保软件包已安装但不更新它：
+$ ansible webservers -m ansible.builtin.yum -a "name=acme state=present"
+
+要确保安装了软件包的特定版本：(如果没有将会安装,需要 root 权限)
+$ ansible webservers -m ansible.builtin.yum -a "name=acme-1.5 state=present"
+
+要确保软件包是最新版本：(如果没有将会安装,需要 root 权限)
+$ ansible webservers -m ansible.builtin.yum -a "name=acme state=latest"
+
+要确保未安装包：(如果已经安装将会卸载,需要 root 权限)
+$ ansible webservers -m ansible.builtin.yum -a "name=acme state=absent"
+
+比如在 apt 包管理的机器上
+ansible MM -m ansible.builtin.apt -a "name=curl state=latest"  --vault-password-file /root/ansible/vault/vault-password.txt
+
+* 管理用户和组
+您可以使用临时任务在托管节点上创建、管理和删除用户帐户：
+详细可以添加的模块参数
+https://docs.ansible.com/ansible/latest/collections/ansible/builtin/user_module.html#user-module
+
+$ ansible all -m ansible.builtin.user -a "name=foo password=<encrypted password here>"
+$ ansible all -m ansible.builtin.user -a "name=foo state=absent"
+
+* 管理服务
+确保所有网络服务器上都启动了服务：(确认服务启动,如果没有启动则启动之需要 root 权限)
+$ ansible webservers -m ansible.builtin.service -a "name=httpd state=started"
+
+或者，在所有 Web 服务器上重新启动服务：(重启服务,需要 root 权限)
+$ ansible webservers -m ansible.builtin.service -a "name=httpd state=restarted"
+
+确保服务已停止：(停止服务,需要 root 权限)
+$ ansible webservers -m ansible.builtin.service -a "name=httpd state=stopped"
+
+* 收集 facts - 收集系统信息,用户,IP,MAC地址,硬件,等等很多的信息
+facts 表示已发现的有关系统的变量。您可以使用 facts 来实现任务的条件执行，也可以仅获取有关系统的临时信息。要查看所有facts：
+$ ansible all -m ansible.builtin.setup
+
+事实上由于上述的命令会产生相当多的信息,如果需要某些特定的信息,查阅如下的详细的过滤方式及内容
+https://docs.ansible.com/ansible/latest/collections/ansible/builtin/setup_module.html#setup-module
+
+* 检查模式 - 关键是 -C 这个参数用户检查,至于 -m copy 在这里没有什么作用
+在检查模式下，Ansible 不会对远程系统进行任何更改。Ansible 仅打印命令。它不会运行命令。
+$ ansible all -m copy -a "content=foo dest=/root/bar.txt" -C
+$ ansible all -m copy -a "src=/root/bar.txt dest=/root/bar.txt"  -C
+
+在上面的命令中启用检查模式（-C或--check）意味着 Ansible 实际上不会在任何远程系统上创建或更新 /root/bar.txt 文件。
+
+
+
+

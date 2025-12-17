@@ -1,0 +1,71 @@
+################ innobackupex ################################
+
+xtrabackup安装使用
+
+innobackupex工具可以用来全备份myisam，innodb等等数据库，会导致备份myisam时锁表的情况产生
+用于使用的是二进制的工具，无需安装，在使用过程中碰到几个问题
+找不到xtrabackup_55文件，找不到datadir路径
+解决办法是
+把xtrabackup_55文件所在路径添加到环境变量里
+datadir路径在my.cnf里添加datadir = /home/blue/apps/mysql/data内容
+
+备份
+
+使用root账户及my.cnf配置文件，把数据库备份到/home/blue/bak/db下
+这个命令是全备份的命令，包括mysql的数据表
+./innobackupex --user=root --password=8mnOJGZemn --socket=/home/blue/apps/mysql/tmp/mysql.sock --defaults-file=/home/blue/apps/mysql/my.cnf /home/blue/backup/full/ --no-timestamp
+
+当要备份单个数据库时 加上--databases=abc
+如果是全数据库备份则使用上述命令
+这里会生成一个以日期为名字的目录
+
+上述命令只是备份了数据文件，需要通过命令来备份日志文件
+
+./innobackupex --user=root --password=8mnOJGZemn --socket=/home/blue/apps/mysql/tmp/mysql.sock --defaults-file=/home/blue/apps/mysql/my.cnf --apply-log /home/blue/backup/full/
+
+在备份单个数据库时，如果数据库是innodb类型则需要加上 --ibbackup=/home/blue/apps/xtrabackup/bin/xtrabackup 备份日志文件
+
+最后的--apply-log的路径要与备份数据文件的路径相同，备份完毕以后会有如下几个日志文件
+ib_logfile0
+ib_logfile1
+ib_logfile2
+
+--incremental-dir=  #加上这个备份增量备份，这个选项只能针对支持事物的引擎
+
+
+恢复
+上述备份的时候没有选择具体数据库，因此恢复的过程是将所有的数据库都恢复，包括mysql相关的表数据，用户等等，并且在备份之前需要清空mysql的data目录
+
+./innobackupex --user=root --password --socket=/home/blue/apps/mysql/tmp/mysql.sock --defaults-file=/home/blue/apps/mysql/my.cnf --copy-back /home/blue/2013-05-23_15-02-22/
+
+实际就是把所有文件拷贝到mysql的data目录里，可以手动拷贝，重启数据库
+
+--databases=databasename1[.table_name1] databasename2[.table_name2] 这个选项用于备份特定的表或者数据库
+
+############# xtrabackup  ##########
+使用xtrbackup备份innodb、xtrdb类型的数据
+
+./xtrabackup --defaults-file=/home/blue/apps/mysql/my.cnf --user=root --password --socket=/home/blue/apps/mysql/tmp/mysql.sock --backup --datadir=/home/blue/apps/mysql/data/ --target-dir=/home/blue/backup/full/
+
+当要备份单个数据库时 加上--databases=abc
+如果是全数据库备份则使用上述命令
+上述命令生成一个备份，文件如下
+
+ibdata1
+xtrabackup_checkpoints
+xtrabackup_logfile
+
+./xtrabackup --defaults-file=/home/blue/apps/mysql/my.cnf --user=root --password --socket=/home/blue/apps/mysql/tmp/mysql.sock --prepare --datadir=/home/blue/apps/mysql/data/ --target-dir=/home/blue/backup/full/
+
+准备数据，从执行后的操作来看，应该是把数据库中的操作同步到日志文件中，其中xtrabackup_logfile文件会变大,同时多一个文件xtrabackup_binlog_pos_innodb
+
+恢复过程，上述文件拷贝到mysq的data目录中，重启数据库
+
+
+提示：全数据库的备份实际是适用于重建数据库，相当与把数据库中的所有内容重新拷贝到一个新的环境中，包括用户，权限等等
+
+
+使用innobackupex工具时候，必须做如下连接，否则，在执行计划任务时候，出现找不到xtrabackup_55的提示
+xtrabackup_55 -> /home/blue/apps/xtrabackup/bin/xtrabackup_55
+
+##################################

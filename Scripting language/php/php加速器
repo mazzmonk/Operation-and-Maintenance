@@ -1,0 +1,6 @@
+eaccelerator-eaccelerator-42067ac.tar.gz 
+cd eaccelerator-eaccelerator-42067ac
+/home/blue/apps/php/bin/phpize
+./configure --enable-eaccelerator --with-php-config=/home/blue/apps/php/bin/php-config
+make
+make install

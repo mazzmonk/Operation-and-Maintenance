@@ -1,0 +1,21 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  namespace: own-project
+  name: murder-tracker
+  labels:
+    name: murder-tracker
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        name: murder-tracker
+    spec:
+      containers:
+      - name: murder-tracker
+        image: 192.168.6.83:5000/murder:latest
+        ports:
+        - containerPort: 8998
+
+

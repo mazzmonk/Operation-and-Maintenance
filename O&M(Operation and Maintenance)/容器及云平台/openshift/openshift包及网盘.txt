@@ -1,0 +1,13 @@
+下面是openshift的安装文件，请安排试一下。
+
+ 
+
+链接:https://pan.baidu.com/s/1pMXVWyn 密码:g6v6
+
+企业版3.6的安装介质
+
+ 
+
+xaa xab xac这些，是分割出来的文件。只要cat xaa > a.tar.gz  cat xab>> a.tar.gz
+
+然后就能恢复出一个tar gzip文件

@@ -1,0 +1,238 @@
+环境: ubuntu 19.0x
+
+下载链接: https://github.com/goharbor/harbor/releases/download/v1.10.0/harbor-offline-installer-v1.10.0.tgz
+
+# 使用https模式访问
+解压以后建立目录key
+然后进入目录以后生成证书及相应的key
+
+这里的harbor服务器
+IP: 172.20.20.3 
+port: 38080
+https port: 443
+$ openssl genrsa -out ca.key 4096
+$ openssl req -x509 -new -nodes -sha512 -days 3650 -subj "/C=CN/ST=Beijing/L=Beijing/O=Personal/OU=Personal/CN=172.20.20.3" -key ca.key -out ca.crt
+$ openssl genrsa -out 172.20.20.3.key 4096
+$ openssl req -sha512 -new -subj "/C=CN/ST=Beijing/L=Beijing/O=Personal/OU=Personal/CN=172.20.20.3"  -key 172.20.20.3.key -out 172.20.20.3.csr
+$ touch v3.ext 
+# 内容如下:
+ authorityKeyIdentifier=keyid,issuer
+ basicConstraints=CA:FALSE
+ keyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment
+ extendedKeyUsage = serverAuth
+ subjectAltName = IP:172.20.20.3
+
+
+$ openssl x509 -req -sha512 -days 3650 -extfile v3.ext -CA ca.crt -CAkey ca.key -CAcreateserial -in 172.20.20.3.csr -out 172.20.20.3.crt
+$ openssl x509 -inform PEM -in 172.20.20.3.crt -out 172.20.20.3.cert
+
+
+1. 修改harbor.yml文件的如下内容:
+hostname: 172.20.20.3
+
+http:
+  port: 38080
+
+https:
+  port: 443
+  certificate: /home/blue/apps/harbor/key/172.20.20.3.crt
+  private_key: /home/blue/apps/harbor/key/172.20.20.3.key
+
+
+harbor_admin_password: Harbor12345
+
+database:
+  password: root123
+  max_idle_conns: 50
+  max_open_conns: 100
+
+data_volume: /home/blue/apps/harbor/data
+
+...
+
+log:
+  level: info
+  local:
+    rotate_count: 50
+    rotate_size: 200M
+    location: /home/blue/apps/harbor/logs
+
+
+2. 运行install.sh,要用root运行,因为其中在docker-compose文件中有个
+
+    logging:
+      driver: "syslog"
+
+部分
+
+3. 客户使用
+在需要在客户端建立目录
+
+/etc/docker/certs.d/172.20.20.3
+
+此目录必须和harbor服务器对应,如果服务器端使用的https端口为6443,则这里目录必须为172.20.20.3:6443
+然后将服务端生成的文件
+
+172.20.20.3.crt
+
+放到上述的目录中
+
+使用时
+# 登录
+$ docker login https://172.20.20.3 
+# 输入用户名密码即可,默认用户名和密码为: admin/Harbor12345
+
+或者
+
+$ docker login https://172.20.20.3 -u admin -p Harbor12345
+
+# 注销
+$ docker logout https://172.20.20.3
+
+
+# 通过Web UI建立镜像仓库
+# 当push和pull之前,需要通过UI先建立一个项目,比如public 设置是否公开(公开表示不需要登录)
+push的时候,使用如下的命令
+$ docker push 172.20.20.3/public/x/x/x
+$ docker pull 172.20.20.3/public/x/x/x
+
+# 同时建立用户,比如public/Admin456
+# 在建立好用户以后,在项目的设置页中,添加建立好的用户,比如:public,然后就可以通过此用户登录仓库
+
+
+# 物理删除不用的镜像
+
+#要启用垃圾回收（GC），首先要关闭Harbor服务，然后再执行清理命令
+
+#停止Harbor相关服务
+
+# docker-compose stop
+
+#使用--dry-run参数运行容器，预览运行效果，但不删除任何数据
+
+# docker run -it --name gc --rm --volumes-from registry vmware/registry:2.6.2-photon garbage-collect --dry-run /etc/registry/config.yml
+
+#NOTE: The above option "--dry-run" will print the progress without removing any data.
+
+Verify the result of the above test, then use the below commands to perform garbage collection and restart Harbor.
+
+#不使用--dry-run参数，将删除相关的文件和镜像，
+
+# docker run -it --name gc --rm --volumes-from registry vmware/registry:2.6.2-photon garbage-collect  /etc/registry/config.yml
+
+#重新启动Harbor相关服务
+
+# docker-compose start
+
+注意: 上述方式似乎不怎么管用,因此采用直接登录容器删除文件方式,注意需要root方式
+# docker ps |grep 5000
+
+# 这里显示的容器是
+
+0a458813140d        goharbor/registry-photon:v2.7.1-patch-2819-2553-v1.10.0   "/home/harbor/entryp…"   4 days ago
+
+# 进入到容器中
+# docker exec -it 0a458813140d /bin/bash
+
+删除
+# rm -rf /storage/docker/registry/v2/blobs/sha256/*
+目录下所有内容
+
+
+# 重置admin密码
+登录database服务器,用的postgres
+$ psql -h postgresql -d postgres -U postgres
+
+
+
+systemctl daemon-reload
+systemctl restart docker
+
+
+FAQ
+1. 报错:
+cannot validate certificate for 172.20.20.3 because it doesn't contain any IP SANs
+
+解决:修改生成证书签名文件的的
+
+subjectAltName = @alt_names 
+
+这部分,修改为:
+subjectAltName = IP:172.20.20.3
+
+并且删掉后续的
+ [alt_names]
+ DNS.1=172.20.20.3
+ DNS.2=10.24.26.56
+ DNS.3=ubu03
+
+具体的描述如下:
+https://codeday.me/bug/20181106/357313.html
+
+2. 这里有几种客户端登录报错的情况,如下:
+https://blog.csdn.net/u013197629/article/details/82879096
+
+3. endpoint with name harbor-jobservice already exists in network harbor_harbor报错
+详细的链接:
+http://2kr.blog87.fc2.com/blog-entry-1247.html
+
+基本的步骤就是优先关掉所有的容器,然后找出和harbor_harbor网桥相关连的容器,然后删掉
+# docker-compose -f ./docker-compose.yml down
+# docker network rm harbor_harbor
+Error response from daemon: error while removing network: network harbor_harbor id b93f958791115db5e8a2e024dafeeaa218fce4b023ce3e418cb9b4bde2b2d027 has active endpoints
+# docker network ls
+NETWORK ID          NAME                DRIVER              SCOPE
+8ef03259e4c5        bridge              bridge              local
+b93f95879111        harbor_harbor       bridge              local
+772496c9a669        host                host                local
+6cd7c3741aef        none                null                local
+# docker network inspect harbor_harbor
+[
+    {
+        "Name": "harbor_harbor",
+        "Id": "b93f958791115db5e8a2e024dafeeaa218fce4b023ce3e418cb9b4bde2b2d027",
+        "Created": "2019-12-19T14:59:18.319614898+08:00",
+        "Scope": "local",
+        "Driver": "bridge",
+        "EnableIPv6": false,
+        "IPAM": {
+            "Driver": "default",
+            "Options": null,
+            "Config": [
+                {
+                    "Subnet": "172.22.0.0/16",
+                    "Gateway": "172.22.0.1"
+                }
+            ]
+        },
+        "Internal": false,
+        "Attachable": true,
+        "Ingress": false,
+        "ConfigFrom": {
+            "Network": ""
+        },
+        "ConfigOnly": false,
+        "Containers": {
+            "7c9b3e97181f236ea9cda2ea11ea27e1c677532781c08fec3f7dbbedf388fd0e": {
+                "Name": "harbor-jobservice",
+                "EndpointID": "c5a1d20e2baaf24dc362fd6ccd6d0bcfe6ba192fe84593b41e69e3cd49f6c32b",
+                "MacAddress": "02:42:ac:16:00:09",
+                "IPv4Address": "172.22.0.9/16",
+                "IPv6Address": ""
+            }
+        },
+        "Options": {},
+        "Labels": {
+            "com.docker.compose.network": "harbor",
+            "com.docker.compose.project": "harbor",
+            "com.docker.compose.version": "1.24.1"
+        }
+    }
+]
+
+看到上述和harbor_harbor关联的容器是harbor-jobservice,执行如下步骤将其断开
+
+# docker network disconnect -f harbor_harbor harbor-jobservice
+
+
+

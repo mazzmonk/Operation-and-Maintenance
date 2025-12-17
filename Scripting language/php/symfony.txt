@@ -1,0 +1,24 @@
+安装方式一
+$ curl -sS https://getcomposer.org/installer | php
+$ sudo mv composer.phar /usr/local/bin/composer
+$composer create-project symfony/framework-standard-edition my_project_name
+#composer create-project symfony/framework-standard-edition my_project_name "3.2.*"            //创建应用
+$ cd my_project_name/
+$ php app/console server:run		//用于测试
+
+
+安装方式二
+可用1
+$ curl -LsS http://symfony.com/installer > symfony.phar
+$ sudo mv symfony.phar /usr/local/bin/symfony
+$ chmod a+x /usr/local/bin/symfony
+
+可用2
+$ php -r "readfile('http://symfony.com/installer');" > symfony.phar
+$ sudo mv symfony.phar /usr/local/bin/symfony
+$ chmod a+x /usr/local/bin/symfony
+
+
+$symfony new myproject			//创建应用
+$ cd my_project_name/
+$ php app/console server:run		//用于测试

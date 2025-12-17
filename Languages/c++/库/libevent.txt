@@ -1,0 +1,8 @@
+使用eclipse编译libevent
+
+选择项目属性->c/c++ build/settings右边
+GCC C++Linker->Libraries右边上边填写 event
+
+如果不添加将会出现找不到函数的情况
+
+

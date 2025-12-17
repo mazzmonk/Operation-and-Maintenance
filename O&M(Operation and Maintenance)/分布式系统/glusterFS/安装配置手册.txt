@@ -1,0 +1,629 @@
+glusterFS
+glusterFS是一个分布式存储,也可以叫网络存储,和HDFS这种庞然大物不同,glusterFS比较小巧,配置相对容易,方便扩展,在容器和实体服务器上的都可以运行。
+采用卷的模式,将多个实体目录加入到卷中,整个卷做为一个总体对外服务,具有自己的传输协议,多个加入的目录有三种模式配置,多个目录都做为镜像使用,类似raid 1,多个目录分片,类似raid 0,上述混合模式。
+
+目前glusterFS属于redhat,因此官方可以找到文档和安装包。
+由于glusterFS使用了目前比较流行的网络存储设备,必须支持xfs文件格式,就centos版本来说必须是7.0以后版本,7.0以后版本默认使用xfs格式。
+
+官方文档
+https://wiki.centos.org/SpecialInterestGroup/Storage/gluster-Quickstart
+
+安装
+yum -y install centos-release-gluster
+yum --enablerepo=centos-gluster*-test -y install glusterfs-server
+
+这里有个步骤,在每台节点机器的hosts文件中添加所有节点的机器名称和ip地址对应,详细如下：
+
+从后来的实际来看,此步骤不是必须。
+
+172.17.10.3	d51a1bbe06d4
+172.17.10.4	bc9fbe126825
+172.17.43.2	f14026ba5d7a
+172.17.43.3	b136e0d22869
+172.17.43.4 f18e37502fda
+mritd/kubernetes-dashboard-amd64
+
+需要在每个节点上启动 
+#/usr/sbin/glusterd
+
+添加节点
+#gluster peer probe xxx   #此工作可以在任一节点执行,xxx是除本机以外的其他机器的ip或者机器名
+
+查看状态
+#gluster peer status 
+
+重要：这里xxx不论使用ip地址还是hostname(当前使用的ip),都会导致如下诡异的现象,显示发送了连接请求,当前只有一个加入了,或者某几个加入,或者全没加入
+
+Number of Peers: 4
+
+Hostname: 172.17.10.4
+Uuid: adecea58-0c70-4421-b4e2-bb0a0028f20f
+State: Peer in Cluster (Connected)
+
+Hostname: 172.17.43.2
+Uuid: e8e7d478-e461-4541-9cd8-63a74118644f
+State: Accepted peer request (Connected)
+
+Hostname: 172.17.43.3
+Uuid: 42c31fba-fe9e-45aa-a5c2-4d67f59360df
+State: Accepted peer request (Connected)
+
+Hostname: 172.17.43.4
+Uuid: d3433175-d79d-4f8a-ba22-a1f193e170ce
+State: Accepted peer request (Connected)
+
+出现上述现象在节点不在一个网段几率更大
+
+出现上述的情况是因为目前网络环境,在不同网段之间的机器中,会看到其他网段节点发送过来的是类似172.16.10.0这样的地址。
+解决方式是在所有的机器的/var/lib/glusterd/peers/目录中查看所有的节点对应文件,如下：
+
+uuid=42c31fba-fe9e-45aa-a5c2-4d67f59360df
+state=3
+hostname1=172.17.43.3
+
+主要是hostname1这个字段,有时候会有hostname2,但是必须保证正确
+操作步骤是停掉所有节点glusterFS进程,然后修改第一个节点的文件,保证文件中的上述字段正确,然后启动此节点,然后依次修改后续节点,有时候在其他节点上未必有所有的节点文件,没有什么关系,只需要修改有的文件即可以。
+
+需要说明的是,当集群全部完整启动以后,在此目录中应该有除自己以外的所有节点对应的配置文件。并且每个节点执行gluster peer status都会看到除自己以外的所有的所有节点。
+
+
+添加目录到集群中
+#gluster volume create gv0 replica 5 172.17.10.3:/share/mysql_data 172.17.10.4:/share/mysql_data 172.17.43.2:/share/mysql_data 172.17.43.3:/share/mysql_data 172.17.43.4:/share/mysql_data  force
+这里建议用ip地址,因为在容器中
+
+启动卷
+gluster volume start gv0
+
+
+客户端挂载
+上述的服务器端全部是安装在宿主服务器为centos7.2,同时docker容器操作系统版本也为centos7.0的容器中,内核版本为3.10.0-327.28.3.el7.x86_64
+
+客户端使用了宿主服务器为centos6.x版本,但是docker容器操作系统版本为centos7.0的容器中,内核版本为3.10.102-1.el6.elrepo.x86_64
+同时客户端使用了宿主服务器为centos7.0版本,docker容器操作系统版本为centos7.0的容器中,内核版本为3.10.102-1.el6.elrepo.x86_64
+
+挂载卷到本地目录中
+#mount -t glusterfs 172.17.43.3:/gv0 /mnt
+
+上述2种方式的挂载都没有问题
+
+具体挂载使用那个ip,没有关系,节点中任一一个ip地址都可以。
+
+
+
+
+###################################################3
+环境:
+OS: ubuntu server 19.x
+glusterFS: glusterfs 6.5
+
+hosts:
+172.20.20.11
+172.20.20.2
+172.20.20.3
+
+每台服务器上都安装
+apt-get install software-properties-common
+add-apt-repository ppa:gluster/glusterfs-6
+apt-get update
+apt-get install glusterfs-server
+
+修改/etc/glusterfs/glusterd.vol中的working-directory
+systemctl start glusterd.service
+systemctl enable glusterd.service
+
+
+# 在172.20.20.11上操作
+# gluster peer probe 172.20.20.2		//添加节点
+# gluster peer probe 172.20.20.3		//添加节点
+# gluster peer status							//查看状态
+
+# 删除节点
+# gluster peer detach 172.20.20.11
+
+# 因为有只有3台服务器,因此使用此种模式,复制,带有仲裁者
+# gluster volume create gv0 replica 3 arbiter 1 172.20.20.11:/home/blue/data/glusterfs 172.20.20.2:/home/blue/data/glusterfs 172.20.20.3:/home/blue/data/glusterfs force
+# gluster volume start gv0
+
+# 显示状态
+# gluster volume status
+
+# 删除卷
+# 	gluster volume delete gv0
+
+
+
+* 如果有节点掉线,处理步骤是先停掉卷,删除节点
+* 恢复节点,也需要先停掉卷,删除节点,然后重新加入,启动卷
+步骤: 这里假设172.20.20.11掉线
+如果有arbiter角色,如下:
+###############################################3
+gluster volume info
+ 
+Volume Name: gv0
+Type: Replicate
+Volume ID: 4a615580-738e-4039-b401-305f7d9c3513
+Status: Stopped
+Snapshot Count: 0
+Number of Bricks: 1 x (2 + 1) = 3
+Transport-type: tcp
+Bricks:
+Brick1: 172.20.20.11:/home/blue/data/glusterfs
+Brick2: 172.20.20.2:/home/blue/data/glusterfs
+Brick3: 172.20.20.3:/home/blue/data/glusterfs (arbiter)
+Options Reconfigured:
+transport.address-family: inet
+nfs.disable: on
+performance.client-io-threads: off
+##################################################
+
+1. 先停掉卷
+# gluster volume stop gv0
+
+2. 删除仲裁者(arbiter),这里的replica 2,必须参考开始时建立卷的模式,比如这里用的是replica 3 arbiter 1,就是优先将仲裁者删掉,同时是将replica缩减到去除arbiter的数量
+# gluster volume remove-brick gv0 replica 2  172.20.20.3:/home/blue/data/glusterfs force
+
+3. 删除掉线的条带
+# gluster volume remove-brick gv0 replica 1  172.20.20.11:/home/blue/data/glusterfs force
+
+4. 删除掉掉线的节点
+# gluster peer detach 172.20.20.3 force			//此节点不稳定,因此删掉
+# gluster peer detach 172.20.20.11 foce
+
+5. 添加卷
+# gluster volume add-brick gv0 172.20.20.11:/home/blue/data/glusterfs force			//新的172.20.20.11上线,重新加入,加入之前,先安装glusterd
+
+6. 启动卷
+# gluster volume start gv0
+
+其他一些命令:
+# 把172.20.20.11:/home/blue/data/glusterfs替换为172.20.20.3:/home/blue/data/glusterfs
+# 开始替换
+# gluster volume replace-brick gv0 172.20.20.11:/home/blue/data/glusterfs 172.20.20.3:/home/blue/data/glusterfs start
+
+# 查看是否替换完成
+# gluster volume replace-brick gv0 172.20.20.11:/home/blue/data/glusterfs 172.20.20.3:/home/blue/data/glusterfs status
+
+# 完成以后,使用commit命令结束任务
+# gluster volume replace-brick gv0 172.20.20.11:/home/blue/data/glusterfs 172.20.20.3:/home/blue/data/glusterfs commit
+
+# 终止brick替换
+# gluster volume replace-brick gv0 172.20.20.11:/home/blue/data/glusterfs 172.20.20.3:/home/blue/data/glusterfs abort
+
+
+# 均衡负载
+# gluster volume rebalance gv0 start
+
+# 强制均衡
+# gluster volume rebalance gv0 start force
+
+# 查看均衡状态
+# gluster volume rebalance gv0 status
+
+# 停止均衡
+# gluster volume rebalance gv0 stop
+
+# 修复损坏的文件
+# gluster volume heal gv0
+
+# 修复所有的文件(检查健康文件是否损坏,如果损坏进行修复)
+# gluster volume heal gv0 full
+
+# 查看需要修复的文件信息
+# gluster volume heal gv0 info
+
+# 查看修复的文件信息
+# gluster volume heal gv0 info healed
+
+# 查看没有修复的文件信息
+# gluster volume heal gv0 info failed
+
+# 查看脑裂文件信息(如果有脑裂文件,直接把坏的脑裂文件删除进行文件修复即可,据说3.3以后的版本有个赢链接,在修复时仍然会把脑裂文件恢复,可以把链接文件找到一并删除或是直接把目录下所有文件删除)
+# gluster volume heal gv0 info split-brain 
+
+# 状态查看
+# gluster volume status all
+# gluster volume status gv0 details
+# gluster volume status gv0 clients
+# gluster volume status gv0 mem
+# gluster volume status gv0 inode
+# gluster volume status gv0 callpool
+
+
+# 性能查看
+# 此功能需要随时用随时开,应该是当开启的时候,有性能损耗
+# gluster volume profile gv0 start
+# gluster volume profile gv0 info
+# gluster volume profile gv0 stop
+
+输出例子:
+####################################
+gluster volume profile gv0 info
+Brick: 172.20.20.2:/home/blue/data/glusterfs
+-------------------------------------------------
+Cumulative Stats:
+   Block Size:                    4b+                   8b+                 512b+ 
+ No. of Reads:                    0                      0                     0 
+No. of Writes:                   60                    21                    21 
+ 
+   Block Size:               4096b+                8192b+              524288b+ 
+ No. of Reads:                    0                    21                     1 
+No. of Writes:                   42                     0                     0 
+ 
+ %-latency   Avg-latency   Min-Latency   Max-Latency   No. of calls         Fop
+ ---------   -----------   -----------   -----------   ------------        ----
+      0.00       0.00 us       0.00 us       0.00 us             23      FORGET
+      0.00       0.00 us       0.00 us       0.00 us             23     RELEASE
+      0.00       0.00 us       0.00 us       0.00 us             70  RELEASEDIR
+     13.43     177.81 us      72.54 us     246.77 us              3        STAT
+     86.57     143.21 us      36.14 us     290.35 us             24      LOOKUP
+ 
+    Duration: 19958 seconds
+   Data Read: 912208 bytes
+Data Written: 183372 bytes
+ 
+Interval 9 Stats:
+ %-latency   Avg-latency   Min-Latency   Max-Latency   No. of calls         Fop
+ ---------   -----------   -----------   -----------   ------------        ----
+     12.59     143.32 us      72.54 us     214.10 us              2        STAT
+     87.41     124.37 us      36.14 us     217.22 us             16      LOOKUP
+ 
+    Duration: 406 seconds
+   Data Read: 0 bytes
+Data Written: 0 bytes
+ 
+Brick: 172.20.20.11:/home/blue/data/glusterfs
+--------------------------------------------------
+Cumulative Stats:
+   Block Size:               4096b+               65536b+              131072b+ 
+ No. of Reads:                    0                     2                   109 
+No. of Writes:                   42                     0                     0 
+ 
+   Block Size:             524288b+ 
+ No. of Reads:                    0 
+No. of Writes:                    1 
+ %-latency   Avg-latency   Min-Latency   Max-Latency   No. of calls         Fop
+ ---------   -----------   -----------   -----------   ------------        ----
+      0.00       0.00 us       0.00 us       0.00 us              2     RELEASE
+      0.00       0.00 us       0.00 us       0.00 us             70  RELEASEDIR
+     10.45     250.11 us     247.70 us     253.30 us              3       FSTAT
+     12.01     287.45 us     272.48 us     296.28 us              3        STAT
+     30.40     181.93 us     165.18 us     201.65 us             12          LK
+     47.15     282.21 us     273.64 us     307.77 us             12      LOOKUP
+ 
+    Duration: 19958 seconds
+   Data Read: 14434304 bytes
+Data Written: 901120 bytes
+ 
+Interval 9 Stats:
+ %-latency   Avg-latency   Min-Latency   Max-Latency   No. of calls         Fop
+ ---------   -----------   -----------   -----------   ------------        ----
+     10.50     250.50 us     247.70 us     253.30 us              2       FSTAT
+     11.86     283.03 us     272.48 us     293.58 us              2        STAT
+     29.93     178.50 us     165.18 us     193.26 us              8          LK
+     47.71     284.58 us     273.64 us     307.77 us              8      LOOKUP
+ 
+    Duration: 406 seconds
+   Data Read: 0 bytes
+Data Written: 0 bytes
+
+####################################
+
+
+# 查看条带性能
+# 查看全部条带
+# gluster volume top gv0 open		
+
+# 查看172.20.20.11上的条带,打开的文件
+# gluster volume top gv0 open brick 172.20.20.11:/home/blue/data/glusterfs		
+
+# gluster volume top gv0 open brick 172.20.20.11:/home/blue/data/glusterfs list-cnt 10
+
+# 查看172.20.20.11上的条带,读文件
+# gluster volume top gv0 read brick 172.20.20.11:/home/blue/data/glusterfs list-cnt 10
+
+# 查看172.20.20.11上的条带,写文件
+# gluster volume top gv0 write brick 172.20.20.11:/home/blue/data/glusterfs list-cnt 10
+
+# 查看172.20.20.11上的条带,打开目录
+# gluster volume top gv0 opendir brick 172.20.20.11:/home/blue/data/glusterfs list-cnt 10
+
+# 查看172.20.20.11上的条带,读目录
+# gluster volume top gv0 readdir brick 172.20.20.11:/home/blue/data/glusterfs list-cnt 10
+
+# gluster volume top gv0 read-perf bs 256 count 1
+# gluster volume top gv0 read-perf bs 256 count 1 brick 172.20.20.11:/home/blue/data/glusterfs list-cnt 10
+# gluster volume top gv0 write-perf bs 256 count 1 brick 172.20.20.11:/home/blue/data/glusterfs list-cnt 10
+
+
+
+# client端
+# apt-get install libfuse2 libfuse-dev
+# pkg-config --modversion fuse
+
+
+
+
+
+
+
+卷模式分为如下几种:
+详细链接:
+https://docs.gluster.org/en/latest/Administrator%20Guide/Setting%20Up%20Volumes/
+
+1.Distributed (分布式模式)	-	将文件以hash算法随机分布到一台服务器节点中存储
+2. Replicated(复制模式),类似raid 1
+3. Distributed Replicated(分布式复制模式)
+4. Dispersed
+5. Distributed Dispersed
+6. Striped [Deprecated]	-	将文件切割成x份,分别存储在x个节点中,类似raid 0
+7. Distributed Striped [Deprecated] 
+8. Distributed Striped Replicated [Deprecated] 
+9. Striped Replicated [Deprecated]
+
+
+gluster volume create [stripe | replica | disperse] [transport tcp | rdma | tcp,rdma]
+例子:
+gluster volume create test-volume server3:/exp3 server4:/exp4
+
+1. 创建Distributed(分布式)卷
+gluster volume create [transport tcp | rdma | tcp,rdma]
+例子:
+# gluster volume create test-volume server1:/exp1 server2:/exp2 server3:/exp3 server4:/exp4
+
+带有选项,通过 InfiniBand 创建
+# gluster volume create test-volume transport rdma server1:/exp1 server2:/exp2 server3:/exp3 server4:/exp4
+
+
+2. 创建replicated(复制)卷
+gluster volume create [replica ] [transport tcp | rdma | tcp,rdma]
+例子:
+# gluster volume create test-volume replica 2 transport tcp server1:/exp1 server2:/exp2
+
+注意的是不能在同一个机器上存在2个副本,例子: server1:/brick1 server1:/brick2
+
+带有仲裁配置的复制卷,可以阻止脑裂的情况
+# gluster volume create  <VOLNAME>  replica 3 arbiter 1 host1:brick1 host2:brick2 host3:brick3
+
+distributed-replicate volumes也可以使用此种模式
+
+
+3. 创建striped(条带)卷,类似raid 0
+gluster volume create [stripe ] [transport tcp | rdma | tcp,rdma]
+例子:
+# gluster volume create test-volume stripe 2 transport tcp server1:/exp1 server2:/exp2
+
+
+4. 创建Distributed Striped(分布式条带)卷
+gluster volume create [stripe ] [transport tcp | rdma | tcp,rdma]
+例子:
+# gluster volume create test-volume stripe 4 transport tcp server1:/exp1 server2:/exp2 server3:/exp3 server4:/exp4 server5:/exp5 server6:/exp6 server7:/exp7 server8:/exp8
+
+
+5. 创建Distributed Replicated(分布式复制)卷,至少4个节点
+gluster volume create [replica ] [transport tcp | rdma | tcp,rdma]
+例子:
+# 4个节点的分布式卷,带有2个镜像
+# gluster volume create test-volume replica 2 transport tcp server1:/exp1 server2:/exp2 server3:/exp3 server4:/exp4
+
+# 6个节点的分布式卷,带有2个镜像
+# gluster volume create test-volume replica 2 transport tcp server1:/exp1 server2:/exp2 server3:/exp3 server4:/exp4 server5:/exp5 server6:/exp6
+
+和replica卷具有相同的问题,不能在同一个节点上出现2个副本,例子: server1:/brick1 server1:/brick2
+
+
+6. 创建Distributed Striped Replicated(分布式条带复制)卷,至少8个节点
+gluster volume create [stripe ] [replica ] [transport tcp | rdma | tcp,rdma]
+例子:
+2个条带,2个镜像
+# gluster volume create test-volume stripe 2 replica 2 transport tcp server1:/exp1 server2:/exp2 server3:/exp3 server4:/exp4 server5:/exp5 server6:/exp6 server7:/exp7 server8:/exp8
+
+
+7. 创建Striped Replicated(条带复制)卷,至少4个节点
+gluster volume create [stripe ] [replica ] [transport tcp | rdma | tcp,rdma]
+例子:
+4个节点创建2个条带,2个镜像
+# gluster volume create test-volume stripe 2 replica 2 transport tcp server1:/exp1 server2:/exp2 server3:/exp3 server4:/exp4
+
+6个节点创建3个条带,2个镜像
+# gluster volume create test-volume stripe 3 replica 2 transport tcp server1:/exp1 server2:/exp2 server3:/exp3 server4:/exp4 server5:/exp5 server6:/exp6
+
+
+8. 创建Dispersed(疏散)卷
+gluster volume create [disperse [<count>]] [redundancy <count>] [transport tcp | rdma | tcp,rdma]
+例子:
+# gluster volume create test-volume disperse 4 server{1..4}:/bricks/test-volume
+
+
+9. 创建Distributed Dispersed卷
+gluster volume create disperse <count> [redundancy <count>] [transport tcp | rdma | tcp,rdma]
+例子:
+# gluster volume create <volname> disperse 3 server1:/brick{1..6}
+
+
+Glusterfs调优
+
+# 开启 指定 volume 的配额
+$ gluster volume quota k8s-volume enable
+# 限制 指定 volume 的配额
+$ gluster volume quota k8s-volume limit-usage / 1TB
+# 设置 cache 大小, 默认32MB
+$ gluster volume set k8s-volume performance.cache-size 4GB
+# 设置 io 线程, 太大会导致进程崩溃
+$ gluster volume set k8s-volume performance.io-thread-count 16
+# 设置 网络检测时间, 默认42s
+$ gluster volume set k8s-volume network.ping-timeout 10
+# 设置 写缓冲区的大小, 默认1M
+$ gluster volume set k8s-volume performance.write-behind-window-size 1024MB
+
+
+# 直接在kubernetes挂载glusterfs
+
+K8S中的Gluster FS的使用,需要首先定义一个 Endpoint + Service形式的代理,来定义 Gluster FS 集群,然后就可以通过持久卷或者用 Pod 直接加载了
+
+# 建立Endpoint
+# port具体值没卵用,随便写(1-65535范围)
+# ip为glusterfs节点地址
+# 这里是172.20.20.11/172.20.20.2/172.20.20.3
+
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: glusterfs-cluster
+subsets:
+- addresses:
+  - ip: 172.20.20.11
+  ports:
+  - port: 1990
+- addresses:
+  - ip: 172.20.20.2
+  ports:
+  - port: 1990
+- addresses:
+  - ip: 172.20.20.3
+  ports:
+  - port: 1990
+
+
+# 建立service
+# port具体值没卵用,随便写(1-65535范围)
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: glusterfs-cluster
+spec:
+  ports:
+  - port: 1990
+
+
+# 建立pv
+# path是glusterfs中的卷的名字
+# endpoints是上面的Endpoints的名字
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: gluster-dev-volume
+spec:
+  capacity:
+    storage: 8Gi
+  accessModes:
+    - ReadWriteMany
+  glusterfs:
+    endpoints: "glusterfs-cluster"
+    path: "gv0"
+    readOnly: false
+
+
+# 建立用pvc,用于某些具体的应用,这里用于nginx应用,后续将挂载此pvc
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: glusterfs-nginx
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi
+
+
+# 使用pvc
+# claimName是上述建立的pvc
+# mountPath是容器里挂载点
+
+---
+apiVersion: extensions/v1beta1 
+kind: Deployment 
+metadata: 
+  name: mynginx
+spec: 
+  replicas: 3
+  template: 
+    metadata: 
+      labels: 
+        name: mynginx 
+    spec: 
+      containers: 
+        - name: mynginx 
+          image: nginx:latest
+          imagePullPolicy: IfNotPresent
+          ports: 
+            - containerPort: 80
+          volumeMounts:
+            - name: gluster-volume
+              mountPath: "/usr/share/nginx/html"
+      volumes:
+      - name: gluster-volume
+        persistentVolumeClaim:
+          claimName: glusterfs-nginx
+
+
+
+注意:
+1. 将组挂载到容器中的目录上,当多个容器挂载的时候,必须注意建立的目录/文件是否有冲突
+2. 如果要在本地操作,可以用glusterfs客户端挂载到本地目录
+
+
+heketi
+
+#  容器操作
+docker exec -it  dd400f08a511 heketi-cli  --server http://172.20.20.11:8080 cluster create
+
+docker exec -it  dd400f08a511 heketi-cli  --server http://172.20.20.11:8080 node add --cluster "80f659b01d7ee88d5176060738c3c57d" --management-host-name 172.20.20.11 --storage-host-name 172.20.20.11 --zone 1
+docker exec -it  dd400f08a511 heketi-cli  --server http://172.20.20.11:8080 node add --cluster "80f659b01d7ee88d5176060738c3c57d" --management-host-name 172.20.20.2 --storage-host-name 172.20.20.2 --zone 1
+docker exec -it  dd400f08a511 heketi-cli  --server http://172.20.20.11:8080 node add --cluster "80f659b01d7ee88d5176060738c3c57d" --management-host-name 172.20.20.3 --storage-host-name 172.20.20.3 --zone 1
+
+# 查看的device id
+docker exec -it  dd400f08a511 heketi-cli  --server http://172.20.20.11:8080 node list
+
+# 添加device,device ID通过上述的步骤查阅
+docker exec -it  dd400f08a511 heketi-cli  --server http://172.20.20.11:8080 device add --name=/home/blue/data/glusterfs --node 28e496f36b7659e0cde786e456c17c67 
+
+docker exec -it  dd400f08a511 heketi-cli  --server http://172.20.20.11:8080 device add --name=/home/blue/data/glusterfs --node 5696ed935ac7fcbc61cb1c22882315a9
+
+docker exec -it  dd400f08a511 heketi-cli  --server http://172.20.20.11:8080 device add --name=/home/blue/data/glusterfs --node 
+b0817de8f9339c479d46a6a02c549ffd
+
+
+数据保存在中,可以尝试导入,看上述的内容是否保存
+/var/lib/heketi/heketi.db
+
+# standalone模式
+
+# yum install centos-release-gluster6.noarch
+# yum install heketi
+# yum install heketi-client
+
+# ssh-keygen -f /etc/heketi/heketi_key -t rsa -N ''
+# ssh-copy-id -i /etc/heketi/heketi_key.pub root@gluster23.rhs
+# ssh-copy-id -i /etc/heketi/heketi_key.pub root@gluster24.rhs
+# ssh-copy-id -i /etc/heketi/heketi_key.pub root@gluster25.rhs
+# chown heketi:heketi /etc/heketi/heketi_key*
+
+
+heketi可以管理glusterfs,但是当glusterfs是使用目录作为卷的时候,不支持这种模式
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

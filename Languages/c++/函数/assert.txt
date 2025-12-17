@@ -1,0 +1,61 @@
+assert（断言）的使用
+
+程序一般分为Debug 版本和Release 版本，Debug 版本用于内部调试，Release 版本发行给用户使用。（这个概念可能不大好理解，想想VC下，调试时有个选项，一个是debug，一个是release）
+
+assert(表达式);     的意思是：当表达式为真时，程序继续运行，如果表达市为假，那程序就会停止运行，并提示错误信息。
+
+注意：assert是一个宏，只在debug版本中起作用，在release版本中，该语句是不起任何作用的。
+
+先简单的看一个例子吧！
+以下为一个使用了断言的C源程序：
+#include <stdio.h>
+#include <assert.h>
+
+void test(int *p)
+{
+  assert(p != NULL);
+  printf("%d\n", *p);
+}
+
+int main(void)
+{
+  test(NULL);
+}
+
+
+编译及运行结果：
+Qdieyou@qdieyou /cygdrive/e/gcc
+$ gcc -o assert assert.c
+
+Qdieyou@qdieyou /cygdrive/e/gcc
+$ ./assert
+
+assertion "p != NULL" failed: file "assert.c", line 6
+19331 [sig] assert 3288 e:\gcc\assert.exe: *** fatal error - called with threa
+dlist_ix -1
+Hangup
+
+
+程序说明：由于我们在main函数中传了NULL指针值给test函数，在test函数执行到assert(p != NULL);发现表达式不为真，就终止了程序的运行，并提示错误的行数信息。
+
+注意：由于assert宏只在debug版本中起作用，所以assert一般只用于内部函数对参数有效性进行检查，如果该函数作为一个外部接口来使用时，一般需要利用if，else语句进行防错设计。——Qdieyou
+
+以下摘自《C高效编程》
+
+【规则6-5-1】使用断言捕捉不应该发生的非法情况。不要混淆非法情况与错误情况之间的区别，后者是必然存在的并且是一定要作出处理的。
+【规则6-5-2】在函数的入口处，使用断言检查参数的有效性（合法性）。
+【建议6-5-1】在编写函数时，要进行反复的考查，并且自问：“我打算做哪些假定？”一旦确定了的假定，就要使用断言对假定进行检查。
+【建议6-5-2】一般教科书都鼓励程序员们进行防错设计，但要记住这种编程风格可能会隐瞒错误。当进行防错设计时，如果“不可能发生”的事情的确发生了，则要使用断言进行报警。
+
+
+c++的断言很容易关闭.
+//#define NDEBUG
+#include <cassert>
+其中NDEBUG的#define被注释掉了.要关闭断言,只要在#define <<cassert>>行之上加NDEBUG的#define即可:
+#define NDEBUG
+#include <cassert>
+这样就关闭了代码中所有的assert.不必删除assert语句本身.
+
+
+
+

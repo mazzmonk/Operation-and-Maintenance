@@ -1,0 +1,19 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: txxy-redis
+  labels:
+    name: txxy-redis
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        name: txxy-redis
+    spec:
+      containers:
+      - name: txxy-redis
+        image: 192.168.6.83:5000/tyyx/redis:latest
+        ports:
+        - containerPort: 6379
+

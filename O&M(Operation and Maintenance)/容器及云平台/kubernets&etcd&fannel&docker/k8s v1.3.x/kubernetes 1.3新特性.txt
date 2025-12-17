@@ -1,0 +1,223 @@
+Kubernetes 1.3新特性
+本次分析的kubernetes版本号：v1.3.0。
+scheduler模块
+
+新增了kube-api-content-type参数，表示scheduler模块发送给api-server的请求类型，默认值是“application/vnd.kubernetes.protobuf”。
+
+新增了hard-pod-affinity-symmetric-weight参数，表示POD调度规则亲和力的权重，取值范围从0到100。
+
+新增了failure-domains参数，这是一个字符串参数，表示POD调度时亲和力参数。在调度POD的时候，如果两个POD有相同的亲和力参数，那么这两个POD会被调度在相同的节点上；如果两个POD有不同的亲和力参数，那么这两个POD不会在相同的节点上。
+
+在结构体Affinity中增加了两个参数PodAffinity和PodAntiAffinity，这两个参数会使用到failure-domains参数输入值。
+type Affinity struct {
+
+   NodeAffinity *NodeAffinity `json:”nodeAffinity,omitempty” protobuf:”bytes,1,opt,name=nodeAffinity”`
+
+   PodAffinity *PodAffinity `json:”podAffinity,omitempty” protobuf:”bytes,2,opt,name=podAffinity”`
+
+   PodAntiAffinity *PodAntiAffinity `json:”podAntiAffinity,omitempty” protobuf:”bytes,3,opt,name=podAntiAffinity”`
+
+} 
+
+在结构体Resource中增加了对Nvidia GPU的支持，也就是说在调度的时候，也将Nvidia GPU作为资源进行调度。
+type Resource struct {
+
+   MilliCPU  int64
+
+   Memory    int64
+
+   NvidiaGPU int64
+
+} 
+
+api-server模块
+
+新增了storage-media-type参数，用来表示存储上存放对象的类型，默认是application/json。
+
+新增了enable-swagger-ui参数，可以通过访问apiServer上面的“/swagger-ui”来查看所有api。Swagger 是一个规范和完整的框架，用于生成、描述、调用和可视化 RESTful 风格的 Web 服务。Swagger的目标是对REST API定义一个标准的和语言无关的接口，可让人和计算机无需访问源码、文档或网络流量监测就可以发现和理解服务的能力。
+
+新增了storage-backend参数，用来表示后台存储类型，包括“etcd2”和“etcd3”，默认是“etcd2”。
+
+新增了deserialization-cache-size参数，用来表示内存中缓存的jason对象个数。
+
+新增了webhook相关参数authorization-webhook-cache-authorized-ttl和authorization-webhook-cache-unauthorized-ttl，用来表示进行webhook认证信息超时时长。
+
+新增了authorization-rbac-super-user参数，如果设置了这个参数，那么当authorization-mode参数设置为RBAC时，authorization-rbac-super-user参数的用户就会作为超级用户使用系统，不会通过RBAC进行权限和授权校验。
+
+新增了enable-garbage-collector参数，用来表示是否启用垃圾回收功能，这是一个alpha特性，这个参数的值必须同controller-manager模块对应参数设置成一样。
+controller-manager模块
+
+新增了node-cidr-mask-size参数，用来表示kubernetes管理集群中节点的cidr掩码长度，默认是24位。
+
+新增了configure-cloud-routes参数，用来表示是否使用kubernetes管理的IP来设置公有云提供商的路由IP，默认是true。
+
+新增了enable-dynamic-provisioning参数，如果这个参数设置成true，那么如果kubernetes使用的存储环境支持动态预配置，那么就启用这个存储环境的动态预配置功能。动态预配置是指存储环境可以根据kubernetes自身所预期的未来需求合理分配虚拟磁盘存储，而无需预先分配专用的物理磁盘存储。通过这种方法，可以有效的利用存储环境中的存储容量，达到按需使用存储空间的目的。
+
+新增了controller-start-interval参数，用来表示下面各个控制管理程序的启动间隔，默认间隔是0秒。
+
+新增了enable-garbage-collector参数，用来表示是否启用垃圾回收功能，这是一个alpha特性，这个参数的值必须同api-server模块对应参数设置成一样。
+
+新增了service-cluster-ip-range参数，用来定义kubernetes集群中service使用的IP范围。
+EndpointController
+
+新增了全局变量PodStoreSyncedPollPeriod，默认100毫秒，用来等待POD缓存同步，之后在进行service同步。
+
+新增了全局变量TolerateUnreadyEndpointsAnnotation，如果用于PetSet的POD还没有准备好的时候，先创建了endpoints，那么这个时候POD其实是不可用的，所以需要通过这个变量进行标识。
+
+在结构体EndpointController中新增了变量internalPodInformer和podStoreSynced，其中internalPodInformer表示使用自定义的内存缓存来存放消息，而podStoreSynced返回true的时候表示POD缓存至少已经同步一次了。
+type EndpointController struct {
+
+   client *clientset.Clientset
+
+   serviceStore cache.StoreToServiceLister
+
+   podStore     cache.StoreToPodLister
+
+   internalPodInformer framework.SharedIndexInformer
+
+   queue *workqueue.Type
+
+   serviceController *framework.Controller
+
+   podController     framework.ControllerInterface
+
+   podStoreSynced func() bool
+
+} 
+
+
+ReplicationManager
+
+全局变量FullControllerResyncPeriod的默认值从30秒调整到了10分钟，由于kubernetes已经越来越健壮了，所以为了保证系统稳定而设置的同步周期越来越没有存在的价值了。
+
+结构体ReplicationManager中新增了变量internalPodInformer，表示使用自定义的内存缓存来存放消息。
+GCController
+
+在v1.3中没有什么变化。
+NodeController
+
+新增了全局变量podCIDRUpdateRetry，用来设置更新Node.Spec.PodCIDR的重试次数，默认为5次。
+
+新增了全局变量cidrUpdateWorkers和cidrUpdateQueueSize，分别表示NodeController更新NodeSpec的线程数和队列容量，默认值分别是10和5000。
+
+结构体NodeController中，新增了变量cidrAllocator，用来记录分配给NODE的cidr；还新增了变量networkSegmentationMode，在1.3中这个变量起到一个临时作用，当这个启用这个变量的时候，NodeController不对出于unhealthy状态的NODE进行POD逃离操作，当NodeController发现所有的NODE状态都是NotReady的时候，会自动启用这个变量，当NodeController发现所有NODE状态都是healthy的时候，会置这个变量为无效。
+ServiceController
+
+在v1.3中没有什么变化。
+RouteController
+
+新增了三个全局变量，maxConcurrentRouteCreations、maxRetries、updateNodeStatusMaxRetries，分别用来表示CreateRoute API的最大调用并发数、创建路由最大重试次数、NODE状态更新最大重试次数。
+
+ResourceQuotaController
+
+在v1.3中没有什么变化。
+
+HorizontalController
+
+在v1.3中没有什么变化。
+
+DaemonSetsController
+
+结构体DaemonSetsController中增加了变量eventRecorder，用于记录DaemonSetsController的日志事件。
+
+JobController
+
+结构体JobController中增加了internalPodInformer变量，表示使用自定义的内存缓存来存放消息。结构体中还删除了podController变量。
+
+DeploymentController
+
+在v1.3中没有什么变化。
+
+ReplicaSetController
+
+在v1.3中没有什么变化。
+
+PersistentVolumeController
+
+新增了enable-dynamic-provisioning参数，作用同controller-manager模块的enable-dynamic-provisioning参数，上面已经介绍过了。
+
+在v1.3中将PersistentVolumeProvisionerController、PersistentVolumeClaimBinder、PersistentVolumeRecycler删除掉，更新成了PersistentVolumeController。
+
+在结构体VolumeConfigFlags中新增了EnableDynamicProvisioning变量，根据enable-dynamic-provisioning参数取值。在初始化NewPersistentVolumeControllerOptions方法中，EnableDynamicProvisioning变量被设置成true。PVClaimBinderSyncPeriod变量在初始化的时候从10分钟调整到了15秒钟。
+
+在1.2的时候使用的Builder和Cleaner，在1.3的时候都修改成了Mounter和Unmounter。
+
+NamespaceController
+
+在v1.3中没有什么变化。
+
+PetSetController
+
+在v1.3中新增加了PetSetController。这个新的Controller满足了下面这些需求：重启POD永久保存host名称；提供每个容器的持久化存储，即使POD被删除，数据也不会丢失；提供一个稳定的、唯一标识的存储实例；提供一致性的网络标识，即使POD被删除，其他成员也可以发现以前的实例；通过DNS实现从节点到节点的迁移。
+Kubelet模块
+
+在v1.3中新增了runtime-request-timeout参数，表示在执行pull, logs, exec and attach等请求的超时时间，默认值是2分钟，如果超过2分钟，那么将取消请求，然后进行重试。
+
+增加了exit-on-lock-contention参数，表示在lock-file发生冲突时，kubelet是否退出。
+
+增加了rkt-api-endpoint参数，表示如果使用的容器不是Docker，而是CoreOS的RKT时，RKT入口API。
+
+增加了experimental-nvidia-gpus参数，表示节点上面的NVIDIA GPU数量，目前只支持0和1两个参数，默认是0，表示没有NVIDIA GPU。
+
+增加了kube-api-content-type参数，表示kubelet发送给api-server的请求类型。
+
+增加了eviction-hard参数，表示一个上限值，当达到这个上限值时，就会触发POD回收。
+
+增加了eviction-soft参数，表示一个上限值，当达到这个上限值时，就会触发POD回收的宽限期，如果超过宽限期，那么触发POD回收。
+
+增加了eviction-soft-grace-period参数，表示宽限期，当到达eviction-soft参数设置的上限值，并且超过eviction-soft-grace-period参数设置的宽限期，那么触发POD回收。
+
+增加了eviction-pressure-transition-period参数，kubenete在回收的时候需要获取这个参数设置指定时长内的处理条件。
+
+增加了eviction-max-pod-grace-period参数，表示最大宽限期，参数eviction-soft-grace-period不能够超过这个参数设置的最大值。
+
+增加了pods-per-core参数，运行在kubelet节点上每核CPU上最大的POD数量，如果配置了这个参数，那么这个kubelet节点上运行的POD数量不能超过这个参数值，这个参数可以设置成0，表示取消最大的POD数量限制。
+
+Kube-proxy模块
+
+新增了cluster-cidr参数，用来通过linux bridge模式设置kubernetes集群中POD的IP地址范围。
+
+新增了kube-api-content-type参数，表示scheduler模块发送给api-server的请求类型，默认值是“application/vnd.kubernetes.protobuf”。
+Kubemark模块
+
+增加了对pods-per-core参数的仿真测试功能。
+第三方卷管理插件
+
+在v1.3中增加了vsphere_volume卷管理。通过结构体VSphereConfig可以看出来，kubernetes的vsphere卷管理插件可以直接连接到VMware vCenter上。
+type VSphereConfig struct {
+
+   Global struct {
+
+          User         string `gcfg:”user”`
+
+          Password     string `gcfg:”password”`
+
+          VCenterIP    string `gcfg:”server”`
+
+          VCenterPort  string `gcfg:”port”`
+
+          InsecureFlag bool   `gcfg:”insecure-flag”`
+
+          Datacenter   string `gcfg:”datacenter”`
+
+          Datastore    string `gcfg:”datastore”`
+
+          WorkingDir   string `gcfg:”working-dir”`
+
+   }
+
+   Network struct {
+
+          PublicNetwork string `gcfg:”public-network”`
+
+   }
+
+   Disk struct {
+
+          SCSIControllerType string `dcfg:”scsicontrollertype”`
+
+   }
+
+}  
+
+如果kubernetes是部署在vsphere上面的虚拟机里面，那么可以通过给虚拟机挂载硬盘的方式来给kubernetes添加卷。

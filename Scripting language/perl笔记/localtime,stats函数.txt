@@ -1,0 +1,49 @@
+stat()函数返回一个数组，下面是数组各个元素的含义：
+0     dev      设备号 驱动器号（C：通常是2，D：通常是3，等等）
+1     ino      索引节号 总是0
+2     mode     文件的方式 无
+3     nlink    链接号 通常为0；Windows NT；文件系统允许链接
+4     uid      文件所有者的用户ID（UID）总是0
+5     gid      文件所有者的组ID（GID）总是0
+6     rdev     特殊文件信息 驱动器号（重复）
+7     size     文件大小（以字节计）文件大小（以字节计）
+8     atime    上次访问的时间 上次访问的时间
+9     mtime    上次修改的时间 上次修改的时间
+10    ctime    Inode修改时间 文件的创建时间
+11    blksz    磁盘块的大小 总是0
+12    blocks   文件中的块的数量 总是0
+
+例子：
+例:获取文件时间
+ 
+my @array = stat("mysql.tar.gz"); 
+   print "$array[9]\n";
+
+
+
+localtime函数
+localtime函数，根据它所在的上下文，可以用两种完全不同的方法来运行。在标量上下文中，localtime函数返回一个格式化很好的当前时间字符串。例如，print scalar (localtime)这个代码，它输出的结果将类似于Thu Sep 16 23:00:06 1999。在列表上下文中，localtime将返回能够描述当前时间的一个元素列表：
+($sec,$min,$hour,$mday,$mon,$year_off,$wday,$yday,$isdat) = localtime;
+字段   值
+$sec    秒，0 ~ 59
+$min    分，0 ~ 59
+$hour    时，0 ~ 23
+$mday    月份中的日期， 1 ~ 2 8、2 9、3 0或3 1
+$mon    年份中的月份， 0 ~ 11（这里请特别要小心）
+$year_off   1900年以来的年份。将1900加上这个数字，得出正确的4位数年份
+$wday    星期几，0 ~ 6
+$yday    一年中的第几天，0 ~ 364或365
+$isdst    如果夏令时有效，则为真
+不要将19附加给localtime返回的年份。它返回的年份是1900的偏移量。比如，在1999年，年份是99;在2000年中,它是100,将1999与该值相加，可以在2000年以后正确地产生年份。perl不存在2000年问题，但是，如果简单地将19(或20)附加给该年份，就会导致程序中产生2000年问题。
+ 
+my  ($sec,$min,$hour,$mday,$mon,$year) = (localtime)[0..5];
+($sec,$min,$hour,$mday,$mon,$year) = (
+    sprintf("%02d", $sec),
+    sprintf("%02d", $min),
+    sprintf("%02d", $hour),
+    sprintf("%02d", $mday),
+    sprintf("%02d", $mon + 1),
+    $year + 1900
+);
+print "$year-$mon-$mday $hour:$min:$sec\n";
+得到的结果是：2009-01-21 15:44:23

@@ -1,0 +1,2231 @@
+此文档汇总了经过至少15个工作日的测试,排错,搭建,最终完成上线,内容包括四个部分
+1. docker容器
+2. kubernetes,coredns
+3. etcd,flannel
+4. FAQ
+5. 配置文件及启动程序详细内容
+
+软件环境:
+操作系统: ubuntu 19.04 server
+内核版本: 5.0.0-20-generic
+
+1. docker容器
+容器目前的架构与早期的1.13版本相差很多,分成了多个模块,每个模块负责不同的工作
+
+组件版本: 
+docker-18.09.6.tgz
+
+1.1 docker容器配置,启动
+分为2个组件启动,containerd,dockerd
+dockerd 主要监听外部请求,containerd来实际的容器启动,消除容器
+
+生成默认的containerd的配置文件
+$ containerd config default 
+
+根据上述的默认配置文件,修改为如下:
+************************************************************************
+root = "$HOME/apps/docker/var/lib/docker/containerd"
+state = "$HOME/apps/docker/var/run/docker/containerd"
+disabled_plugins = ["cri"]
+oom_score = 0
+
+[grpc]
+  address = "$HOME/apps/docker/var/run/docker/containerd/containerd.sock"
+  uid = 0
+  gid = 0
+  max_recv_message_size = 16777216
+  max_send_message_size = 16777216
+
+[debug]
+  address = "$HOME/apps/docker/var/run/docker/containerd/containerd-debug.sock"
+  uid = 0
+  gid = 0
+  level = "info"
+
+[metrics]
+  address = ""
+  grpc_histogram = false
+
+[cgroup]
+  path = ""
+
+[plugins]
+  [plugins.linux]
+    shim = "containerd-shim"
+    runtime = "docker-runc"
+    runtime_root = "$HOME/apps/docker/var/lib/docker/runtime-runc/"
+    no_shim = false
+    shim_debug = false
+
+************************************************************************
+
+根据上述的对应配置文件对应的dockerd的启动
+************************************************************************
+$HOME/apps/docker/bin/containerd \\
+--config $HOME/apps/docker/config.toml >> $HOME/apps/docker/containerd.log 2>&1 & 
+
+
+$HOME/apps/docker/bin/dockerd \\
+--bip=\${BIP} \\
+--containerd=$HOME/apps/docker/var/run/docker/containerd/containerd.sock \\
+--data-root=$HOME/apps/docker/var/lib/docker \\
+--exec-root=$HOME/apps/docker/var/run/docker \\
+--exec-opt=native.cgroupdriver=cgroupfs \\
+--experimental="false" \\
+--group=${USER} \\
+-H=unix://$HOME/apps/docker/var/run/docker.sock \\
+-H="tcp://0.0.0.0:2375" \\
+--init-path="$HOME/apps/docker/bin" \\
+--insecure-registry=${REGISTRY_IPADDRESS}:5000 \\
+--log-level=info \\
+--pidfile=$HOME/apps/docker/var/run/docker.pid \\
+--selinux-enabled=false >> $HOME/apps/docker/dockerd.log 2>&1 &
+************************************************************************
+
+1.2 私有库配置,启动
+私有库,目前使用harbor这个应用来部署,其核心仍然是registry这个容器镜像,只是开发出来了周边的包括多个私有库同步,用户认证等等.
+
+官网: https://goharbor.io/docs/
+组件版本: 
+harbor-offline-installer-v1.8.2-rc1.tgz		#下载 https://github.com/goharbor/harbor/releases
+
+1.2.1 安装配置
+私有库不使用k8s管理,因此单独部署,使用docker-compose
+解压完成以后,修改其中的harbor.yml配置文件,修改其中几项
+hostname:		# 通过web ui访问使用的地址或者域名
+port:				# 通过docker login和web ui访问时用的的端口,docker的私有库地址中使用的端口
+data_volume:		# 数据目录
+location:				# 日志路径
+
+启动:
+$ docker-compose up -d
+$ docker ps -a |grep goharbor
+
+c4f2c3932112        goharbor/nginx-photon:v1.8.2                        "nginx -g 'daemon of…"   5 days ago          Up About an hour (healthy)      0.0.0.0:28080->80/tcp                                                                                       nginx
+f0f11135e262        goharbor/harbor-jobservice:v1.8.2                   "/harbor/start.sh"       5 days ago          Up About a minute                                                                                                                           harbor-jobservice
+4dedc2a74f30        goharbor/harbor-portal:v1.8.2                       "nginx -g 'daemon of…"   5 days ago          Up 4 hours (healthy)            80/tcp                                                                                                      harbor-portal
+b24c4bd213bb        goharbor/harbor-core:v1.8.2                         "/harbor/start.sh"       5 days ago          Restarting (2) 53 seconds ago                                                                                                               harbor-core
+3758475a437c        goharbor/harbor-db:v1.8.2                           "/entrypoint.sh post…"   5 days ago          Up 4 hours (healthy)            5432/tcp                                                                                                    harbor-db
+b2e0d82282a4        goharbor/harbor-registryctl:v1.8.2                  "/harbor/start.sh"       5 days ago          Up 4 hours (healthy)                                                                                                                        registryctl
+239293d921f9        goharbor/registry-photon:v2.7.1-patch-2819-v1.8.2   "/entrypoint.sh /etc…"   5 days ago          Up 4 hours (healthy)            5000/tcp                                                                                                    registry
+3b8eb697acf1        goharbor/harbor-log:v1.8.2                          "/bin/sh -c /usr/loc…"   5 days ago          Up 4 hours (healthy)            127.0.0.1:1514->10514/tcp                                                                                   harbor-log
+
+
+2. kubernetes
+组件版本: kubernetes-server-linux-amd64-v1.14.tar.gz
+
+这个版本详细介绍证书,访问api-server的模式/授权模式,TLS Bootstrap引导
+
+2.1 kube-apiserver
+对api的访问控制,当一个http请求对api访问时候,包含使用证书方式传输,使用多种方式进行"身份验证",授权访问相应的部分,访问控制对应的模块
+
+2.1.1 传输安全	
+通过证书的方式,建立TLS
+
+2.1.2 认证(Authentication)	
+建立TLS以后,HTTP请求将到"身份验证",认证方式: 客户端证书(client certificates),承载令牌(bearer tokens),身份验证代理(an authenticating proxy)或HTTP基本身份验证(HTTP basic auth)
+
+身份验证步骤的输入是整个HTTP请求,但是,它通常只检查标头和/或客户端证书.可以指定多个验证模块,在这种情况下,每个验证模块都按顺序尝试,直到其中一个成功.
+
+如果请求无法通过身份验证,则会被HTTP状态码401拒绝.否则,用户将被认证为特定username用户,并且用户名可供后续步骤用于他们的决策.某些身份验证器还提供用户的组成员身份,而其他身份验证器则不提供.
+
+当向API服务器发出HTTP请求时,插件会尝试将以下属性与请求相关联:
+Username: 标识最终用户的字符串.常见值可能是kube-admin或jane@example.com.
+UID: 一个字符串,用于标识最终用户并尝试比用户名更加一致和唯一.
+Groups: 一组字符串,用于将用户与一组通常分组的用户相关联.
+Extra fields: 字符串列表到字符串列表,其中包含授权人可能认为有用的其他信息.
+
+可以一次启用多个身份验证方法.通常应该使用至少两种方法:
+* service account tokens for service accounts                             # 服务帐号令牌
+* at least one other method for user authentication.				  # 至少一种方法用于用户认证
+
+# X509 Client Certs
+通过将--client-ca-file=SOMEFILE 选项传递给API服务器来启用客户端证书身份验证.
+
+# Static Token File
+当--token-auth-file=SOMEFILE在命令行上给出选项时,API服务器从文件中读取承载令牌.
+
+令牌文件是一个至少包含3列的csv文件: 令牌,用户名,用户uid,后跟可选的组名.
+
+注意:
+如果您有多个组,则该列必须加双引号,例如
+token,user,uid,"group1,group2,group3"
+
+# Bearer Token
+当从http客户端使用承载令牌身份验证时,API服务器需要Authorization一个值为的标头Bearer THETOKEN.承载令牌必须是一个字符序列,只需使用HTTP的编码和引用功能就可以将其置于HTTP头值中.例如: 如果是承载令牌, 31ada4fd-adec-460c-809a-9e56ceb75269那么它将出现在HTTP头中,如下所示.
+
+Authorization: Bearer 31ada4fd-adec-460c-809a-9e56ceb75269
+
+# Bootstrap Tokens
+为了允许新集群的简化引导,Kubernetes包括一个动态管理的承载令牌类型,称为引导令牌.这些令牌作为Secrets存储在kube-system命名空间中,可以动态管理和创建它们.Controller Manager包含一个TokenCleaner控制器,可在过期时删除引导令牌.
+
+令牌是形式的[a-z0-9]{6}.[a-z0-9]{16}.第一个组件是令牌ID,第二个组件是令牌秘密.您可以在HTTP标头中指定令牌,如下所示:
+Authorization: Bearer 781292.db7bc3a58fc5f07e
+
+必须使用--enable-bootstrap-token-auth在API服务上的标志启用Bootstrap Token Authenticator
+
+验证者验证为system:bootstrap:<Token ID>.它包含在该system:bootstrappers组中
+
+# Static Password File
+通过将--basic-auth-file=SOMEFILE 选项传递给API服务器来启用基本身份验证
+
+基本auth文件是一个至少包含3列的csv文件:密码,用户名,用户ID.在Kubernetes 1.6及更高版本中,您可以指定包含逗号分隔组名称的可选第四列.如果您有多个组,则必须将第四列值括在双引号(“）中.请参阅以下示例:
+
+password,user,uid,"group1,group2,group3"
+从http客户端使用基本身份验证时,API服务器需要Authorization一个值为的标头Basic BASE64ENCODED(USER:PASSWORD).
+
+# Service Account Tokens
+服务帐户是一个自动启用的身份验证器,它使用签名的承载令牌来验证请求.该插件有两个可选标志: 
+
+--service-account-key-file包含用于签名承载令牌的PEM编码密钥的文件.如果未指定,将使用API​​服务器的TLS私钥.
+--service-account-lookup 如果启用,将撤消从API中删除的令牌.
+服务帐户通常由API服务器自动创建,并通过ServiceAccount Admission Controller与群集中运行的pod相关联.承载令牌安装在众所周知的位置的pod中,并允许集群内进程与API服务器通信.帐户可以使用a的serviceAccountName字段与pod明确关联 PodSpec.
+
+注意: serviceAccountName通常省略,因为这是自动完成的.
+
+# Anonymous requests
+启用后,未被其他已配置的身份验证方法拒绝的请求将被视为匿名请求,并提供用户名system:anonymous和一组 system:unauthenticated.
+
+例如,在配置了令牌身份验证且启用了匿名访问的服务器上,提供无效承载令牌的请求将收到401 Unauthorized错误.不提供承载令牌的请求将被视为匿名请求.
+
+2.1.3 授权
+请求被认证为来自特定用户后,必须授权该请求,请求必须包括请求者的用户名,请求的操作以及受操作影响的对象.如果现有策略声明用户有权完成请求的操作,则授权该请求.
+
+Kubernetes授权要求您使用通用REST属性(post,get等等)与现有的组织范围或云提供商范围的访问控制系统进行交互.使用REST格式很重要,因为这些控制系统可能与Kubernetes API之外的其他API交互.
+
+Kubernetes支持多种授权模块,例如ABAC模式,RBAC模式和Webhook模式.管理员创建集群时,他们配置了应在API服务器中使用的授权模块.如果配置了多个授权模块,Kubernetes将检查每个模块,如果任何模块授权该请求,则该请求可以继续.如果所有模块拒绝该请求,则拒绝该请求(HTTP状态代码403).
+
+详细授权如下:
+Kubernetes仅审查以下API请求属性:
+
+# 原文
+user - The user string provided during authentication.
+group - The list of group names to which the authenticated user belongs.
+extra - A map of arbitrary string keys to string values, provided by the authentication layer.
+API - Indicates whether the request is for an API resource.
+Request path - Path to miscellaneous non-resource endpoints like /api or /healthz.
+API request verb - API verbs get, list, create, update, patch, watch, proxy, redirect, delete, and deletecollection are used for resource requests. To determine the request verb for a resource API endpoint, see Determine the request verb.
+HTTP request verb - HTTP verbs get, post, put, and delete are used for non-resource requests.
+Resource - The ID or name of the resource that is being accessed (for resource requests only) – For resource requests using get, update, patch, and delete verbs, you must provide the resource name.
+Subresource - The subresource that is being accessed (for resource requests only).
+Namespace - The namespace of the object that is being accessed (for namespaced resource requests only).
+API group - The API group being accessed (for resource requests only). An empty string designates the core API group.
+
+# 翻译
+user - user身份验证期间提供的字符串.
+group - 经过身份验证的用户所属的组名列表.
+extra - 由身份验证层提供的任意字符串键到字符串值的映射.
+API - 指示请求是否针对API资源.
+Request path - 其他非资源端点的路径,如/api或/healthz.
+API request verb - API verbs get,list,create,update,patch,watch,proxy,redirect,delete,和deletecollection用于资源请求.要确定资源API端点的请求谓词,请参阅确定请求谓词.
+HTTP request verb- HTTP动词get,post,put,和delete用于非资源请求.
+Resource - 正在访问的资源的ID或名称(仅限资源请求) - 对于使用get,update和patch,和delete动词的资源请求,您必须提供资源名称.
+Subresource - 正在访问的子资源(仅限资源请求).
+Namespace - 要访问的对象的名称空间(仅适用于命名空间资源请求).
+API group - 正在访问的API组(仅限资源请求).空字符串表示核心API组.
+
+确定请求动词
+要确定资源API端点的请求谓词,请查看使用的HTTP谓词以及请求是否对单个资源或资源集合起作用:
+HTTP verb		request verb
+POST				create
+GET, HEAD		get (for individual resources), list (for collections)
+PUT					update
+PATCH				patch
+DELETE			delete (for individual resources), deletecollection (for collections)
+
+
+Kubernetes有时使用专门的动词检查授权以获得额外的权限.例如:
+
+PodSecurityPolicy检查API组中资源的use动词授权.podsecuritypoliciespolicy
+RBAC检查bind动词的授权roles和API组中的clusterroles资源rbac.authorization.k8s.io.
+认证层将检查授权impersonate上动词users,groups以及serviceaccounts在核心API组,userextras中authentication.k8s.ioAPI组
+
+授权模块
+Node - 一种特殊用途的授权程序,它根据计划运行的pod为kubelet授予权限.要了解有关使用节点授权模式的更多信息,请参阅节点授权.
+ABAC - 基于属性的访问控制(ABAC)定义了一种访问控制范例,通过使用将属性组合在一起的策略向用户授予访问权限.策略可以使用任何类型的属性(用户属性,资源属性,对象,环境属性等).要了解有关使用ABAC模式的更多信息,请参阅ABAC模式.
+RBAC - 基于角色的访问控制(RBAC)是一种根据企业中各个用户的角色来管理对计算机或网络资源的访问的方法.在此上下文中,访问是单个用户执行特定任务的能力,例如查看,创建或修改文件.要了解有关使用RBAC模式的更多信息,请参阅RBAC模式
+当指定的RBAC(基于角色的访问控制)使用rbac.authorization.k8s.ioAPI组来驱动授权决策时,允许管理员通过Kubernetes API动态配置权限策略.
+要启用RBAC,请启动apiserver --authorization-mode=RBAC.
+Webhook - WebHook是一个HTTP回调:发生某些事情时发生的HTTP POST; 通过HTTP POST进行简单的事件通知.实现WebHooks的Web应用程序会在发生某些事情时将消息发布到URL.要了解有关使用Webhook模式的更多信息,请参阅Webhook模式.
+
+使用Flags作为授权模块
+您必须在策略中包含一个标志,以指明您的策略包含哪个授权模块: 
+
+可以使用以下标志: 
+--authorization-mode=ABAC 基于属性的访问控制(ABAC)模式允许您使用本地文件配置策略.
+--authorization-mode=RBAC 基于角色的访问控制(RBAC)模式允许您使用Kubernetes API创建和存储策略.
+--authorization-mode=Webhook WebHook是一种HTTP回调模式,允许您使用远程REST端点管理授权.
+--authorization-mode=Node 节点授权是一种特殊用途的授权模式,专门授权由kubelet发出的API请求.
+--authorization-mode=AlwaysDeny该标志阻止所有请求.仅将此标志用于测试.
+--authorization-mode=AlwaysAllow此标志允许所有请求.仅在您不需要API请求的授权时才使用此标志.
+您可以选择多个授权模块.按顺序检查模块,以便较早的模块具有更高的优先级来允许或拒绝请求.
+
+2.1.4 访问控制
+Kubernetes中的许多高级功能都需要启用许可控制器才能正确支持该功能
+
+Kubernetes API服务器标志enable-admission-plugins采用逗号分隔的许可控制插件列表,以便在修改集群中的对象之前进行调用.例如,以下命令行启用NamespaceLifecycle和LimitRanger 允许控件插件:
+kube-apiserver --enable-admission-plugins=NamespaceLifecycle,LimitRanger ...
+
+Kubernetes API服务器标志disable-admission-plugins采用以逗号分隔的允许控制插件列表,即使它们位于默认启用的插件列表中也是如此
+kube-apiserver --disable-admission-plugins=PodNodeSelector,AlwaysDeny ...
+
+要查看启用了哪些准入插件:
+kube-apiserver -h | grep enable-admission-plugins
+
+在1.14中,它们是:
+NamespaceLifecycle, LimitRanger, ServiceAccount, TaintNodesByCondition, Priority, DefaultTolerationSeconds, DefaultStorageClass, PersistentVolumeClaimResize, MutatingAdmissionWebhook, ValidatingAdmissionWebhook, ResourceQuota
+
+具体每个准入控制器的功能见: 
+https://v1-14.docs.kubernetes.io/docs/reference/access-authn-authz/admission-controllers/
+
+2.1.5 生成X509证书
+cat << EOF > kubernetes/pki/ca-config.json
+{
+    "signing": {
+        "default": {
+            "expiry": "43800h"
+        },
+        "profiles": {
+            "kubernetes": {
+                "expiry": "43800h",
+                "usages": [
+                    "signing",
+                    "key encipherment",
+                    "server auth",
+		    "client auth"
+                ]
+            }
+        }
+    }
+}
+EOF
+
+cat << EOF > kubernetes/pki/ca-csr.json
+{
+  "CN": "kubernetes",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "CN",
+      "ST": "Beijing",
+      "L": "Beijing",
+      "O": "k8s",
+      "OU": "CA"
+    }
+  ]
+}
+EOF
+
+cat << EOF > kubernetes/pki/apiserver-csr.json
+{
+    "CN": "kubernetes",
+    "hosts": [
+      "127.0.0.1",
+      "${KUBE_MASTER_HOST}",
+      "${MASTER_CLUSTER_IP}",
+      "kubernetes",
+      "kubernetes.default",
+      "kubernetes.default.svc",
+      "kubernetes.default.svc.cluster",
+      "kubernetes.default.svc.cluster.local"
+    ],
+    "key": {
+        "algo": "rsa",
+        "size": 2048
+    },
+    "names": [
+        {
+            "C": "CN",
+            "ST": "Beijing",
+            "L": "Beijing",
+            "O": "k8s",
+            "OU": "CA"
+        }
+    ]
+}
+EOF
+
+bin/cfssl gencert -initca kubernetes/pki/ca-csr.json | bin/cfssljson -bare ca
+bin/cfssl gencert -ca=ca.pem -ca-key=ca-key.pem --config=kubernetes/pki/ca-config.json -profile=kubernetes kubernetes/pki/apiserver-csr.json | bin/cfssljson -bare apiserver
+
+
+apiserver启动
+************************************************************************
+cat << EOF > bin/srv.kube-apiserver 
+$KUBERNETES_PREFIX/server/bin/kube-apiserver \\
+--advertise-address=${KUBE_MASTER_HOST} \\
+--allow-privileged="true" \\
+--alsologtostderr="true" \\
+--anonymous-auth="false" \\
+--authorization-mode="Node,RBAC" \\
+--bind-address=0.0.0.0 \\
+--client-ca-file=$PKI_PATH/ca.pem \\
+--default-watch-cache-size="150" \\
+--delete-collection-workers="3" \\
+--enable-admission-plugins="NodeRestriction,NamespaceLifecycle,LimitRanger,ServiceAccount,TaintNodesByCondition,Priority,DefaultTolerationSeconds,DefaultStorageClass,PersistentVolumeClaimResize,MutatingAdmissionWebhook,ValidatingAdmissionWebhook,ResourceQuota" \\
+--enable-bootstrap-token-auth="true" \\
+--enable-garbage-collector="true" \\
+--enable-logs-handler="true" \\
+--etcd-cafile=$PKI_PATH/etcd/ca.pem \\
+--etcd-certfile=$PKI_PATH/etcd/client.pem \\
+--etcd-keyfile=$PKI_PATH/etcd/client-key.pem \\
+--etcd-servers=https://$ETCD_NODE01_IPADDRESS:2379,https://$ETCD_NODE02_IPADDRESS:2379,https://$ETCD_NODE03_IPADDRESS:2379 \\
+--external-hostname=${KUBE_MASTER_HOST} \\
+--event-ttl="30m" \\
+--feature-gates=RotateKubeletServerCertificate=true \\
+--kubelet-client-certificate=$PKI_PATH/apiserver.pem  \\
+--kubelet-client-key=$PKI_PATH/apiserver-key.pem \\
+--kubelet-https="true" \\
+--kubelet-preferred-address-types="InternalIP,ExternalIP,Hostname,InternalDNS,ExternalDNS" \\
+--kubelet-timeout="8s" \\
+--kubernetes-service-node-port="0" \\
+--log-dir=$LOGS_PATH/ \\
+--log-flush-frequency="2s" \\
+--logtostderr="false" \\
+--max-mutating-requests-inflight="300" \\
+--profiling="true" \\
+--secure-port="6443" \\
+--service-account-key-file=$PKI_PATH/ca-key.pem \\
+--service-cluster-ip-range=${SERVICE_CLUSTER_IP_RANGE} \\
+--service-node-port-range="30000-33500" \\
+--tls-cert-file=$PKI_PATH/apiserver.pem  \\
+--tls-private-key-file=$PKI_PATH/apiserver-key.pem \\
+--v="6" \\
+--watch-cache="true"
+
+#--authorization-mode="AlwaysAllow" 
+#--token-auth-file=$PKI_PATH/token.csv \\
+
+EOF
+************************************************************************
+
+2.2 kube-controller-manager
+此组件在k8s系统中具有了自己的账户,因此,开始具有认证和授权的需要
+启动用的配置文件中具有证书,及对应的用户授权
+
+如下是用户及授权
+$ kubectl get rolebinding -n kube-system -o wide
+NAME                                                AGE   ROLE                                                  USERS                                                   GROUPS   SERVICEACCOUNTS
+system::extension-apiserver-authentication-reader   12h   Role/extension-apiserver-authentication-reader        system:kube-controller-manager, system:kube-scheduler            
+system::leader-locking-kube-controller-manager      12h   Role/system::leader-locking-kube-controller-manager   system:kube-controller-manager                                   kube-system/kube-controller-manager
+system::leader-locking-kube-scheduler               12h   Role/system::leader-locking-kube-scheduler            system:kube-scheduler                                            kube-system/kube-scheduler
+system:controller:bootstrap-signer                  12h   Role/system:controller:bootstrap-signer                                                                                kube-system/bootstrap-signer
+system:controller:cloud-provider                    12h   Role/system:controller:cloud-provider                                                                                  kube-system/cloud-provider
+system:controller:token-cleaner                     12h   Role/system:controller:token-cleaner                                                                                   kube-system/token-cleaner
+
+2.2.1 证书及授权配置文件
+cat << EOF > kubernetes/pki/controller-manager.json
+{
+    "CN": "system:kube-controller-manager",
+    "key": {
+        "algo": "rsa",
+        "size": 2048
+    },
+    "names": [
+        {
+            "C": "CN",
+            "ST": "Beijing",
+            "L": "Beijing",
+            "O": "system:kube-controller-manager",
+            "OU": "controller-manager"
+   }
+ ]
+}
+EOF
+ 
+bin/cfssl gencert -ca=kubernetes/pki/ca.pem -ca-key=kubernetes/pki/ca-key.pem -config=kubernetes/pki/ca-config.json -profile=kubernetes kubernetes/pki/controller-manager.json | bin/cfssljson -bare controller-manager
+
+KUBECONFIG=controller-manager.conf bin/kubectl config set-cluster kubernetes --server=https://${KUBE_MASTER_HOST}:6443 --certificate-authority kubernetes/pki/ca.pem --embed-certs
+KUBECONFIG=controller-manager.conf bin/kubectl config set-credentials system:kube-controller-manager --client-key controller-manager-key.pem --client-certificate controller-manager.pem --embed-certs
+KUBECONFIG=controller-manager.conf bin/kubectl config set-context system:kube-controller-manager@kubernetes --cluster kubernetes --user system:kube-controller-manager
+KUBECONFIG=controller-manager.conf bin/kubectl config use-context system:kube-controller-manager@kubernetes
+
+
+kube-controller-manager启动
+************************************************************************
+cat << EOF > bin/srv.kube-controller-manager
+$KUBERNETES_PREFIX/server/bin/kube-controller-manager \\
+--allocate-node-cidrs="true" \\
+--alsologtostderr="true" \\
+--authentication-kubeconfig=${KUBERNETES_PREFIX}/server/conf/controller-manager.conf \\
+--authorization-kubeconfig=${KUBERNETES_PREFIX}/server/conf/controller-manager.conf \\
+--cidr-allocator-type="RangeAllocator"  \\
+--client-ca-file=${PKI_PATH}/ca.pem \\
+--cluster-cidr=${CLUSTER_CIDR} \\
+--cluster-signing-cert-file="$PKI_PATH/ca.pem"  \\
+--cluster-signing-key-file="$PKI_PATH/ca-key.pem"  \\
+--concurrent-deployment-syncs="10"  \\
+--concurrent-endpoint-syncs="10"  \\
+--concurrent-gc-syncs="20"  \\
+--concurrent-namespace-syncs="10"  \\
+--concurrent-replicaset-syncs="10"  \\
+--concurrent-resource-quota-syncs="10"  \\
+--concurrent_rc_syncs="10"  \\
+--concurrent-serviceaccount-token-syncs="5"  \\
+--concurrent-service-syncs="3"  \\
+--configure-cloud-routes="false"  \\
+--contention-profiling="true"  \\
+--controllers="*,bootstrapsigner,tokencleaner"  \\
+--deployment-controller-sync-period="45s"  \\
+--enable-garbage-collector="true"  \\
+--flex-volume-plugin-dir="$KUBERNETES_PREFIX/kubelet-plugins/volume/exec/"  \\
+--feature-gates=RotateKubeletServerCertificate="true" \\
+--horizontal-pod-autoscaler-sync-period="45s"  \\
+--kubeconfig=${KUBERNETES_PREFIX}/server/conf/controller-manager.conf \\
+--kube-api-burst="30"  \\
+--kube-api-content-type="application/vnd.kubernetes.protobuf"  \\
+--large-cluster-size-threshold="50"  \\
+--leader-elect=true \\
+--log-dir="$LOGS_PATH/"  \\
+--log-flush-frequency="2s"  \\
+--logtostderr="false"  \\
+--min-resync-period="12h0m0s"  \\
+--namespace-sync-period="5m"  \\
+--node-cidr-mask-size="24"  \\
+--node-eviction-rate="0.1"  \\
+--node-monitor-grace-period="40s"  \\
+--node-monitor-period="3s"  \\
+--node-startup-grace-period="2m"  \\
+--pod-eviction-timeout="3m0s"  \\
+--profiling="true"  \\
+--pvclaimbinder-sync-period="20s"  \\
+--resource-quota-sync-period="5m0s"  \\
+--root-ca-file="$PKI_PATH/ca.pem"  \\
+--secondary-node-eviction-rate="0.01"  \\
+--service-cluster-ip-range=${SERVICE_CLUSTER_IP_RANGE}  \\
+--service-account-private-key-file="$PKI_PATH/ca-key.pem"  \\
+--stderrthreshold="4"  \\
+--terminated-pod-gc-threshold="12500"  \\
+--unhealthy-zone-threshold="0.55"  \\
+--use-service-account-credentials="true"  \\
+--v="4" 
+
+EOF
+************************************************************************
+
+2.3 kube-scheduler
+和kube-controller-manager具有相同的模式
+
+2.3.1 证书及授权配置文件
+cat << EOF > kubernetes/pki/scheduler.json
+{
+    "CN": "system:kube-scheduler",
+    "key": {
+        "algo": "rsa",
+        "size": 2048
+    },
+    "names": [
+        {
+            "C": "CN",
+            "ST": "Beijing",
+            "L": "Beijing",
+            "O": "system:kube-scheduler",
+            "OU": "scheduler"
+   }
+ ]
+}
+EOF
+
+bin/cfssl gencert -ca=kubernetes/pki/ca.pem -ca-key=kubernetes/pki/ca-key.pem -config=kubernetes/pki/ca-config.json -profile=kubernetes kubernetes/pki/scheduler.json | bin/cfssljson -bare scheduler
+
+KUBECONFIG=scheduler.conf bin/kubectl config set-cluster kubernetes --server=https://${KUBE_MASTER_HOST}:6443 --certificate-authority kubernetes/pki/ca.pem --embed-certs
+KUBECONFIG=scheduler.conf bin/kubectl config set-credentials system:kube-scheduler --client-key scheduler-key.pem --client-certificate scheduler.pem --embed-certs
+KUBECONFIG=scheduler.conf bin/kubectl config set-context system:kube-scheduler@kubernetes --cluster kubernetes --user system:kube-scheduler
+KUBECONFIG=scheduler.conf bin/kubectl config use-context system:kube-scheduler@kubernetes
+
+kube-scheduler启动
+************************************************************************
+cat << EOF > bin/srv.kube-scheduler
+$KUBERNETES_PREFIX/server/bin/kube-scheduler \\
+--alsologtostderr="true" \\
+--authentication-kubeconfig=${KUBERNETES_PREFIX}/server/conf/scheduler.conf \\
+--authorization-kubeconfig=${KUBERNETES_PREFIX}/server/conf/scheduler.conf \\
+--kubeconfig=${KUBERNETES_PREFIX}/server/conf/scheduler.conf \\
+--leader-elect=true \\
+--log-dir="$LOGS_PATH/"  \\
+--log-flush-frequency="2s"  \\
+--logtostderr="false"  \\
+--stderrthreshold="4"  \\
+--v="4"
+EOF
+************************************************************************
+
+2.4 kubelet
+kubelet担任着与apiserver通讯同时调度docker的任务,因此具有与api通讯的时候就必须通过认证,授权,准入流程.
+
+传统的每个k8s slave节点与api通讯的时候,使用证书的方式,必须每个slave节点生成证书,因此,当前版本采用了一个新的认证方式 - TLS bootstrap - Bootstrap Tokens 
+
+如下是官方的描述:
+原文链接:
+https://v1-14.docs.kubernetes.io/docs/reference/command-line-tools-reference/kubelet-tls-bootstrapping/#
+
+TLS引导 (TLS bootstrap)
+在Kubernetes集群中,工作节点上的组件(kubelet和kube-proxy)需要与Kubernetes主组件通信,特别是kube-apiserver.为了确保通信保持私密,不受干扰,并确保群集的每个组件与另一个受信任组件通信,我们强烈建议在节点上使用客户端TLS证书.
+
+引导这些组件的正常过程,特别是需要证书的工作节点,因此它们可以与kube-apiserver安全地通信,这可能是一个具有挑战性的过程,因为它通常超出了Kubernetes的范围,需要大量的额外工作.反过来,这可能会使初始化或扩展集群变得具有挑战性.
+
+为了简化流程,从版本1.4开始,Kubernetes引入了证书请求和签名API以简化流程.
+
+本文档描述了节点初始化的过程,如何为kubelet设置TLS客户端证书引导以及它是如何工作的.
+
+* 初始化过程
+* 组态
+* 证书颁发机构
+* kube-apiserver配置
+* kube-controller-manager配置
+* kubelet配置
+* 其他验证组件
+* kubectl批准
+* 范围
+
+
+初始化过程
+当工作节点启动时,kubelet执行以下操作:
+
+1. 寻找它的kubeconfig文件
+2. 检索API服务器的URL和凭据,通常是kubeconfig文件中的TLS密钥和签名证书
+3. 尝试使用凭据与API服务器通信.
+
+假设kube-apiserver成功验证了kubelet的凭证,它会将kubelet视为有效节点,并开始为其分配pod.
+
+请注意,上述过程取决于:
+
+* 在本地主机上存在密钥和证书 kubeconfig
+* 证书已由kube-apiserver信任的证书颁发机构(CA)签名
+
+以下所有内容都是设置和管理集群的人员的责任:
+
+1. 创建CA密钥和证书
+2. 将CA证书分发到正在运行kube-apiserver的主节点
+3. 为每个kubelet创建密钥和证书; 强烈建议每个kubelet都有一个独特的CN
+4. 使用CA密钥签署kubelet证书
+5. 将kubelet密钥和签名证书分发到运行kubelet的特定节点
+
+本文档中描述的TLS Bootstrapping旨在简化,部分甚至完全自动化第3步,因为这些是初始化或扩展群集时最常见的.
+
+Bootstrap初始化
+在引导程序初始化过程中,会发生以下情况:
+
+1. kubelet开始了
+2. kubelet认为,它并没有有一个kubeconfig文件
+3. kubelet搜索并查找bootstrap-kubeconfig文件
+4. kubelet读取其引导文件,检索API服务器的URL和有限使用“令牌”
+5. kubelet连接到API服务器,使用令牌进行身份验证
+6. kubelet现在具有创建和检索证书签名请求(CSR)的有限凭据
+7. kubelet为自己创建了一个CSR
+8. CSR通过以下两种方式之一获得批准:
+    * 如果已配置,kube-controller-manager将自动批准CSR
+    * 如果已配置,则外部流程(可能是人员)使用Kubernetes API或通过批准CSR kubectl
+9. 为kubelet创建证书
+10. 证书颁发给kubelet
+11. kubelet检索证书
+12. kubelet kubeconfig使用密钥和签名证书创建一个正确的
+13. kubelet开始正常运作
+14. 可选:如果已配置,则当证书接近到期时,kubelet会自动请求续订证书
+15. 续订证书将根据配置自动或手动批准和颁发.
+
+本文档的其余部分介绍了配置TLS Bootstrapping的必要步骤及其局限性.
+
+组态
+要配置TLS引导和可选的自动批准,必须在以下组件上配置选项:
+
+* kube-apiserver
+* kube-controller-manager
+* kubelet
+* 集群内资源:ClusterRoleBinding和可能ClusterRole
+此外,您还需要Kubernetes证书颁发机构(CA).
+
+证书颁发机构
+如果没有自举,您将需要证书颁发机构(CA)密钥和证书.由于没有自举,这些将用于签署kubelet证书.和以前一样,您有责任将它们分发到主节点.
+
+出于本文档的目的,我们假设这些已经/var/lib/kubernetes/ca.pem(证书)和/var/lib/kubernetes/ca-key.pem(密钥)分发给主节点.我们将这些称为“Kubernetes CA证书和密钥”.
+
+所有使用这些证书的Kubernetes组件 - kubelet,kube-apiserver,kube-controller-manager--都假定密钥和证书是PEM编码的.
+
+kube-apiserver配置
+kube-apiserver有几个要求启用TLS引导:
+
+* 识别签署客户端证书的CA.
+* 将bootstrapping kubelet验证到system:bootstrappers组
+* 授权bootstrapping kubelet创建证书签名请求(CSR)
+
+识别客户证书
+这适用于所有客户端证书身份验证.如果尚未设置,请将--client-ca-file=FILENAME标志添加到kube-apiserver命令以启用客户端证书身份验证,例如,引用包含签名证书的证书颁发机构捆绑包 --client-ca-file=/var/lib/kubernetes/ca.pem.
+
+初始引导程序验证
+为了使bootstrapping kubelet连接到kube-apiserver并请求证书,它必须首先向服务器进行身份验证.你可以使用任何身份验证,可以验证kubelet.
+
+虽然任何身份验证策略都可用于kubelet的初始引导凭据,但建议使用以下两个身份验证器以便于配置.
+
+1. Bootstrap Tokens - beta
+2. Token authentication file
+
+Bootstrap Tokens是一种更简单且更易于管理的方法来验证kubelet,并且在启动kube-apiserver时不需要任何额外的标志.使用bootstrap令牌目前是Kubernetes 1.12版的测试版.
+这里有详细描述:
+https://v1-14.docs.kubernetes.io/docs/reference/access-authn-authz/bootstrap-tokens/
+
+无论您选择哪种方法,都要求kubelet能够作为具有以下权限的用户进行身份验证:
+
+1. 创建和检索CSR
+2. 如果启用了自动批准,则自动批准请求节点客户端证书.
+
+使用引导令牌进行身份验证的kubelet将作为组中的用户进行身份验证system:bootstrappers,这是使用的标准方法.
+
+随着此功能的成熟,您应该确保令牌绑定到基于角色的访问控制(RBAC)策略,该策略将请求(使用引导令牌)严格限制为与证书配置相关的客户端请求.通过RBAC,将令牌范围限定为一组可以实现极大的灵活性.例如,您可以在完成配置节点后禁用特定引导程序组的访问权限.
+
+Bootstrap Tokens
+这里详细描述了Bootstrap Tokens.这些是作为Kubernetes集群中的秘密存储的令牌,然后发布到单个kubelet.您可以为整个群集使用单个令牌,也可以为每个工作节点发出一个令牌.
+
+这个过程有两个方面:
+
+1. 使用令牌ID,密钥和范围创建Kubernetes密钥.
+2. 将令牌发送到kubelet
+
+从kubelet的角度来看,一个标记就像另一个标记,并没有特殊含义.然而,从kube-apiserver的角度来看,引导令牌是特殊的.由于它Type,namespace并且name,kube-apiserver将其识别为一个特殊的记号,并授予任何与该令牌特殊的启动权认证,特别是对待他们的成员system:bootstrappers组.这满足了TLS引导的基本要求.
+
+
+如果要使用引导令牌,则必须在带有标志的kube-apiserver上启用它:
+
+--enable-bootstrap-token-auth=true
+
+Token authentication file
+kube-apiserver具有接受令牌作为身份验证的能力.这些令牌是任意的,但应该代表从安全随机数生成器(例如/dev/urandom在大多数现代Linux系统上)派生的至少128位熵.您可以通过多种方式生成令牌.例如:
+
+head -c 16 /dev/urandom | od -An -t x | tr -d ' '
+将生成看起来像的令牌02b50b05283e98dd0fd71db496ef01e8.
+
+令牌文件应类似于以下示例,其中前三个值可以是任何值,引用的组名称应如下所示:
+
+02b50b05283e98dd0fd71db496ef01e8,kubelet-bootstrap,10001,"system:bootstrappers"
+
+将--token-auth-file=FILENAME标志添加到kube-apiserver命令(可能在您的systemd单元文件中)以启用令牌文件.
+
+授权kubelet创建CSR
+既然bootstrapping节点作为组的一部分进行了身份验证system:bootstrappers,则需要授权它创建证书签名请求(CSR)并在完成后检索它.幸运的是,Kubernetes正好附带了ClusterRole这些(以及这些)权限system:node-bootstrapper.
+
+为此,您只需创建一个ClusterRoleBinding将system:bootstrappers组绑定到群集角色的方法system:node-bootstrapper.
+
+# enable bootstrapping nodes to create CSR
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: create-csrs-for-bootstrapping
+subjects:
+- kind: Group
+  name: system:bootstrappers
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: system:node-bootstrapper
+  apiGroup: rbac.authorization.k8s.io
+
+
+kube-controller-manager配置
+当apiserver从kubelet接收证书请求并验证这些请求时,kube-controller-manager负责发出实际签名的证书.
+
+kube-controller-manager通过证书发布控制循环执行此功能.这采用使用磁盘资产的cfssl本地签名者的形式 .目前,所有颁发的证书都有一年的有效期和一组默认的关键用法.
+
+为了让kube-controller-manager签署证书,它需要以下内容:
+
+* 访问您创建和分发的“Kubernetes CA密钥和证书”
+* 实现CSR签名
+
+
+访问密钥和证书
+如前所述,您需要创建Kubernetes CA密钥和证书,并将其分发到主节点.kube-controller-manager将使用这些来签署kubelet证书.
+
+由于这些签名证书将由kubelet用作对kube-apiserver的常规kubelet进行身份验证,因此在此阶段提供给kube-controller-manager的CA也必须由kube-apiserver信任以进行身份​​验证.这是通过标志--client-ca-file=FILENAME(例如--client-ca-file=/var/lib/kubernetes/ca.pem)提供给kube-apiserver ,如kube-apiserver配置部分所述.
+
+要向Kube-controller-manager提供Kubernetes CA密钥和证书,请使用以下标志:
+
+--cluster-signing-cert-file="/etc/path/to/kubernetes/ca/ca.crt" --cluster-signing-key-file="/etc/path/to/kubernetes/ca/ca.key"
+
+例如:
+--cluster-signing-cert-file="/var/lib/kubernetes/ca.pem" --cluster-signing-key-file="/var/lib/kubernetes/ca-key.pem"
+签名证书的有效期可以使用flag配置:
+
+--experimental-cluster-signing-duration
+
+赞同
+为了批准CSR,您需要告诉Kube-controller-manager批准它们是可以接受的.这是通过向正确的组授予RBAC权限来完成的.
+
+有两组不同的权限:
+
+* nodeclient:如果节点正在为节点创建新证书,则它还没有证书.它使用上面列出的一个令牌进行身份验证,因此是该群组的一部分system:bootstrappers.
+* selfnodeclient:如果某个节点正在续订其证书,那么它已经拥有一个证书(根据定义),它会连续使用该证书作为该组的一部分进行身份验证system:nodes.
+
+要使kubelet能够请求和接收新证书,请创建一个ClusterRoleBinding将引导节点所属的组绑定system:bootstrappers到ClusterRole授予其权限的组,即
+
+system:certificates.k8s.io:certificatesigningrequests:nodeclient:
+
+# Approve all CSRs for the group "system:bootstrappers"
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: auto-approve-csrs-for-group
+subjects:
+- kind: Group
+  name: system:bootstrappers
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: system:certificates.k8s.io:certificatesigningrequests:nodeclient
+  apiGroup: rbac.authorization.k8s.io
+
+
+要使kubelet能够更新自己的客户端证书,请创建一个ClusterRoleBinding将完全正常运行的节点所属的组绑定到该组的权限,system:nodes以ClusterRole授予其权限,system:certificates.k8s.io:certificatesigningrequests:selfnodeclient:
+
+# Approve renewal CSRs for the group "system:nodes"
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: auto-approve-renewals-for-nodes
+subjects:
+- kind: Group
+  name: system:nodes
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: system:certificates.k8s.io:certificatesigningrequests:selfnodeclient
+  apiGroup: rbac.authorization.k8s.io
+
+注意:Kubernetes低于1.8:如果您运行的是早期版本的Kubernetes,特别是低于1.8的版本,则默认情况下不会发送上面引用的集群角色.你将不得不自己创建他们除了对ClusterRoleBindings.
+
+要创建ClusterRoles:
+
+# A ClusterRole which instructs the CSR approver to approve a user requesting
+# node client credentials.
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: system:certificates.k8s.io:certificatesigningrequests:nodeclient
+rules:
+- apiGroups: ["certificates.k8s.io"]
+  resources: ["certificatesigningrequests/nodeclient"]
+  verbs: ["create"]
+---
+# A ClusterRole which instructs the CSR approver to approve a node renewing its
+# own client credentials.
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: system:certificates.k8s.io:certificatesigningrequests:selfnodeclient
+rules:
+- apiGroups: ["certificates.k8s.io"]
+  resources: ["certificatesigningrequests/selfnodeclient"]
+  verbs: ["create"]
+
+在csrapproving附带的一部分控制器Kube-controller-manager和默认情况下启用.控制器使用SubjectAccessReview API来确定给定用户是否有权请求CSR,然后根据授权结果进行批准.为防止与其他批准者发生冲突,内置审批者未明确拒绝CSR.它只会忽略未经授权的请求.控制器还会将过期的证书修剪为垃圾收集的一部分.
+
+kubelet配置
+最后,在主节点正确设置并且所有必要的身份验证和授权到位后,我们可以配置kubelet.
+
+kubelet需要以下配置来引导:
+
+* 存储它生成的密钥和证书的路径(可选,可以使用默认值)
+* 指向kubeconfig尚不存在的文件的路径; 它会将bootstrapped配置文件放在这里
+* 引导kubeconfig文件的路径,用于提供服务器和引导凭证的URL,例如引导令牌
+* 可选:轮换证书的说明
+
+例如,引导程序kubeconfig应该位于kubelet可用的路径中/var/lib/kubelet/bootstrap-kubeconfig.
+
+其格式与普通kubeconfig文件相同.示例文件可能如下所示: (这里使用的是Bootstrap Tokens模式)
+
+apiVersion: v1
+clusters:
+- cluster:
+    certificate-authority: /var/lib/kubernetes/ca.pem
+    server: https://my.server.example.com:6443
+  name: bootstrap
+contexts:
+- context:
+    cluster: bootstrap
+    user: kubelet-bootstrap
+  name: bootstrap
+current-context: bootstrap
+kind: Config
+preferences: {}
+users:
+- name: kubelet-bootstrap
+  user:
+    token: 07401b.f395accd246ae52d
+
+需要注意的重要因素是:
+
+* certificate-authority:CA文件的路径,用于验证kube-apiserver提供的服务器证书
+* server:kube-apiserver的URL
+* token:要使用的令牌
+
+令牌的格式无关紧要,只要它与kube-apiserver所期望的匹配即可.在上面的示例中,我们使用了引导令牌.如前所述,可以使用任何有效的身份验证方法,而不仅仅是令牌.
+
+因为引导程序kubeconfig 是标准的kubeconfig,所以您可以使用kubectl它来生成它.要创建上面的示例文件:
+
+kubectl config --kubeconfig=/var/lib/kubelet/bootstrap-kubeconfig set-cluster bootstrap --server='https://my.server.example.com:6443' --certificate-authority=/var/lib/kubernetes/ca.pem
+kubectl config --kubeconfig=/var/lib/kubelet/bootstrap-kubeconfig set-credentials kubelet-bootstrap --token=07401b.f395accd246ae52d
+kubectl config --kubeconfig=/var/lib/kubelet/bootstrap-kubeconfig set-context bootstrap --user=kubelet-bootstrap --cluster=bootstrap
+kubectl config --kubeconfig=/var/lib/kubelet/bootstrap-kubeconfig use-context bootstrap
+
+要指示kubelet使用引导程序kubeconfig,请使用以下kubelet标志:
+
+--bootstrap-kubeconfig="/var/lib/kubelet/bootstrap-kubeconfig" --kubeconfig="/var/lib/kubelet/kubeconfig"
+
+启动kubelet时,如果指定的文件--kubeconfig不存在,则指定via的bootstrap kubeconfig --bootstrap-kubeconfig用于从API服务器请求客户端证书.在通过kubelet批准证书请求和回执时,引用生成的密钥和获得的证书的kubeconfig文件将写入由指定的路径--kubeconfig.证书和密钥文件将放在指定的目录中--cert-dir.
+
+客户和服务证书
+以上所有内容都涉及kubelet 客户端证书,特别是kubelet用于向kube-apiserver进行身份验证的证书.
+
+kubelet也可以使用服务证书.kubelet本身为某些功能公开了https端点.为了保护这些,kubelet可以做以下之一:
+
+* 使用提供的密钥和证书,通过--tls-private-key-file和--tls-cert-file标志
+* 如果未提供密钥和证书,则创建自签名密钥和证书
+* 请求通过CSR API从群集服务器提供服务证书
+
+默认情况下,TLS引导提供的客户端证书client auth仅用于签名,因此不能用作服务证书,或者server auth.
+
+但是,您可以通过证书轮换至少部分地启用其服务器证书.
+
+证书轮换
+Kubernetes v1.7及更高版本的kubelet实现了beta功能,可以启用其客户端和/或服务证书的轮换.这些可以通过kubelet上的相应RotateKubeletClientCertificate和 RotateKubeletServerCertificate功能标志启用,默认情况下启用.
+
+RotateKubeletClientCertificate导致kubelet通过在其现有凭据到期时创建新CSR来轮换其客户端证书.要启用此功能,请将以下标志传递给kubelet:
+--rotate-certificates
+
+RotateKubeletServerCertificate导致kubelet 都以自举其客户端凭证后,请求服务的证书和旋转该证书.要启用此功能,请将以下标志传递给kubelet:
+--rotate-server-certificates
+
+注意:出于安全原因,在核心Kubernetes中实施的CSR批准控制器不批准节点服务证书.要使用 运营商,需要运行自定义批准控制器,或手动批准服务证书请求.RotateKubeletServerCertificate
+
+
+其他验证组件
+本文档中描述的所有TLS引导都涉及kubelet.但是,其他组件可能需要直接与kube-apiserver通信.值得注意的是kube-proxy,它是Kubernetes控制平面的一部分并在每个节点上运行,但也可能包括其他组件,如监控或网络.
+
+与kubelet一样,这些其他组件也需要一种对kube-apiserver进行身份验证的方法.您有几种生成这些凭据的选项:
+
+* 旧方法:创建和分发证书的方式与在TLS引导之前对kubelet的方式相同
+* DaemonSet:由于kubelet本身在每个节点上加载,并且足以启动基本服务,因此您可以运行kube-proxy和其他特定于节点的服务,而不是作为独立进程运行,而是作为kube-system命名空间中的守护进程运行.由于它将是集群内的,因此您可以为其提供具有适当权限的适当服务帐户以执行其活动.这可能是配置此类服务的最简单方法.
+
+
+kubectl批准
+CSR可以在内置于控制器管理器的批准流程之外批准.
+
+签名控制器不会立即签署所有证书请求.相反,它等待,直到他们被适当特权的用户标记为“已批准”状态.此流程旨在允许由外部审批控制器或核心控制器管理器中实施的审批控制器处理的自动审批.但是,群集管理员也可以使用kubectl手动批准证书请求.管理员可以列出CSR kubectl get csr并详细描述kubectl describe csr <name>.管理员可以使用kubectl certificate approve <name>和批准或拒绝CSR kubectl certificate deny <name>.
+
+范围
+尽管Kubernetes支持在容器中运行控制平面主控组件(如kube-apiserver和kube-controller-manager),甚至Pod在kubelet中运行,但在撰写本文时,您不能同时使用TLS Bootstrap kubelet并在其上运行主平面组件.
+
+这种限制的原因是kubelet尝试在启动任何pod 之前引导与kube-apiserver的通信,甚至是在磁盘上定义的静态并通过kubelet选项引用的--pod-manifest-path=<PATH>.尝试在kubelet中同时执行TLS Bootstrapping和主组件会导致竞争条件:kubelet需要与kube-apiserver通信以请求证书,但需要这些证书才能启动kube-apiserver.
+
+
+整个kubelet访问api的流程如下:
+master端具有Bootstrap Tokens -> kubelet端持有此token并发起证书签名请求 -> master认证,授权,准入控制
+
+2.4.1 生成Bootstrap Tokens及对应的用户组信息
+Tokens生成:
+# token-id
+$ head -c 6 /dev/urandom | md5sum | head -c 6
+07401b
+
+# token-secret
+$ head -c 16 /dev/urandom | md5sum | head -c 16
+f395accd246ae52d
+
+cat << EOF > bin/CreateSecret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  # Name MUST be of form "bootstrap-token-<token id>"
+  name: bootstrap-token-07401b
+  namespace: kube-system
+
+# Type MUST be 'bootstrap.kubernetes.io/token'
+type: bootstrap.kubernetes.io/token
+stringData:
+  # Human readable description. Optional.
+  description: "The default bootstrap token generated by 'kubeadm init'."
+
+  # Token ID and secret. Required.
+  token-id: 07401b
+  token-secret: f395accd246ae52d
+
+  # Expiration. Optional.
+  expiration: 2050-01-01T00:00:00Z
+
+  # Allowed usages.
+  usage-bootstrap-authentication: "true"
+  usage-bootstrap-signing: "true"
+
+  # Extra groups to authenticate the token as. Must start with "system:bootstrappers:"
+  auth-extra-groups: system:bootstrappers:worker,system:bootstrappers:ingress
+
+EOF
+
+2.4.2 允许node创建CSR(certificate signing request,证书签名需求)
+注意: 
+1. group:  system:bootstrappers
+
+cat << EOF > bin/AllowNodeCreateCSR.yaml
+
+# enable bootstrapping nodes to create CSR
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: create-csrs-for-bootstrapping
+subjects:
+- kind: Group
+  name: system:bootstrappers
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: system:node-bootstrapper
+  apiGroup: rbac.authorization.k8s.io
+
+EOF
+
+2.4.3 自动签名CSR
+注意: 
+1. apiserver/controller-manager的--feature-gates=RotateKubeletServerCertificate="true",有此选项才能保证到api的请求认证成功以后,可以自动的签名证书
+
+cat << EOF > bin/ApproveCsrForGroup.yaml
+# Approve all CSRs for the group "system:bootstrappers"
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: auto-approve-csrs-for-group
+subjects:
+- kind: Group
+  name: system:bootstrappers
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: system:certificates.k8s.io:certificatesigningrequests:nodeclient
+  apiGroup: rbac.authorization.k8s.io
+
+EOF
+
+2.4.4 自动更新CSR
+
+cat << EOF > bin/ApproveRenewalCsrForGroup.yaml
+# Approve renewal CSRs for the group "system:nodes"
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: auto-approve-renewals-for-nodes
+subjects:
+- kind: Group
+  name: system:nodes
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: system:certificates.k8s.io:certificatesigningrequests:selfnodeclient
+  apiGroup: rbac.authorization.k8s.io
+
+EOF
+
+2.4.5 生成用于bootstrap请求的配置文件
+配置文件生成CSR及包含对应的用户组及token信息,必须和上述api中的对应,其中group必须是system:bootstrap
+
+bin/kubectl config --kubeconfig=kubernetes/client/kubelet/etc/bootstrap-kubeconfig set-cluster kubernetes --server="https://${KUBE_MASTER_HOST}:6443" --certificate-authority=${PKI_PATH}/ca.pem
+bin/kubectl config --kubeconfig=kubernetes/client/kubelet/etc/bootstrap-kubeconfig set-credentials system:bootstrap:07401b --token=07401b.f395accd246ae52d
+bin/kubectl config --kubeconfig=kubernetes/client/kubelet/etc/bootstrap-kubeconfig set-context bootstrap --user=system:bootstrap:07401b --cluster=kubernetes
+bin/kubectl config --kubeconfig=kubernetes/client/kubelet/etc/bootstrap-kubeconfig use-context bootstrap
+
+2.4.6 kubelet启动
+
+************************************************************************
+cat << EOF > ${HOST}/srv.kubelet
+$KUBERNETES_PREFIX/client/kubelet/bin/kubelet \\
+--alsologtostderr="true" \\
+--authentication-token-webhook="true" \\
+--bootstrap-kubeconfig="$KUBERNETES_PREFIX/client/kubelet/etc/bootstrap-kubeconfig" \\
+--cert-dir="$PKI_PATH/" \\
+--cgroup-driver="cgroupfs" \\
+--cluster-dns="$KUBE_DNS" \\
+--containerd="unix://$HOME/apps/docker/var/run/docker/containerd/containerd.sock" \\
+--docker="unix://$HOME/apps/docker/var/run/docker.sock" \\
+--docker-endpoint="unix://$HOME/apps/docker/var/run/docker.sock" \\
+--docker-root="$HOME/apps/docker/var/lib/docker" \\
+--exit-on-lock-contention="false" \\
+--experimental-dockershim-root-directory="$HOME/apps/docker/var/lib/dockershim/" \\
+--fail-swap-on="false" \\
+--feature-gates=DevicePlugins="false" \\
+--hostname-override="${HOST}" \\
+--kubeconfig="$KUBERNETES_PREFIX/client/kubelet/etc/kubeconfig"  \\
+--log-dir="${KUBELET_LOGS_PATH}/" \\
+--log-flush-frequency="2s" \\
+--logtostderr="false" \\
+--machine-id-file="$HOME/apps/kubernetes/client/kubelet/etc/machine-id" \\
+--node-ip="${HOST}" \\
+--pod-infra-container-image="k8s.gcr.io/pause:3.1" \\
+--register-node="true" \\
+--root-dir="$KUBERNETES_PREFIX/client/kubelet/" \\
+--runonce="false" \\
+--seccomp-profile-root="$KUBERNETES_PREFIX/client/kubelet/seccomp/" \\
+--stderrthreshold="4" \\
+--v="4" \\
+--volume-plugin-dir="$KUBERNETES_PREFIX/client/kubelet/plugins/volume/exec/" 
+************************************************************************
+注意:
+1. bootstrap-kubeconfig文件使用上述生成的,kubeconfig必须不能优先存在,此文件会在CSR完成以后,由api颁发的内容生成
+2. --containerd和--docker-endpoint需要和docker对应
+
+2.5 kube-proxy
+和kube-controller-manager类似,使用配置文件的方式来与api认证通讯
+
+cat << EOF > kubernetes/pki/proxy.json
+{
+    "CN": "system:kube-proxy",
+    "key": {
+        "algo": "rsa",
+        "size": 2048
+    },
+    "names": [
+        {
+            "C": "CN",
+            "ST": "Beijing",
+            "L": "Beijing",
+            "O": "k8s",
+            "OU": "proxy"
+   }
+ ]
+}
+EOF
+
+bin/cfssl gencert -ca=kubernetes/pki/ca.pem -ca-key=kubernetes/pki/ca-key.pem -config=kubernetes/pki/ca-config.json -profile=kubernetes kubernetes/pki/proxy.json | bin/cfssljson -bare proxy
+
+KUBECONFIG=proxy.conf bin/kubectl config set-cluster kubernetes --server=https://${KUBE_MASTER_HOST}:6443 --certificate-authority kubernetes/pki/ca.pem --embed-certs
+KUBECONFIG=proxy.conf bin/kubectl config set-credentials system:kube-proxy --client-key proxy-key.pem --client-certificate proxy.pem --embed-certs
+KUBECONFIG=proxy.conf bin/kubectl config set-context system:kube-proxy@kubernetes --cluster kubernetes --user system:kube-proxy
+KUBECONFIG=proxy.conf bin/kubectl config use-context system:kube-proxy@kubernetes
+
+cat << EOF > ${HOST}/srv.kube-proxy
+$KUBERNETES_PREFIX/client/kube-proxy/bin/kube-proxy \\
+--bind-address="0.0.0.0" \\
+--cleanup-ipvs="true" \\
+--cluster-cidr=${CLUSTER_CIDR} \\
+--config-sync-period="30m0s" \\
+--conntrack-max-per-core="65535" \\
+--conntrack-tcp-timeout-close-wait="10m0s" \\
+--conntrack-tcp-timeout-established="30m0s" \\
+--feature-gates=DevicePlugins=false \\
+--healthz-bind-address="0.0.0.0" \\
+--healthz-port="10256" \\
+--hostname-override=${HOST} \\
+--iptables-min-sync-period="5s" \\
+--iptables-sync-period="15s" \\
+--kube-api-burst="10" \\
+--kube-api-content-type="application/vnd.kubernetes.protobuf" \\
+--kube-api-qps="5" \\
+--kubeconfig=${KUBERNETES_PREFIX}/client/kube-proxy/etc/proxy.conf \\
+--log-dir="${KUBELET_LOGS_PATH}" \\
+--log-flush-frequency="2s" \\
+--logtostderr="false" \\
+--metrics-bind-address="0.0.0.0" \\
+--stderrthreshold="4" \\
+--v="4" 
+
+EOF
+
+2.5 coredns
+用于取代原来的kube-dns,启动也很简单
+
+cat << EOF > bin/srv.dns
+$KUBERNETES_PREFIX/server/bin/coredns &
+EOF
+
+3. etcd, flannel
+
+3.1 etcd
+组件版本: 
+etcd-v3.3.13-linux-amd64.tar.gz
+
+原来的版本没有什么ssl的方式通讯及认证此版本详细介绍如何使用证书通讯
+流程如下:
+ca证书 -> ca证书的签名请求 -> apiserver证书的签名请求 -> 签名apiserver证书
+
+# 生成ca证书
+cat << EOF > kubernetes/pki/etcd/ca-config.json
+{
+    "signing": {
+        "default": {
+            "expiry": "43800h"
+        },
+        "profiles": {
+            "server": {
+                "expiry": "43800h",
+                "usages": [
+                    "signing",
+                    "key encipherment",
+                    "server auth"
+                ]
+            },
+            "client": {
+                "expiry": "43800h",
+                "usages": [
+                    "signing",
+                    "key encipherment",
+                    "client auth"
+                ]
+            },
+            "peer": {
+                "expiry": "43800h",
+                "usages": [
+                    "signing",
+                    "key encipherment",
+                    "server auth",
+                    "client auth"
+                ]
+            }
+        }
+    }
+}
+EOF
+
+cat << EOF > kubernetes/pki/etcd/ca-csr.json
+{
+  "CN": "etcd",
+  "key": {
+    "algo": "ecdsa",
+    "size": 256
+  },
+  "names": [
+    {
+      "C": "CN",
+      "ST": "Beijing",
+      "L": "Beijing",
+      "O": "etcd",
+      "OU": "Etcd Security"
+    }
+  ]
+}
+EOF
+
+../../../bin/cfssl gencert -initca ca-csr.json | ../../../bin/cfssljson -bare ca -
+
+# 使用ca签名server端证书
+cat << EOF > kubernetes/pki/etcd/server.json
+{
+    "CN": "etcd",
+    "hosts": [
+      "127.0.0.1",
+      "${HOST1}",
+      "${HOST2}",
+      "${HOST3}"
+    ],
+    "key": {
+        "algo": "ecdsa",
+        "size": 256
+    },
+    "names": [
+        {
+            "C": "CN",
+            "ST": "Beijing",
+            "L": "Beijing",
+            "O": "etcd",
+            "OU": "Etcd Security"
+        }
+    ]
+}
+EOF
+
+../../../bin/cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=server server.json | ../../../bin/cfssljson -bare server
+
+# 客户端(etcd节点做为集群的client端)请求及证书签名
+cat << EOF > kubernetes/pki/etcd/${NAME}.json
+{
+    "CN": "${NAME}",
+    "hosts": [
+        "${HOST}",
+	    "${NAME}.local",
+	    "${NAME}",
+        "127.0.0.1"
+    ],
+    "key": {
+        "algo": "ecdsa",
+        "size": 256
+    },
+    "names": [
+        {
+            "C": "CN",
+            "ST": "Beijing",
+            "L": "Beijing",
+            "O": "etcd",
+            "OU": "Etcd Security"
+        }
+    ]
+}
+EOF
+
+../../../bin/cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=peer ${NAME}.json | ../../../bin/cfssljson -bare ${NAME}
+
+# client端证书,用于其他客户端连接etcd集群时使用
+cat << EOF > kubernetes/pki/etcd/client.json
+{
+    "CN": "client",
+    "hosts": [""],
+    "key": {
+        "algo": "ecdsa",
+        "size": 256
+    },
+    "names": [
+        {
+            "C": "CN",
+            "ST": "Beijing",
+            "L": "Beijing",
+            "O": "etcd",
+            "OU": "Etcd Security"
+        }
+    ]
+}
+EOF
+cd kubernetes/pki/etcd
+../../../bin/cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=client client.json | ../../../bin/cfssljson -bare client
+
+3.2 flannel
+组件版本:
+flannel-v0.11.0-linux-amd64.tar.gz
+
+因为etcd使用了证书,flannel需要指定etcd证书
+
+cat << EOF > bin/startup-networkplugin.sh
+$HOME/apps/flannel/bin/flanneld \\
+-etcd-cafile=${PKI_PATH}/etcd/ca.pem \\
+-etcd-certfile=${PKI_PATH}/etcd/client.pem \\
+-etcd-keyfile=${PKI_PATH}/etcd/client-key.pem \\
+-etcd-endpoints="https://$ETCD_NODE01_IPADDRESS:2379,\\
+https://$ETCD_NODE02_IPADDRESS:2379,\\
+https://$ETCD_NODE03_IPADDRESS:2379" 
+
+EOF
+
+4. FAQ
+4.1 证书及签名文件的选项说明
+
+身份验证问题就应由RBAC解决(可以使用其他权限模型,如 ABAC);RBAC中规定了一个用户或者用户组(subject)具有请求哪些api的权限;在配合 TLS 加密的时候,实际上apiserver读取客户端证书的CN字段作为用户名,读取O字段作为用户组
+
+总结出两点: 
+1. 想要与apiserver通讯就必须采用由apiserver CA签发的证书,这样才能形成信任关系,建立 TLS 连接
+2. 可以通过证书的CN、O字段来提供RBAC所需的用户与用户组
+
+4.2 CSR 请求类型
+kubelet 发起的CSR请求都是由controller manager来做实际签署的,对于controller manager来说,TLS bootstrapping下kubelet发起的CSR请求大致分为以下三种
+
+nodeclient: kubelet以O=system:nodes和CN=system:node:(node name)形式发起的CSR请求
+selfnodeclient: kubelet client renew自己的证书发起的CSR请求(与上一个证书就有相同的 O 和 CN)
+selfnodeserver: kubelet server renew自己的证书发起的CSR请求
+
+结果: nodeclient类型的CSR仅在第一次启动时会产生,selfnodeclient类型的CSR请求实际上就是kubelet renew自己作为client跟apiserver通讯时使用的证书产生的,selfnodeserver类型的CSR请求则是kubelet首次申请或后续renew自己的10250 api端口证书时产生的
+
+4.3 使用etcd证书连接服务
+$ etcdctl --endpoints https://${HOST}:2379 --key-file=client-key.pem --ca-file=ca.pem --cert-file=client.pem get /coreos.com/network/config/ 
+$ etcdctl --endpoints https://192.168.10.1:2379 --key-file=client-key.pem --ca-file=ca.pem --cert-file=client.pem member list
+
+4.4 kubelet端提交csr以后,仍然报错
+apiserver 端的参数开启,否则会出现,即使是kubelet已经可以提交csr,apiserver也已经可以自动批准csr,仍然不可以用,会提示等待证书,在apiserver端$kubectl get csr,会发现csr一直pending,需要在apiserver端开启如下的特性
+--feature-gates=RotateKubeletServerCertificate=true
+
+4.5 当使用systemd作为驱动的时候,会有如下的错误提示
+failed:systemd cgroup flag passed, but systemd support for managing cgroups is not available:unknown
+解决:换成cgroupfs,需要修改docker及kubelet启动
+
+4.6 kubelet端启动时候
+I0701 23:36:20.488522    4906 manager.go:109] Creating Device Plugin manager at /var/lib/kubelet/device-plugins/kubelet.sock
+F0701 23:36:20.488547    4906 server.go:266] failed to run Kubelet: failed to initialize checkpoint manager: mkdir /var/lib/kubelet: permission denied
+关闭此特性,此特性实际是支持第三方设备,比如GPU,等等
+解决: --feature-gates=DevicePlugins="false" \
+
+4.7 kubelet端的--register-node="true" 如果为false的话,就会出现下边的诡异现象,node无法注册
+E0702 06:49:39.513784    3899 kubelet.go:2244] node "192.168.10.3" not found
+
+4.8 kube-proxy证书
+kube-proxy的提交CA验证的json文件中的"O"这个字段需要和apiserver中的相同,这个字段对应与k8s系统中的group字段,通过
+kubectl get clusterrolebinding -o wide
+可以看到system:kube-controller-manager,system:kube-scheduler,system:kube-proxy用户
+当需要提交请求到apiserver,提交的json文件中CN字段必须是系统中具有的,然后使用此用户绑定role,rolebinding等等
+通过如下方式得到group,user信息
+
+如下查看:
+$ kubectl get clusterrolebindings -o go-template='{{range .items}}{{range .subjects}}{{.kind}} || {{.name}} {{end}} {{" || "}} {{.metadata.name}} {{"\n"}}{{end}}'
+
+Group || system:authenticated Group || system:unauthenticated   ||  system:public-info-viewer 
+Group || system:authenticated   ||  system:basic-user 
+Group || system:authenticated   ||  system:discovery 
+Group || system:bootstrappers   ||  auto-approve-csrs-for-group 
+Group || system:bootstrappers   ||  create-csrs-for-bootstrapping 
+Group || system:bootstrappers   ||  node-client-auto-approve-csr 
+Group || system:masters   ||  cluster-admin 
+Group || system:nodes   ||  auto-approve-renewals-for-nodes 
+Group || system:nodes   ||  node-client-auto-renew-crt 
+Group || system:nodes   ||  node-server-auto-renew-crt 
+ServiceAccount || attachdetach-controller   ||  system:controller:attachdetach-controller 
+ServiceAccount || aws-cloud-provider   ||  system:aws-cloud-provider 
+ServiceAccount || certificate-controller   ||  system:controller:certificate-controller 
+ServiceAccount || clusterrole-aggregation-controller   ||  system:controller:clusterrole-aggregation-controller 
+ServiceAccount || cronjob-controller   ||  system:controller:cronjob-controller 
+ServiceAccount || daemon-set-controller   ||  system:controller:daemon-set-controller 
+ServiceAccount || deployment-controller   ||  system:controller:deployment-controller 
+ServiceAccount || disruption-controller   ||  system:controller:disruption-controller 
+ServiceAccount || endpoint-controller   ||  system:controller:endpoint-controller 
+ServiceAccount || expand-controller   ||  system:controller:expand-controller 
+ServiceAccount || generic-garbage-collector   ||  system:controller:generic-garbage-collector 
+ServiceAccount || horizontal-pod-autoscaler   ||  system:controller:horizontal-pod-autoscaler 
+ServiceAccount || job-controller   ||  system:controller:job-controller 
+ServiceAccount || kube-dns   ||  system:kube-dns 
+ServiceAccount || namespace-controller   ||  system:controller:namespace-controller 
+ServiceAccount || node-controller   ||  system:controller:node-controller 
+ServiceAccount || persistent-volume-binder   ||  system:controller:persistent-volume-binder 
+ServiceAccount || pod-garbage-collector   ||  system:controller:pod-garbage-collector 
+ServiceAccount || pvc-protection-controller   ||  system:controller:pvc-protection-controller 
+ServiceAccount || pv-protection-controller   ||  system:controller:pv-protection-controller 
+ServiceAccount || replicaset-controller   ||  system:controller:replicaset-controller 
+ServiceAccount || replication-controller   ||  system:controller:replication-controller 
+ServiceAccount || resourcequota-controller   ||  system:controller:resourcequota-controller 
+ServiceAccount || route-controller   ||  system:controller:route-controller 
+ServiceAccount || service-account-controller   ||  system:controller:service-account-controller 
+ServiceAccount || service-controller   ||  system:controller:service-controller 
+ServiceAccount || statefulset-controller   ||  system:controller:statefulset-controller 
+ServiceAccount || ttl-controller   ||  system:controller:ttl-controller   ||  system:node 
+User || kubelet-bootstrap   ||  kubelet-bootstrap 
+User || system:kube-controller-manager   ||  system:kube-controller-manager 
+User || system:kube-proxy   ||  system:node-proxier 
+User || system:kube-scheduler   ||  system:kube-scheduler 
+User || system:kube-scheduler   ||  system:volume-scheduler 
+
+
+4.9 证书字段说明,具体的内容根据实际定义
+
+ca-config.json问中的字段解释
+cat > ca-config.json <<EOF
+{
+  "signing": {
+    "default": {
+      "expiry": "87600h"
+    },
+    "profiles": {
+      "kubernetes": {
+        "usages": [
+            "signing",
+            "key encipherment",
+            "server auth",
+            "client auth"
+        ],
+        "expiry": "87600h"
+      }
+    }
+  }
+}
+EOF
+
+字段说明:
+ca-config.json: 可以定义多个 profiles,分别指定不同的过期时间、使用场景等参数;后续在签名证书时使用某个 profile
+signing: 表示该证书可用于签名其它证书;生成的 ca.pem 证书中 CA=TRUE
+server auth: 表示client可以用该 CA 对server提供的证书进行验证
+client auth: 表示server可以用该CA对client提供的证书进行验证
+
+
+ca-csr.json 文件,内容如下: 
+{
+  "CN": "kubernetes",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "CN",
+      "ST": "BeiJing",
+      "L": "BeiJing",
+      "O": "k8s",
+      "OU": "System"
+    }
+  ],
+    "ca": {
+       "expiry": "87600h"
+    }
+}
+
+"CN": Common Name,kube-apiserver 从证书中提取该字段作为请求的用户名 (User Name)
+"O": Organization,kube-apiserver 从证书中提取该字段作为请求用户所属的组 (Group)
+
+创建 kubernetes 证书签名请求文件 kubernetes-csr.json：
+{
+    "CN": "kubernetes",
+    "hosts": [
+      "127.0.0.1",
+      "172.16.138.100",
+      "172.16.138.171",
+      "172.16.138.172",
+      "172.16.138.173",
+      "10.254.0.1",
+      "kubernetes",
+      "kubernetes.default",
+      "kubernetes.default.svc",
+      "kubernetes.default.svc.cluster",
+      "kubernetes.default.svc.cluster.local"
+    ],
+    "key": {
+        "algo": "rsa",
+        "size": 2048
+    },
+    "names": [
+        {
+            "C": "CN",
+            "ST": "BeiJing",
+            "L": "BeiJing",
+            "O": "k8s",
+            "OU": "System"
+        }
+    ]
+}
+
+如果 hosts 字段不为空则需要指定授权使用该证书的 IP 或域名列表,由于该证书后续被 etcd 集群和 kubernetes master 集群使用,所以上面分别指定了 etcd 集群、kubernetes master 集群的主机 IP 和 kubernetes 服务的服务 IP(一般是 kube-apiserver 指定的 service-cluster-ip-range 网段的第一个IP,如 10.254.0.1)
+这是最小化安装的kubernetes集群,包括一个私有镜像仓库,三个节点的kubernetes集群,以上物理节点的IP也可以更换为主机名
+
+4.10 
+controller_manager必须生成自己的证书,然后根据证书生成.conf的连接配置文件,否则会有类似的错误:
+Unable to get configmap/extension-apiserver-authentication in kube-system.  Usually fixed by 'kubectl create rolebinding -n kube-system ROLEBINDING_NAME --role=extension-apiserver-authentication-reader --serviceaccount=YOUR_NS:YOUR_SA'
+configmaps "extension-apiserver-authentication" is forbidden: User "kubernetes" cannot get resource "configmaps" in API group "" in the namespace "kube-system"
+
+4.11
+在k8s系统中有system:kube-controller-manager, system:kube-scheduler2个用户,但是没有类似的apiserver账户,为了能让controller-manager和scheduler能运行起来,必须给这2个账户授权
+如下是查询的结果:
+
+$ kubectl get rolebinding -n kube-system -o wide
+NAME                                                AGE   ROLE                                                  USERS                                                   GROUPS   SERVICEACCOUNTS
+system::extension-apiserver-authentication-reader   12h   Role/extension-apiserver-authentication-reader        system:kube-controller-manager, system:kube-scheduler            
+system::leader-locking-kube-controller-manager      12h   Role/system::leader-locking-kube-controller-manager   system:kube-controller-manager                                   kube-system/kube-controller-manager
+system::leader-locking-kube-scheduler               12h   Role/system::leader-locking-kube-scheduler            system:kube-scheduler                                            kube-system/kube-scheduler
+system:controller:bootstrap-signer                  12h   Role/system:controller:bootstrap-signer                                                                                kube-system/bootstrap-signer
+system:controller:cloud-provider                    12h   Role/system:controller:cloud-provider                                                                                  kube-system/cloud-provider
+system:controller:token-cleaner                     12h   Role/system:controller:token-cleaner                                                                                   kube-system/token-cleaner
+
+证书中就必须包含上述账户
+
+5. 配置文件及启动程序详细内容
+
+etcd相关证书
+************************************************************************
+cat << EOF > ca-config.json
+{
+    "signing": {
+        "default": {
+            "expiry": "43800h"
+        },
+        "profiles": {
+            "server": {
+                "expiry": "43800h",
+                "usages": [
+                    "signing",
+                    "key encipherment",
+                    "server auth"
+                ]
+            },
+            "client": {
+                "expiry": "43800h",
+                "usages": [
+                    "signing",
+                    "key encipherment",
+                    "client auth"
+                ]
+            },
+            "peer": {
+                "expiry": "43800h",
+                "usages": [
+                    "signing",
+                    "key encipherment",
+                    "server auth",
+                    "client auth"
+                ]
+            }
+        }
+    }
+}
+EOF
+
+cat << EOF > ca-csr.json
+{
+  "CN": "etcd",
+  "key": {
+    "algo": "ecdsa",
+    "size": 256
+  },
+  "names": [
+    {
+      "C": "CN",
+      "ST": "Beijing",
+      "L": "Beijing",
+      "O": "etcd",
+      "OU": "Etcd Security"
+    }
+  ]
+}
+EOF
+
+cat << EOF > server.json
+{
+    "CN": "etcd",
+    "hosts": [
+      "127.0.0.1",
+      "${HOST1}",
+      "${HOST2}",
+      "${HOST3}"
+    ],
+    "key": {
+        "algo": "ecdsa",
+        "size": 256
+    },
+    "names": [
+        {
+            "C": "CN",
+            "ST": "Beijing",
+            "L": "Beijing",
+            "O": "etcd",
+            "OU": "Etcd Security"
+        }
+    ]
+}
+EOF
+
+cfssl gencert -initca ca-csr.json | cfssljson -bare ca -
+cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=server server.json | cfssljson -bare server
+
+cat << EOF > ${NAME}.json
+{
+    "CN": "${NAME}",
+    "hosts": [
+        "${HOST}",
+	    "${NAME}.local",
+	    "${NAME}",
+        "127.0.0.1"
+    ],
+    "key": {
+        "algo": "ecdsa",
+        "size": 256
+    },
+    "names": [
+        {
+            "C": "CN",
+            "ST": "Beijing",
+            "L": "Beijing",
+            "O": "etcd",
+            "OU": "Etcd Security"
+        }
+    ]
+}
+EOF
+
+cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=peer ${NAME}.json | cfssljson -bare ${NAME}
+
+
+cat << EOF > client.json
+{
+    "CN": "client",
+    "hosts": [""],
+    "key": {
+        "algo": "ecdsa",
+        "size": 256
+    },
+    "names": [
+        {
+            "C": "CN",
+            "ST": "Beijing",
+            "L": "Beijing",
+            "O": "etcd",
+            "OU": "Etcd Security"
+        }
+    ]
+}
+EOF
+
+cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=client client.json | cfssljson -bare client
+
+************************************************************************
+
+kube-apiserver/kube-controller-manager/kube-proxy/kublete/kube-proxy相关证书
+************************************************************************
+# create ca,key json files.
+cat << EOF > kubernetes/pki/ca-config.json
+{
+    "signing": {
+        "default": {
+            "expiry": "43800h"
+        },
+        "profiles": {
+            "kubernetes": {
+                "expiry": "43800h",
+                "usages": [
+                    "signing",
+                    "key encipherment",
+                    "server auth",
+		    "client auth"
+                ]
+            }
+        }
+    }
+}
+EOF
+
+cat << EOF > ca-csr.json
+{
+  "CN": "kubernetes",
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "CN",
+      "ST": "Beijing",
+      "L": "Beijing",
+      "O": "k8s",
+      "OU": "CA"
+    }
+  ]
+}
+EOF
+
+cat << EOF > apiserver-csr.json
+{
+    "CN": "kubernetes",
+    "hosts": [
+      "127.0.0.1",
+      "${KUBE_MASTER_HOST}",
+      "${MASTER_CLUSTER_IP}",
+      "kubernetes",
+      "kubernetes.default",
+      "kubernetes.default.svc",
+      "kubernetes.default.svc.cluster",
+      "kubernetes.default.svc.cluster.local"
+    ],
+    "key": {
+        "algo": "rsa",
+        "size": 2048
+    },
+    "names": [
+        {
+            "C": "CN",
+            "ST": "Beijing",
+            "L": "Beijing",
+            "O": "k8s",
+            "OU": "CA"
+        }
+    ]
+}
+EOF
+
+cfssl gencert -initca ca-csr.json | cfssljson -bare ca
+cfssl gencert -ca=ca.pem -ca-key=ca-key.pem --config=ca-config.json -profile=kubernetes apiserver-csr.json | cfssljson -bare apiserver
+
+# create kube-controller-manager Certificate 
+cat << EOF > controller-manager.json
+{
+    "CN": "system:kube-controller-manager",
+    "key": {
+        "algo": "rsa",
+        "size": 2048
+    },
+    "names": [
+        {
+            "C": "CN",
+            "ST": "Beijing",
+            "L": "Beijing",
+            "O": "system:kube-controller-manager",
+            "OU": "controller-manager"
+   }
+ ]
+}
+EOF
+
+
+# create controller-manager auth,key
+cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes controller-manager.json | cfssljson -bare controller-manager
+
+# create kubeconfig
+KUBECONFIG=controller-manager.conf kubectl config set-cluster kubernetes --server=https://${KUBE_MASTER_HOST}:6443 --certificate-authority ca.pem --embed-certs
+KUBECONFIG=controller-manager.conf kubectl config set-credentials system:kube-controller-manager --client-key controller-manager-key.pem --client-certificate controller-manager.pem --embed-certs
+KUBECONFIG=controller-manager.conf kubectl config set-context system:kube-controller-manager@kubernetes --cluster kubernetes --user system:kube-controller-manager
+KUBECONFIG=controller-manager.conf kubectl config use-context system:kube-controller-manager@kubernetes
+
+# create kube-scheduler Certificate
+cat << EOF > scheduler.json
+{
+    "CN": "system:kube-scheduler",
+    "key": {
+        "algo": "rsa",
+        "size": 2048
+    },
+    "names": [
+        {
+            "C": "CN",
+            "ST": "Beijing",
+            "L": "Beijing",
+            "O": "system:kube-scheduler",
+            "OU": "scheduler"
+   }
+ ]
+}
+EOF
+
+cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes scheduler.json | cfssljson -bare scheduler
+
+# create kubeconfig
+KUBECONFIG=scheduler.conf kubectl config set-cluster kubernetes --server=https://${KUBE_MASTER_HOST}:6443 --certificate-authority kubernetes/pki/ca.pem --embed-certs
+KUBECONFIG=scheduler.conf kubectl config set-credentials system:kube-scheduler --client-key scheduler-key.pem --client-certificate scheduler.pem --embed-certs
+KUBECONFIG=scheduler.conf kubectl config set-context system:kube-scheduler@kubernetes --cluster kubernetes --user system:kube-scheduler
+KUBECONFIG=scheduler.conf kubectl config use-context system:kube-scheduler@kubernetes
+
+# create k8s slave endpoint directory
+# kubelet
+
+kubectl config --kubeconfig=bootstrap-kubeconfig set-cluster kubernetes --server="https://${KUBE_MASTER_HOST}:6443" --certificate-authority=${PKI_PATH}/ca.pem
+kubectl config --kubeconfig=bootstrap-kubeconfig set-credentials system:bootstrap:07401b --token=07401b.f395accd246ae52d
+kubectl config --kubeconfig=bootstrap-kubeconfig set-context bootstrap --user=system:bootstrap:07401b --cluster=kubernetes
+kubectl config --kubeconfig=bootstrap-kubeconfig use-context bootstrap
+
+# kube-proxy
+# create kube-proxy Certificate
+cat << EOF > proxy.json
+{
+    "CN": "system:kube-proxy",
+    "key": {
+        "algo": "rsa",
+        "size": 2048
+    },
+    "names": [
+        {
+            "C": "CN",
+            "ST": "Beijing",
+            "L": "Beijing",
+            "O": "k8s",
+            "OU": "proxy"
+   }
+ ]
+}
+EOF
+
+cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes proxy.json | cfssljson -bare proxy
+
+KUBECONFIG=proxy.conf kubectl config set-cluster kubernetes --server=https://${KUBE_MASTER_HOST}:6443 --certificate-authority ca.pem --embed-certs
+KUBECONFIG=proxy.conf kubectl config set-credentials system:kube-proxy --client-key proxy-key.pem --client-certificate proxy.pem --embed-certs
+KUBECONFIG=proxy.conf kubectl config set-context system:kube-proxy@kubernetes --cluster kubernetes --user system:kube-proxy
+KUBECONFIG=proxy.conf kubectl config use-context system:kube-proxy@kubernetes
+
+************************************************************************
+
+
+etcd启动
+************************************************************************
+cat << EOF > ${HOST}/srv.etcd
+$HOME/apps/etcd/bin/etcd \
+--advertise-client-urls=https://${HOST}:2379,https://${HOST}:4001 \\
+--data-dir=$HOME/apps/etcd/data \\
+--wal-dir=$HOME/apps/etcd/wal \\
+--name=${NAME} \\
+--initial-advertise-peer-urls=https://${HOST}:2380 \\
+--initial-cluster=${ETCD_NODE01}=https://${ETCD_NODE01_IPADDRESS}:2380,${ETCD_NODE02}=https://${ETCD_NODE02_IPADDRESS}:2380,${ETCD_NODE03}=https://${ETCD_NODE03_IPADDRESS}:2380 \\
+--initial-cluster-state=new \\
+--initial-cluster-token=etcd-cluster \\
+--listen-peer-urls=https://${HOST}:2380 \\
+--listen-client-urls=https://${HOST}:2379,https://${HOST}:4001 \\
+--client-cert-auth=true \\
+--trusted-ca-file=${KUBERNETES_PREFIX}/pki/etcd/ca.pem \\
+--cert-file=${KUBERNETES_PREFIX}/pki/etcd/server.pem \\
+--key-file=${KUBERNETES_PREFIX}/pki/etcd/server-key.pem \\
+--peer-client-cert-auth=true \\
+--peer-trusted-ca-file=${KUBERNETES_PREFIX}/pki/etcd/ca.pem \\
+--peer-cert-file=${KUBERNETES_PREFIX}/pki/etcd/${NAME}.pem \\
+--peer-key-file=${KUBERNETES_PREFIX}/pki/etcd/${NAME}-key.pem \\
+--snapshot-count=100000 \\
+--heartbeat-interval=100 \\
+--election-timeout=1000 \\
+--grpc-keepalive-min-time=10s \\
+--grpc-keepalive-interval=30m \\
+--grpc-keepalive-timeout=30s
+
+************************************************************************
+
+flannel启动
+************************************************************************
+cat << EOF > bin/startup-networkplugin.sh
+$HOME/apps/flannel/bin/flanneld \\
+-etcd-cafile=${PKI_PATH}/etcd/ca.pem \\
+-etcd-certfile=${PKI_PATH}/etcd/client.pem \\
+-etcd-keyfile=${PKI_PATH}/etcd/client-key.pem \\
+-etcd-endpoints="https://$ETCD_NODE01_IPADDRESS:2379,\\
+https://$ETCD_NODE02_IPADDRESS:2379,\\
+https://$ETCD_NODE03_IPADDRESS:2379" 
+
+EOF
+************************************************************************
+
+docker启动
+************************************************************************
+cat << EOF > docker/config.toml
+root = "$HOME/apps/docker/var/lib/docker/containerd"
+state = "$HOME/apps/docker/var/run/docker/containerd"
+disabled_plugins = ["cri"]
+oom_score = 0
+
+[grpc]
+  address = "$HOME/apps/docker/var/run/docker/containerd/containerd.sock"
+  uid = 0
+  gid = 0
+  max_recv_message_size = 16777216
+  max_send_message_size = 16777216
+
+[debug]
+  address = "$HOME/apps/docker/var/run/docker/containerd/containerd-debug.sock"
+  uid = 0
+  gid = 0
+  level = "info"
+
+[metrics]
+  address = ""
+  grpc_histogram = false
+
+[cgroup]
+  path = ""
+
+[plugins]
+  [plugins.linux]
+    shim = "containerd-shim"
+    runtime = "docker-runc"
+    runtime_root = "$HOME/apps/docker/var/lib/docker/runtime-runc/"
+    no_shim = false
+    shim_debug = false
+
+EOF
+
+cat << EOF > bin/srv.docker 
+export PATH=$HOME/apps/docker/bin:$PATH
+
+$HOME/apps/docker/bin/containerd \\
+--config $HOME/apps/docker/config.toml >> $HOME/apps/docker/containerd.log 2>&1 & 
+
+$HOME/apps/docker/bin/dockerd \\
+--bip=\${BIP} \\
+--containerd=$HOME/apps/docker/var/run/docker/containerd/containerd.sock \\
+--data-root=$HOME/apps/docker/var/lib/docker \\
+--exec-root=$HOME/apps/docker/var/run/docker \\
+--exec-opt=native.cgroupdriver=cgroupfs \\
+--experimental="false" \\
+--group=${USER} \\
+-H=unix://$HOME/apps/docker/var/run/docker.sock \\
+-H="tcp://0.0.0.0:2375" \\
+--init-path="$HOME/apps/docker/bin" \\
+--insecure-registry=${REGISTRY_IPADDRESS}:5000 \\
+--log-level=info \\
+--pidfile=$HOME/apps/docker/var/run/docker.pid \\
+--selinux-enabled=false >> $HOME/apps/docker/dockerd.log 2>&1 &
+
+EOF
+************************************************************************
+
+
+kube-apiserver启动
+************************************************************************
+# create kube-apiserver service
+cat << EOF > bin/srv.kube-apiserver 
+$KUBERNETES_PREFIX/server/bin/kube-apiserver \\
+--advertise-address=${KUBE_MASTER_HOST} \\
+--allow-privileged="true" \\
+--alsologtostderr="true" \\
+--anonymous-auth="false" \\
+--authorization-mode="Node,RBAC" \\
+--bind-address=0.0.0.0 \\
+--client-ca-file=$PKI_PATH/ca.pem \\
+--default-watch-cache-size="150" \\
+--delete-collection-workers="3" \\
+--enable-admission-plugins="NodeRestriction,NamespaceLifecycle,LimitRanger,ServiceAccount,TaintNodesByCondition,Priority,DefaultTolerationSeconds,DefaultStorageClass,PersistentVolumeClaimResize,MutatingAdmissionWebhook,ValidatingAdmissionWebhook,ResourceQuota" \\
+--enable-bootstrap-token-auth="true" \\
+--enable-garbage-collector="true" \\
+--enable-logs-handler="true" \\
+--etcd-cafile=$PKI_PATH/etcd/ca.pem \\
+--etcd-certfile=$PKI_PATH/etcd/client.pem \\
+--etcd-keyfile=$PKI_PATH/etcd/client-key.pem \\
+--etcd-servers=https://$ETCD_NODE01_IPADDRESS:2379,https://$ETCD_NODE02_IPADDRESS:2379,https://$ETCD_NODE03_IPADDRESS:2379 \\
+--external-hostname=${KUBE_MASTER_HOST} \\
+--event-ttl="30m" \\
+--feature-gates=RotateKubeletServerCertificate=true \\
+--kubelet-client-certificate=$PKI_PATH/apiserver.pem  \\
+--kubelet-client-key=$PKI_PATH/apiserver-key.pem \\
+--kubelet-https="true" \\
+--kubelet-preferred-address-types="InternalIP,ExternalIP,Hostname,InternalDNS,ExternalDNS" \\
+--kubelet-timeout="8s" \\
+--kubernetes-service-node-port="0" \\
+--log-dir=$LOGS_PATH/ \\
+--log-flush-frequency="2s" \\
+--logtostderr="false" \\
+--max-mutating-requests-inflight="300" \\
+--profiling="true" \\
+--secure-port="6443" \\
+--service-account-key-file=$PKI_PATH/ca-key.pem \\
+--service-cluster-ip-range=${SERVICE_CLUSTER_IP_RANGE} \\
+--service-node-port-range="30000-33500" \\
+--tls-cert-file=$PKI_PATH/apiserver.pem  \\
+--tls-private-key-file=$PKI_PATH/apiserver-key.pem \\
+--v="6" \\
+--watch-cache="true"
+
+EOF
+************************************************************************
+
+kube-controller-manager启动
+************************************************************************
+# create kube-controller-manager service
+cat << EOF > bin/srv.kube-controller-manager
+$KUBERNETES_PREFIX/server/bin/kube-controller-manager \\
+--allocate-node-cidrs="true" \\
+--alsologtostderr="true" \\
+--authentication-kubeconfig=${KUBERNETES_PREFIX}/server/conf/controller-manager.conf \\
+--authorization-kubeconfig=${KUBERNETES_PREFIX}/server/conf/controller-manager.conf \\
+--cidr-allocator-type="RangeAllocator"  \\
+--client-ca-file=${PKI_PATH}/ca.pem \\
+--cluster-cidr=${CLUSTER_CIDR} \\
+--cluster-signing-cert-file="$PKI_PATH/ca.pem"  \\
+--cluster-signing-key-file="$PKI_PATH/ca-key.pem"  \\
+--concurrent-deployment-syncs="10"  \\
+--concurrent-endpoint-syncs="10"  \\
+--concurrent-gc-syncs="20"  \\
+--concurrent-namespace-syncs="10"  \\
+--concurrent-replicaset-syncs="10"  \\
+--concurrent-resource-quota-syncs="10"  \\
+--concurrent_rc_syncs="10"  \\
+--concurrent-serviceaccount-token-syncs="5"  \\
+--concurrent-service-syncs="3"  \\
+--configure-cloud-routes="false"  \\
+--contention-profiling="true"  \\
+--controllers="*,bootstrapsigner,tokencleaner"  \\
+--deployment-controller-sync-period="45s"  \\
+--enable-garbage-collector="true"  \\
+--flex-volume-plugin-dir="$KUBERNETES_PREFIX/kubelet-plugins/volume/exec/"  \\
+--feature-gates=RotateKubeletServerCertificate="true" \\
+--horizontal-pod-autoscaler-sync-period="45s"  \\
+--kubeconfig=${KUBERNETES_PREFIX}/server/conf/controller-manager.conf \\
+--kube-api-burst="30"  \\
+--kube-api-content-type="application/vnd.kubernetes.protobuf"  \\
+--large-cluster-size-threshold="50"  \\
+--leader-elect=true \\
+--log-dir="$LOGS_PATH/"  \\
+--log-flush-frequency="2s"  \\
+--logtostderr="false"  \\
+--min-resync-period="12h0m0s"  \\
+--namespace-sync-period="5m"  \\
+--node-cidr-mask-size="24"  \\
+--node-eviction-rate="0.1"  \\
+--node-monitor-grace-period="40s"  \\
+--node-monitor-period="3s"  \\
+--node-startup-grace-period="2m"  \\
+--pod-eviction-timeout="3m0s"  \\
+--profiling="true"  \\
+--pvclaimbinder-sync-period="20s"  \\
+--resource-quota-sync-period="5m0s"  \\
+--root-ca-file="$PKI_PATH/ca.pem"  \\
+--secondary-node-eviction-rate="0.01"  \\
+--service-cluster-ip-range=${SERVICE_CLUSTER_IP_RANGE}  \\
+--service-account-private-key-file="$PKI_PATH/ca-key.pem"  \\
+--stderrthreshold="4"  \\
+--terminated-pod-gc-threshold="12500"  \\
+--unhealthy-zone-threshold="0.55"  \\
+--use-service-account-credentials="true"  \\
+--v="4" 
+
+EOF
+************************************************************************
+
+ kube-scheduler启动
+************************************************************************
+# create kube-scheduler service
+cat << EOF > bin/srv.kube-scheduler
+$KUBERNETES_PREFIX/server/bin/kube-scheduler \\
+--alsologtostderr="true" \\
+--authentication-kubeconfig=${KUBERNETES_PREFIX}/server/conf/scheduler.conf \\
+--authorization-kubeconfig=${KUBERNETES_PREFIX}/server/conf/scheduler.conf \\
+--kubeconfig=${KUBERNETES_PREFIX}/server/conf/scheduler.conf \\
+--leader-elect=true \\
+--log-dir="$LOGS_PATH/"  \\
+--log-flush-frequency="2s"  \\
+--logtostderr="false"  \\
+--stderrthreshold="4"  \\
+--v="4"
+EOF
+************************************************************************
+
+kubelet启动
+************************************************************************
+cat << EOF > ${HOST}/srv.kubelet
+$KUBERNETES_PREFIX/client/kubelet/bin/kubelet \\
+--alsologtostderr="true" \\
+--authentication-token-webhook="true" \\
+--bootstrap-kubeconfig="$KUBERNETES_PREFIX/client/kubelet/etc/bootstrap-kubeconfig" \\
+--cert-dir="$PKI_PATH/" \\
+--cgroup-driver="cgroupfs" \\
+--cluster-dns="$KUBE_DNS" \\
+--containerd="unix://$HOME/apps/docker/var/run/docker/containerd/containerd.sock" \\
+--docker="unix://$HOME/apps/docker/var/run/docker.sock" \\
+--docker-endpoint="unix://$HOME/apps/docker/var/run/docker.sock" \\
+--docker-root="$HOME/apps/docker/var/lib/docker" \\
+--exit-on-lock-contention="false" \\
+--experimental-dockershim-root-directory="$HOME/apps/docker/var/lib/dockershim/" \\
+--fail-swap-on="false" \\
+--feature-gates=DevicePlugins="false" \\
+--hostname-override="${HOST}" \\
+--kubeconfig="$KUBERNETES_PREFIX/client/kubelet/etc/kubeconfig"  \\
+--log-dir="${KUBELET_LOGS_PATH}/" \\
+--log-flush-frequency="2s" \\
+--logtostderr="false" \\
+--machine-id-file="$HOME/apps/kubernetes/client/kubelet/etc/machine-id" \\
+--node-ip="${HOST}" \\
+--pod-infra-container-image="k8s.gcr.io/pause:3.1" \\
+--register-node="true" \\
+--root-dir="$KUBERNETES_PREFIX/client/kubelet/" \\
+--runonce="false" \\
+--seccomp-profile-root="$KUBERNETES_PREFIX/client/kubelet/seccomp/" \\
+--stderrthreshold="4" \\
+--v="4" \\
+--volume-plugin-dir="$KUBERNETES_PREFIX/client/kubelet/plugins/volume/exec/" 
+
+EOF
+************************************************************************
+
+kube-proxy启动
+************************************************************************
+cat << EOF > ${HOST}/srv.kube-proxy
+$KUBERNETES_PREFIX/client/kube-proxy/bin/kube-proxy \\
+--bind-address="0.0.0.0" \\
+--cleanup-ipvs="true" \\
+--cluster-cidr=${CLUSTER_CIDR} \\
+--config-sync-period="30m0s" \\
+--conntrack-max-per-core="65535" \\
+--conntrack-tcp-timeout-close-wait="10m0s" \\
+--conntrack-tcp-timeout-established="30m0s" \\
+--feature-gates=DevicePlugins=false \\
+--healthz-bind-address="0.0.0.0" \\
+--healthz-port="10256" \\
+--hostname-override=${HOST} \\
+--iptables-min-sync-period="5s" \\
+--iptables-sync-period="15s" \\
+--kube-api-burst="10" \\
+--kube-api-content-type="application/vnd.kubernetes.protobuf" \\
+--kube-api-qps="5" \\
+--kubeconfig=${KUBERNETES_PREFIX}/client/kube-proxy/etc/proxy.conf \\
+--log-dir="${KUBELET_LOGS_PATH}" \\
+--log-flush-frequency="2s" \\
+--logtostderr="false" \\
+--metrics-bind-address="0.0.0.0" \\
+--stderrthreshold="4" \\
+--v="4" 
+
+EOF
+************************************************************************
+
+coredns启动
+************************************************************************
+cat << EOF > bin/srv.dns
+$KUBERNETES_PREFIX/server/bin/coredns &
+EOF
+************************************************************************
+
+授权文件
+************************************************************************
+# enable kubelet approve csr and apiserver auto approve/renewals csr
+
+# TLS bootstrap - Bootstrap Tokens 
+
+cat << EOF > bin/CreateSecret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  # Name MUST be of form "bootstrap-token-<token id>"
+  name: bootstrap-token-07401b
+  namespace: kube-system
+
+# Type MUST be 'bootstrap.kubernetes.io/token'
+type: bootstrap.kubernetes.io/token
+stringData:
+  # Human readable description. Optional.
+  description: "The default bootstrap token generated by 'kubeadm init'."
+
+  # Token ID and secret. Required.
+  token-id: 07401b
+  token-secret: f395accd246ae52d
+
+  # Expiration. Optional.
+  expiration: 2050-01-01T00:00:00Z
+
+  # Allowed usages.
+  usage-bootstrap-authentication: "true"
+  usage-bootstrap-signing: "true"
+
+  # Extra groups to authenticate the token as. Must start with "system:bootstrappers:"
+  auth-extra-groups: system:bootstrappers:worker,system:bootstrappers:ingress
+
+EOF
+
+# allow nodes to create csr
+cat << EOF > bin/AllowNodeCreateCSR.yaml
+
+# enable bootstrapping nodes to create CSR
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: create-csrs-for-bootstrapping
+subjects:
+- kind: Group
+  name: system:bootstrappers
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: system:node-bootstrapper
+  apiGroup: rbac.authorization.k8s.io
+
+EOF
+
+# auto approve csr
+cat << EOF > bin/ApproveCsrForGroup.yaml
+# Approve all CSRs for the group "system:bootstrappers"
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: auto-approve-csrs-for-group
+subjects:
+- kind: Group
+  name: system:bootstrappers
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: system:certificates.k8s.io:certificatesigningrequests:nodeclient
+  apiGroup: rbac.authorization.k8s.io
+
+EOF
+
+# renewal csr
+cat << EOF > bin/ApproveRenewalCsrForGroup.yaml
+# Approve renewal CSRs for the group "system:nodes"
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: auto-approve-renewals-for-nodes
+subjects:
+- kind: Group
+  name: system:nodes
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: system:certificates.k8s.io:certificatesigningrequests:selfnodeclient
+  apiGroup: rbac.authorization.k8s.io
+
+EOF
+************************************************************************
+
+
+
+
+
+
+
+
+
+

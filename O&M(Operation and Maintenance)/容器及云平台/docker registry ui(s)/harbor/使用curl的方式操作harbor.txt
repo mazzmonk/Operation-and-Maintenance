@@ -1,0 +1,33 @@
+harbor 2.0以后的版本,需要使用2.0的api才能操作对应的habor仓库
+
+https://cloud.tencent.com/developer/article/1750999
+这里介绍了目前可用的api 2.0
+
+
+查看仓库中项目详细信息
+curl -u "admin:Harbor12345" -X GET -H "Content-Type: application/json" "https://192.168.56.106/api/v2.0/projects/{project_id}"
+
+curl -u "admin:Harbor12345" -X GET -H "Content-Type: application/json" "https://192.168.56.106/api/v2.0/projects?project_name=guest"
+
+
+搜索镜像
+curl  -u "admin:Harbor12345"  -X GET -H "Content-Type: application/json" "https://192.168.56.106/api/v2.0/search?q=nginx"
+
+删除项目
+curl  -u "admin:Harbor12345"  -X DELETE  -H "Content-Type: application/json" "https://192.168.56.106/api/v2.0/projects/{project_id}"
+curl  -u "admin:Harbor12345"  -X DELETE  -H "Content-Type: application/json" "https://192.168.56.106/api/v2.0/projects?project_name=guest"
+
+创建项目
+curl -u "admin:Harbor12345" -X POST -H "Content-Type: application/json" "https://192.168.56.106/api/v2.0/projects" -d @createproject.json
+
+ 
+createproject.json例子
+{"project_name": "paas-admin","metadata": {"public": "true"}}
+
+
+删除项目中用户权限
+curl -u "admin:Harbor12345" -X DELETE -H "Content-Type: application/json" "https://192.168.56.106/api/projects/{project_id}/members/{user_id}"
+
+
+
+

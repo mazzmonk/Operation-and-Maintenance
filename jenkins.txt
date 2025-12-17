@@ -1,0 +1,16 @@
+启动
+docker run -dit --name jenkins-2174 -p 18080:8080 -p 50000:50000 7edc194b635f
+
+备份数据的时候,备份容器中的/var/jenkins_home目录
+
+
+
+windows的java代理报错:
+jenkins java.lang.exception:the server rejected the connection:
+
+解决:
+https://issues.jenkins-ci.org/browse/JENKINS-29616
+
+下面有描述,主要是因为加密通讯,关闭之,也可以安装相关插件,关闭方式
+jenkins->Configure Global Security页面中的
+Agents选项,选择Inbound TCP Agent Protocol/2(deprecated,unencrypted)

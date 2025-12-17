@@ -1,0 +1,5 @@
+stdlib.h
+
+/* Free a block allocated by `malloc', `realloc' or `calloc'.  */
+extern void free (void *__ptr) __THROW;
+

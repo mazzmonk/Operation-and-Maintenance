@@ -1,0 +1,54 @@
+#include <iostream>
+
+struct says {
+  char word[20];
+  int times;
+};
+
+void call(says &x);
+
+int main() {
+  says p = { "hello world", 0 };
+  call(p);
+  std::cout << "the " << p.times << std::endl;
+
+  call(p);
+  std::cout << "the " << p.times << std::endl;
+
+  call(p);
+  std::cout << "the " << p.times << std::endl;
+  return 0;
+
+}
+
+void call(says &x) {
+  std::cout << x.word << std::endl;
+  x.times++;
+}
+
+
+#include <iostream>
+
+struct says {
+  char word[20];
+  int times;
+};
+
+void call(says *x);
+
+int main() {
+  says p = { "hello world", 0 };
+  call(&p);
+  std::cout << "the " << p.times << std::endl;
+
+  call(&p);
+  std::cout << "the " << p.times << std::endl;
+
+  call(&p);
+  std::cout << "the " << p.times << std::endl;
+  return 0;
+
+}
+
+says& call(says &ref) {
+

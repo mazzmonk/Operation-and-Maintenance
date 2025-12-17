@@ -1,0 +1,218 @@
+mysqldumpslow - mysql自带工具,分析慢查询日志
+例如:
+分析出使用频率最高的前50条慢sql：
+/usr/local/services/mysql/bin/mysqldumpslow -s c -t 50 VM_166_154-slow.log
+
+如只需分析处理速度最慢的10条sql：
+/usr/local/services/mysql/bin/mysqldumpslow -t 10 VM_166_154-slow.log
+
+
+# 周期性的运行show status
+bin/mysqladmin -uroot -p --socket=/home/blue/apps/mysql/tmp/mysql.sock  extended -r -i 10
+
+
+# 和服务器之间来往的流量
+Bytes_received和Bytes_sent
+
+# 服务器正在执行的命令
+Com_*
+
+# 在查询执行期间创建的临时表和文件
+Created_*
+
+# 存储引擎操作
+Handler_*
+
+# 不同类型的联结执行计划
+Select_*
+
+# 几种排序信息
+Sort_*
+
+
+##############################################
+#硬件标准: 24/core 128/mem
+
+# innodb 
+# 基本等于内存的80%,如果有更多的,可以更大
+innodb_buffer_pool_size = 105G
+innodb_io_capacity = 800
+innodb_write_io_threads = 24
+innodb_read_io_threads = 24
+innodb_thread_concurrency = 48 
+innodb_additional_mem_pool_size = 128M
+
+# myisam
+# 如果不用myisam,但是mysql自己的操作,要用到
+key_buffer_size = 128M
+
+
+# query cache
+query_cache_size = 4G 
+query_cache_limit = 64M
+query_cache_min_res_unit = 16K
+
+
+# 
+join_buffer_size = 4G
+join_buffer_space_limit = 8G
+
+
+# timeout
+wait_timeout=180
+interactive_timeout=180
+
+
+###############################################################33
+
+在预测最高内存消耗时候不用假设最坏的场景.例如:如果MySql被配置成可以接受100个连接,理论上应该可以同时在这100个连接里运行大的查询,但是实际上这不可能发生.例如:如果吧myisam_buffer_size设置为256M,最坏情况下会消耗25GB内存,但是实际情况下不太可能发生.
+
+最好的办法是通过观察进程虚拟内存大小得到数据.在unix系统中,可以在top的VIRT栏,或者是ps的VSZ栏看到这里一数据
+
+
+对于大部分用户来说,下面的这些缓存最重要:
+.操作系统为MyISAM的数据提供的缓存
+.MyISAM建缓存
+.InnoDB缓存
+.查询缓存
+
+MyISAM
+MyISAM键缓存.默认只有一个缓冲区,但是可以建立多个.和InnoDB及其他引擎不同的是,MyISAM自身只缓存了索引,没有数据(它让操作系统缓存数据).
+最重要的选项是key_buffer_size,它的至应该占到所有保留内存的25%到50%.值得一体的是操作系统缓存,它通常用来保存从MyISAM的.MYD文件中读取出来的数据.
+
+可以使用show status和show variables监视键缓冲区的使用情况和性能.
+通过下面的公式检查缓存命中率和缓冲区使用的百分比:
+缓存命中率
+100-((key_reads*100)/key_read_requests)
+
+缓存使用百分比
+100-((key_blocks_unused*key_cache_block_size)*100/key_buffer_size)
+
+在决定给缓存分配多少内存的时候,知道MyISAM索引使用了多少磁盘空间会比较有帮助.没有必要让键缓存大于数据的大小.如果使用unix,可以使用下面的命令找出存储索引的文件大小:
+
+du -sch `find /mysql/data/ -name "*.MYI"`
+
+要记住MyISAM使用操作系统缓存数据文件,它通常大于索引的大小.因此,留给操作系统缓存的内存比留给键缓存的要多也很正常.最后,即使没有使用MyISAM表,也要给key_buffer_size设置少量的内存,比如32MB.MySql有时会使用MyISAM执行一些内部操作,比如给有GROUP BY的查询提供临时表.
+
+键数据块大小是重要的,使键数据块大小和操作系统相匹配,以避免写入等待.myisam_block_size变量控制了键缓存块的大小.所有的键都存储在相同的文件中,所以的确需要它们的大小都等于或者大于操作系统的值,以避免由于对齐导致的写入等待问题.
+比如:操作系统的页面大小是4KB,键数据块大小设置为4KB或者更大为4KB的倍数.
+
+
+InnoDB
+InnoDB缓冲池也许会比其他的东西更需要更多的内存.InnoDB缓存池不仅仅保存了索引,它还保存了行数据及自适应的哈希索引,插入缓冲区,锁及其他的内部结构.
+InnoDB严重依赖缓冲池,建议把专用服务器上的80%的物理内存分配给缓冲池.实际上,如果机器上有更多的内存,还可以分配更多的内存.
+
+在大部分情况下,应该使InnoDB缓冲池和可用内存保持一致.但是,在少数情况下,很大的缓冲池会导致长时间的延迟.比如,大型的缓冲池在检查点或插入缓存合并操作的时候会变慢,并且并发也会因为锁定而减少.如果遇到这种问题,就应该减少缓冲池的大小.
+
+改变innodb_max_dirty_pages_pct的值,可以让innoDB改变保留在缓冲池中被修改的页面的数量.如果允许保留更多被修改的页面,InnoDB就需要更长的时间来关闭,因为它会在关闭之前把修改的页面写入数据文件.可以强制它快速关闭,但是它在重启的时候需要更多的时间恢复.如果预先知道需要关闭,就可以把变量的值设置为较小的值,并等待线程清理缓冲池,然后在修改页面数量变小的时候关闭InnoDB,可以通过观察状态变量Innodb_buffer_pool_pages_dirty.
+
+降低innodb_max_dirty_pages_pct的值其实并不会确保InnoDB会在缓冲池里边保存较少的修改页面.InnoDB默认行为是使用后台线程刷新修改过的页面,合并写入查询并且顺序地执行写入动作.这种行为是"懒惰的",因为它只会在其他数据需要空间的时候才会执行刷新行为.当修改过的页面超过变量规定的值,InnoDB会尽快刷新缓冲池,以保持尽可能少的修改过的页面.这个变量的默认值是90%,所以默认情况下,InnoDB只会在修改过的页面已经占据了缓冲池90%空间的时候,才开始刷新动作.
+
+如果希望改变写入状况,可以按照工作负载调整这个值.比如,降到50%就会让InnoDB执行更多的写入操作,因为会更快刷新页面,并且不会执行批次写入.如果工作负载有很多写入的尖峰,使用更低的值有助于InnoDB更好地吸收尖峰.
+
+
+线程缓存保存了和当前连接无关的线程.这些线程可以供新连接使用.当一个新连接被创建出来并且缓存中有一个线程的时候,MySql就会把这个线程从缓存中删除,并且把它赋给连接.连接关闭时,MySql会回收线程,把它放回到缓存中.只要缓存中有自由的线程,MySql就能很快地响应连接请求.
+
+thread_cache_size定义了MySql能在缓存中保存的线程数量.可以通过观察threads_created变量的值,以确定线程缓存是否足够大.如果每秒创建的线程数少与10个,缓存的大小就是足够的.
+
+观察Threads_connected的值,并且把thread_cache_size的值设得足够大,以处理波动的负载
+
+大多数情况,非常巨大的线程缓存是没有必要的.但是很小并不会节约内存,每个在缓存中的线程通常消耗256KB内存.通常来说,需要把线程缓存保持的足够大,以使Thread_created不会经常增加.但是如果它的值非常大(比如好几千),那么就应该把它设置小点,因为,操作系统不能很好处理极多的线程.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

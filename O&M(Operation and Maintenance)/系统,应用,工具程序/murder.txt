@@ -1,0 +1,1 @@
+python dist/murder_client.py peer ../tmp/docker-1.12.0.tgz\:torrent /home/blue/apps/a.tar.gz 172.17.82.5

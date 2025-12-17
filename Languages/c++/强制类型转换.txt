@@ -1,0 +1,41 @@
+#include <iostream>
+
+using namespace std;
+
+int main()
+{
+	const int i = 5;
+	int j = const_cast<int&>(i);
+	cout << j << endl;
+
+	const string s = "hello";
+        string s1 = const_cast<string&>(s);	
+	cout << s1 << endl;
+
+	const char* s = "world";
+	char* s1 = const_cast<char*>(s);
+	cout << s1 << endl;
+	
+}
+
+
+double a = 111.23
+int b = static_cast<int>(a);
+
+这里的强制double类型到int类型以后，有可能导致数值不准
+上述111.23强制转换成int类型以后，理论上应该得到111,但是实际上这个数值很大程度上不是111,就是说并非去除小数点后边的内容。换句话说，将导致不可预测的错误。
+
+这种问题同样存在于
+double a = 2.3
+int b = a;
+
+这里的结果同样和上述的一样。
+
+
+
+
+
+
+
+
+

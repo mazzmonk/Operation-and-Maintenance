@@ -1,0 +1,93 @@
+x509 client certs
+步骤:
+角色    IP				HOSTNAME			组件
+master 192.168.10.15 	lb01.myclusterA.net	api/controller manager/scheduler
+client 192.168.10.51						kubelet/proxy
+
+
+1.生成根证书
+# 生成私钥,2048位加密
+openssl genrsa -out ca.key 2048
+
+# 根据私钥生成ca证书,36500天过期
+openssl req -x509 -new -nodes -key ca.key -subj "/CN=mycluster.net" -days 36500 -out ca.crt
+
+2.生成API Server服务端证书和私钥
+# 生成api server用私钥
+openssl genrsa -out api-server.key 2048
+
+# 生成api server端证书
+NH=`hostname`
+openssl req -new -key api-server.key -subj "/CN=$NH" -out api-server.csr
+
+# 使用CA证书给api server签名
+openssl x509 -req -in api-server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out api-server.crt -days 36500
+
+3.生成Controller Manager与Scheduler进程公用的证书和私钥
+# 生成私钥
+openssl genrsa -out controller-manager-and-scheduler.key 2048
+
+# 生成证书
+openssl req -new -key controller-manager-and-scheduler.key -subj "/CN=$NH" -out controller-manager-and-scheduler.csr
+
+# 签名证书
+openssl x509 -req -in controller-manager-and-scheduler.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out controller-manager-and-scheduler.crt -days 36500
+
+4.生成kubelet所用的客户端证书和私钥
+# 生成kubelet端私钥
+#openssl genrsa -out 192-168-10-51.key 2048
+openssl genrsa -out kubelet-client.key 2048
+
+# 生成证书
+#openssl req -new -key 192-168-10-51.key -subj "/CN=192.168.10.51" -out 192-168-10-51.csr
+openssl req -new -key kubelet-client.key -subj "/CN=kubelet-client" -out kubelet-client.csr
+
+# 签名证书
+#openssl x509 -req -in 192-168-10-51.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out 192-168-10-51.crt -days 36500
+openssl x509 -req -in kubelet-client.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out kubelet-client.crt -days 36500
+
+
+
+
+
+##############################
+
+
+
+openssl genrsa -out client.key 2048
+openssl req -new -key client.key -subj "/CN=192.168.10.15" -out client.csr
+openssl x509 -req -in client.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out client.crt -days 5000
+
+openssl genrsa -out kubelet-client.key 2048
+openssl req -new -key kubelet-client.key -subj "/CN=192.168.10.51" -out kubelet-client.csr
+openssl x509 -req -in kubelet-client.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out kubelet-client.crt -days 5000
+
+
+
+
+生成token
+head -c 16 /dev/urandom | od -An -t x | tr -d ' '
+
+
+token.csv文件内容
+token                            用户名             用户ID
+73dec876dabd7a74ebbb092272307d85,kubelet-bootstrap,10001,"system:kubelet-bootstrap"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

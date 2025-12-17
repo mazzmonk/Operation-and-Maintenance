@@ -1,0 +1,858 @@
+$ python -m django --version
+$ django-admin
+$ django-admin startproject django_project
+$ python manage.py runserver
+$ python manage.py startapp blog    # 创建app
+
+# 编辑blog/views.py 添加
+
+from django.http import HttpResponse
+
+
+def home(request):
+    return HttpResponse('<h1>Blog Home</h1>')
+
+
+# 建立urls.py文件, 添加
+
+from django.urls import path
+from . import views
+
+
+urlpatterns = [
+    path('', views.home, name='blog-home'),
+]
+
+
+# 修改django_project/urls.py文件为如下内容
+
+from django.contrib import admin
+from django.urls import path, include
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    path('blog/', include('blog.urls')),
+]
+
+
+# 在views.py文件中添加 
+
+def about(request):
+    return HttpResponse('<h1>Blog About</h1>')
+
+
+# 使用template方式
+# 建立blog/templates/blog目录
+
+# 建立文件blog/templates/blog/{home.html, about.html}
+
+# 在文件django_project/settings.py中的INSTALLED_APPS添加成如下的内容,这里的BlogConfig来之blog/apps.py中的BlogConfig这个类
+而blog.apps.BlogConfi正好对应blog目录中apps.py中的BlogConfig
+
+INSTALLED_APPS = [
+    'blog.apps.BlogConfig',
+
+# 修改views.py文件
+
+def home(request):
+    return render(request, 'blog/home.html')
+
+
+# 添加如下内容,作为传递给template的内容
+
+posts = [
+    {
+        'author': 'CoreyMS',
+        'title': 'Blog Post 1',
+        'content': 'First post content',
+        'date_posted': 'August 27, 2018'
+    },
+    {
+        'author': 'Jane Doe',
+        'title': 'Blog Post 2',
+        'content': 'Second post content',
+        'date_posted': 'August 28, 2018'
+    }
+]
+
+修改如下
+
+def home(request):
+    context = {
+        'posts': posts
+    }
+    return render(request, 'blog/home.html', context)
+
+这里的posts这个key对应的是上边的posts这个集合
+
+
+# 修改home.html文件如下
+
+<body>
+       {% for post in posts %}
+              <h1>{{ post.title }}</h1>
+              <p>By {{ post.author }} on {{ post.date_posted }}</p>
+              <p>{{ post.content }}</p>
+       {% endfor %}
+
+</body>
+
+这里的posts来自views.py中的home函数中的key posts
+
+
+# 修改views.py中的
+
+def about(request):
+    return render(request, 'blog/about.html', {'title': 'About'})
+
+
+修改about.html如下
+
+<head>
+    <meta charset="UTF-8">
+    {% if title %}
+        <title>Django blog - {{ title }}</title>
+    {% else %}
+        <title>Django blog</title>
+    {% endif %}
+</head>
+
+上述的{{ title }}这个变量的值来之于views.py中的about这个函数中的最后一个参数,并且这里的if语句,判读title这个变量的值是否存在,也就是对应到views中的函数,比如这里是about函数
+
+
+# 将重复内容放在一个template文件中 - template继承
+
+添加base.html文件和home.html同级,添加如下内容
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    {% if title %}
+    <title>Django blog - {{ title }}</title>
+    {% else %}
+    <title>Django blog</title>
+    {% endif %}
+</head>
+<body>
+    {% block content %}{% endblock %}
+</body>
+</html>
+
+注意:body部分,其中的block content是不同的部分,其他则是相同,会被继承的部分
+
+
+修改about.html文件
+
+{% extends "blog/base.html" %}
+{% block content %}
+    <h1>About Page</h1>
+{% endblock content %}
+
+修改home.html文件
+
+{% extends "blog/base.html" %}
+{% block content %}
+    {% for post in posts %}
+        <h1>{{ post.title }}</h1>
+        <p>By {{ post.author }} on {{ post.date_posted }}</p>
+        <p>{{ post.content }}</p>
+    {% endfor %}
+{% endblock content %}
+
+
+extends部分是继承的部分
+
+
+# 在页面上添加css,js等等
+将base.html页面修改成如下
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+
+
+
+    <meta charset="UTF-8">
+    {% if title %}
+    <title>Django blog - {{ title }}</title>
+    {% else %}
+    <title>Django blog</title>
+    {% endif %}
+</head>
+<body>
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
+
+    <!-- Optional JavaScript -->
+    <!-- jQuery first, then Popper.js, then Bootstrap JS -->
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q" crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl" crossorigin="anonymous"></script>
+</body>
+</html>
+
+
+其中关于样式的部分来自如下
+
+https://getbootstrap.com/docs/4.0/getting-started/introduction/#starter-template
+
+
+修改base.html文件如下
+
+https://raw.githubusercontent.com/CoreyMSchafer/code_snippets/master/Django_Blog/03-Templates/django_project/blog/templates/blog/base.html
+
+
+添加blog/static/blog目录,建立main.css文件
+
+文件内容如下
+
+https://raw.githubusercontent.com/CoreyMSchafer/code_snippets/master/Django_Blog/03-Templates/django_project/blog/static/blog/main.css
+
+# 将main.css文件加入到base.html中,作为公共加载
+在base.html文件开头加入
+
+{% load static %}
+
+在如下部分的前面加入 <link rel="stylesheet" type="text/html" href="{% static 'blog/main.css' %}">
+
+ {% if title %}
+    <title>Django Blog - {{ title }}</title>
+    {% else %}
+    <title>Django Blog</title>
+    {% endif %}
+
+<link rel="stylesheet" type="text/html" href="{% static 'blog/main.css' %}">
+
+
+最终的base.html文件,
+https://github.com/CoreyMSchafer/code_snippets/blob/master/Django_Blog/03-Templates/django_project/blog/templates/blog/base.html
+
+重启服务,同时清除缓存,刷新页面   
+
+# 修改home.html文件的样式
+
+https://raw.githubusercontent.com/CoreyMSchafer/code_snippets/master/Django_Blog/03-Templates/django_project/blog/templates/blog/home.html
+
+在base.html中的
+
+<div class="navbar-nav mr-auto">
+              <a class="nav-item nav-link" href="{% url 'blog-home' %}">Home</a>
+              <a class="nav-item nav-link" href="{% url 'blog-about' %}">About</a>
+</div>
+
+这里的blog-home,来之urls.py中的如下定义部分
+
+urlpatterns = [
+    path('', views.home, name='blog-home'),
+    path('about/', views.about, name='blog-about'),
+]
+
+另外: 在base.html文件中并没有明确的引用urls.py这个文件,但是确实是可以引用到此文件中的定义,应该是和上述的{% url 'blog-home' %}这里的url这个标签有关
+
+
+# 管理页面 - admin/ 
+
+$ python manage.py makemigrations  # update数据库,如果是第一次做,相当于建立一个数据库
+$ python manage.py migrate  # 迁移数据
+$ python manage.py createsuperuser  # 创建超级用户
+
+
+# 操作数据库
+修改models.py文件如下
+
+from django.db import models
+from django.utils import timezone   # 当用户post数据时候,时区/时间相关
+from django.contrib.auth.models import User  # 和数据库中用户相关
+
+class Post(models.Model):
+    title = models.CharField(max_length=100)
+    content = models.TextField()
+    date_posted = models.DateTimeField(default=timezone.now)
+    author = models.ForeignKey(User, on_delete=models.CASCADE)    # 当用户被删除的时候,是否要删除此用户的数据,这里指用户的帖子
+
+$ python manage.py makemigrations  # 将上述的内容变更到文件中,并生成对应的sql语句
+Migrations for 'blog':
+  blog/migrations/0001_initial.py
+    - Create model Post
+
+
+$ python manage.py sqlmigrate blog 0001  # 查看sql语句,0001则是上述命令中的0001_initial.py这里的0001,blog则是这个应用的名称
+BEGIN;
+--
+-- Create model Post
+--
+CREATE TABLE "blog_post" ("id" integer NOT NULL PRIMARY KEY AUTOINCREMENT, "title" varchar(100) NOT NULL, "content" text NOT NULL, "date_posted" datetime NOT NULL, "author_id" integer NOT NULL REFERENCES "auth_user" ("id") DEFERRABLE INITIALLY DEFERRED);
+CREATE INDEX "blog_post_author_id_dd7a8485" ON "blog_post" ("author_id");
+COMMIT;
+
+默认情况下,使用的是SQL lite,通常情况下,不需要自己编写sql语句,django有自己的与数据映射的一套模式,只需要想上述的方式建立好model
+
+$ python manage.py migrate  # 将0001文件中的内容应用到数据库中
+Operations to perform:
+  Apply all migrations: admin, auth, blog, contenttypes, sessions
+Running migrations:
+  Applying blog.0001_initial... OK
+
+
+查询数据库
+$ python manage.py shell
+>>> from blog.models import Post
+>>> from django.contrib.auth.models import User
+>>> User.objects.all()
+<QuerySet [<User: jack>, <User: TestUser>]>
+>>> User.objects.first()
+<User: jack>
+>>> User.objects.filter(username='jack')
+<QuerySet [<User: jack>]>
+>>> User.objects.filter(username='jack').first()
+<User: jack>
+>>> user = User.objects.filter(username='jack').first()
+>>> user
+<User: jack>
+>>> user.id
+1
+>>> user.pk
+1
+>>> user = User.objects.get(id=1)
+>>> user
+<User: jack>
+>>> Post.objects.all()    # 这里的Post是指早models.py中定义的Post这个类,目前没有通过Post过任何数据,因此查询为空
+<QuerySet []>
+>>> post_1 = Post(title='Blog 1', content='First Post Content!', author=user)
+>>> Post.objects.all()    # 此处查询仍然为空,post_1是个变量,只是保存查询到变量,没有执行
+<QuerySet []>
+>>> post_1.save()   # 保存之时,就会执行
+>>> Post.objects.all()
+<QuerySet [<Post: Post object (1)>]>
+>>> User.objects.filter(username='jack').first()  # 添加第二个帖子
+<User: jack>
+>>> user = User.objects.filter(username='jack').first()
+>>> user
+<User: jack>
+>>> post_2 = Post(title='Blog 2', content='Second Post content', author_id=user.id)
+>>> post_2.save()
+>>> post = Post.objects.first()
+>>> post.content
+'First Post Content!'
+>>> post.date_posted
+datetime.datetime(2021, 6, 16, 9, 25, 51, 874995, tzinfo=<UTC>)
+>>> post.author
+<User: jack>
+>>> post.author.username
+'jack'
+>>> user    # 所有user这个用户发布的帖子
+<User: jack>
+>>> user.post_set.all()
+<QuerySet [<Post: Blog 1>, <Post: Blog 2>]>  # 通过此中方式,不用填写author_id这个字段,也不用save,会自动保存
+>>> user.post_set.create(title='Blog 3', content='Third Post Content!')
+<Post: Blog 3>
+>>> user.post_set.all()
+<QuerySet [<Post: Blog 1>, <Post: Blog 2>, <Post: Blog 3>]>
+
+
+在页面上显示数据库内容
+修改views.py文件,添加
+
+from .models import Post
+
+修改
+
+def home(request):
+    context = {
+        'posts': Post.objects.all()
+    }
+    return render(request, 'blog/home.html', context)
+
+
+
+改变home页上时间格式
+修改home.html文件
+
+<small class="text-muted">{{ post.date_posted|date:"F d, Y" }}</small>  # 注意 |date: "F d, Y"
+
+
+将数据库内容加入到admin页面上管理,即注册自己的model到admin页面
+修改blog/admin.py文件
+
+添加
+
+from .models import Post
+
+admin.site.register(Post)     # 这里的Post是来之models.py这个文件中定义的Post这个类
+
+
+## 添加注册应用及页面
+
+$ python manage.py startapp users   # 添加一个users应用,用于用户注册
+
+在django_prject/settings.py的 
+
+INSTALLED_APPS = [
+
+添加
+
+'users.apps.UserConfig',
+
+修改users/views.py文件,添加 
+
+from django.contrib.auth.forms import UserCreationForm    
+
+
+def register(request):
+    form = UserCreationForm()
+    return render(request, 'user/register.html', {'form': form})
+
+上述的做法,其实是继承了django的本身带有的用户注册的功能,不用自性的定义关于用户的信息(用户名称,密码加密等等)
+
+
+新建templates/users/register.html目录及也页面,加入如下内容:
+
+{% extends "blog/base.html" %}
+{% block content %}
+    <div class="content-section">
+        <form method="POST">
+            {% csrf_token %}                                              
+            <fieldset class="form-group">
+                <legend class="border-bottom mb-4">
+                    Join Today
+                </legend>
+            </fieldset>
+
+        </form>
+
+{% extends "blog/base.html" %}
+{% block content %}
+    <div class="content-section">
+        <form method="POST">
+            {% csrf_token %}                                                                            # 加密,防止盗链
+            <fieldset class="form-group">
+                <legend class="border-bottom mb-4">Join Today</legend>
+                {{ form.as_p }}                                                                              # 这里的form来之views.py中的{'form': form},这个用法其实是继承了django的form默认功能
+            </fieldset>
+            <div class="form-group">
+                <button class="btn btn-outline-info" type="submit">Sign Up</button>
+            </div>
+        </form>
+        <div class="border-top pt-3">
+            <small class="text-muted">
+                Already Have An Account? <a class="ml-2" href="#">Sign In</a>
+            </small>
+        </div>
+
+    </div>
+
+{% endblock content %}
+
+
+在django_project/urls.py中加入:
+
+from users import views as user_views   # 从users这个目录中导入views.py这个文件,
+                                                                     # 区别于from .models import Post,这是从.models这个文件中导入Post这个类
+
+ path('register/', user_views.register, name='register'),   # 当导入的是文件时候,要使用文件中的函数的时候,就需要用上
+                                                                                               # 文件名称.函数名称的方式
+
+
+# 在页面上提交表单的时候,加入判断,及显示响应的报错信息
+修改users/views.py文件为如下:
+
+from django.shortcuts import render
+from django.contrib.auth.forms import UserCreationForm
+from django.contrib import messages   # 用于显示报错的信息
+
+def register(request):
+    if request.method == 'POST':
+        form = UserCreationForm(request.POST)
+        if form.is_valid():
+            username = form.cleaned_data.get('username')
+            messages.success(request, f'Account created for {username}!')
+            return redirect('blog-home')
+    else:
+        form = UserCreationForm()
+    return render(request, 'users/register.html', {'form': form})
+
+
+修改blog/templates/blog/base.html
+
+<div class="col-md-8">
+            {% if messages %}
+              {% for message in messages %}
+                 <div class="alert alert-{{ message.tags }} ">
+                    {{ message }}
+                </div>
+              {% endfor %}
+            {% endif %}
+          {% block content %}{% endblock %}
+        </div>
+
+这里,让报错,或者其他信息显示在页面上
+
+
+为了在表单提交的时候保存到数据库中,修改users/views.py,修改register函数,添加form.save()
+
+        if form.is_valid():
+            form.save()
+            username = form.cleaned_data.get('username')
+            messages.success(request, f'Account created for {username}!')
+            return redirect('blog-home')
+
+
+
+将注册用户这个功能单独的拿出来,建立users/forms.py文件,内容如下
+
+from django import forms
+from django.contrib.auth.models import User
+from django.contrib.auth.forms import UserCreationForm
+
+
+class UserRegisterForm(UserCreationForm):
+    email = forms.EmailField()
+
+    class Meta:         # 这里是一个固定的用法,相当于当继承了UserCreationForm这个类,但是要添加一些自己的内容,就如此用
+        model = User
+        fields = ['username', 'email', 'password1', 'password2']
+
+
+修改users/views.py文件为如下的内容,删除了原来的import UserCreationForm,及将原来的UserCreationForm类改为了UserRegisterForm类(来之forms.py)
+
+from django.shortcuts import render, redirect
+from django.contrib import messages
+from .forms import UserRegisterForm
+
+
+def register(request):
+    if request.method == 'POST':
+        form = UserRegisterForm(request.POST)
+        if form.is_valid():
+            form.save()
+            username = form.cleaned_data.get('username')
+            messages.success(request, f'Account created for {username}!')
+            return redirect('blog-home')
+    else:
+        form = UserRegisterForm()
+    return render(request, 'users/register.html', {'form': form})
+
+
+给注册页面,表单页面设置一些新的样式及css等等
+$ pip install django-crispy-forms
+
+在django_project/settings.py中,添加如下的内容
+INSTALLED_APPS = [
+
+    'crispy_forms',
+
+在文件最后STATIC_URL = '/static/' 后添加一行
+
+CRISPY_TEMPLATE_PACK = 'bootstrap4'
+
+修改users/templates/users/register.html文件,在开头{% extends "blog/base.html" %} 后添加一行加载crispy
+
+{% load crispy_forms_tags %}
+
+修改 {{ form.as_p }} 为如下的方式
+<fieldset class="form-group">
+                <legend class="border-bottom mb-4">Join Today</legend>
+                {{ form|crispy }}
+            </fieldset>
+
+
+通过如上的修改,会修改注册页面的样式,将原理的错误提示,换行等等的样式改为一个新的比较耐看的样式
+
+
+# 登陆及注销页面设置
+django默认情况下有登陆注销的页面,但是与前面的风格样式不匹配,因此自定义模板,另外,由于添加的用户不应该有管理员权限
+
+修改django_project/urls.py文件,开头的地方添加
+
+from django.contrib.auth import views as auth_views
+
+中间path的地方添加两条,作为新的路由
+
+    path('login/', auth_views.LoginView.as_view(), name='login'),
+    path('logout/', auth_views.LogoutView.as_view(), name='logout'),
+
+
+默认情况下,当访问x.x.x.x/login这个页面的时候,访问的页面为registration/login.html,这里要把login.html这个页面放到users这个app下面,因此将上述的两条修改为如下:
+
+    path('login/', auth_views.LoginView.as_view(template_name='users/login.html'), name='login'),
+    path('logout/', auth_views.LogoutView.as_view(template_name='users/logout.html'), name='logout'),
+
+将具体的页面指向到users这个app下,新建users/templates/users/login.html文件,添加如下的内容,和register.html基本类似
+但是需要注意的地方就是在最后如果没有账户,是否需要注册一个,跳转到注册页面
+
+{% extends "blog/base.html" %}
+{% load crispy_forms_tags %}
+{% block content %}
+    <div class="content-section">
+        <form method="POST">
+            {% csrf_token %}
+            <fieldset class="form-group">
+                <legend class="border-bottom mb-4">Log In</legend>
+                {{ form|crispy }}
+            </fieldset>
+            <div class="form-group">
+                <button class="btn btn-outline-info" type="submit">Login</button>
+            </div>
+        </form>
+        <div class="border-top pt-3">
+            <small class="text-muted">
+                Need An Account? <a class="ml-2" href="{% url 'register' %}">Sign Up</a>
+            </small>
+        </div>
+
+    </div>
+
+{% endblock content %}
+%%
+
+同时修改register.html的最后,如果有账户,跳转到登陆的页面
+
+<div class="border-top pt-3">
+            <small class="text-muted">
+                Already Have An Account? <a class="ml-2" href="{% url 'login' %}">Sign In</a>
+            </small>
+        </div>
+
+
+当登陆成功以后,默认的页面是django的profile页面,就是用户设置的页面,这里需要修改,改成主页,修改 django_project/settings.py文件,在
+STATIC_URL = '/static/' 后添加如下的内容
+
+LOGIN_REDIRECT_URL = 'blog-home'
+
+如此当用户登陆成功以后,将会跳转到主页
+
+
+修改users/views.py文件,主要修改的是,当注册成功以后,提示账户创建成功,并且跳转到登陆页面
+
+def register(request):
+    if request.method == 'POST':
+        form = UserRegisterForm(request.POST)
+        if form.is_valid():
+            form.save()
+            username = form.cleaned_data.get('username')
+            messages.success(request, f'You account has been created! You are now able to log in')
+            return redirect('login')
+    else:
+        form = UserRegisterForm()
+    return render(request, 'users/register.html', {'form': form})
+
+
+为了和上面的样式统一,新建users/templates/users/logout.html文件,内容如下:
+
+
+{% extends "blog/base.html" %}
+{% block content %}
+    <h2>You have been logged out</h2>
+    <div class="border-top pt-3">
+        <small class="text-muted">
+            <a href="{% url 'login' %}">Log In Again</a>
+        </small>
+    </div>
+{% endblock content %}
+
+
+将主页上右侧的login及register的链接改成可以用
+
+修改blog/templates/blog/base.html,改成如下:将原来的"#"死链接改为可用,同时加入了一个判断,如果是登陆过,就显示注销
+否则显示登陆及注册,这里的user.is_authenticated来自django的功能
+
+   <div class="navbar-nav">
+                {% if user.is_authenticated %}
+                    <a class="nav-item nav-link" href="{% url 'logout' %}">Logout</a>
+                {% else %}
+                    <a class="nav-item nav-link" href="{% url 'login' %}">Login</a>
+                    <a class="nav-item nav-link" href="{% url 'register' %}">Register</a>
+                {% endif %}
+            </div>
+
+
+
+# 用户修改自己账户配置
+修改users/views.py,添加如下:
+
+def profile(request):
+    return render(request, 'users/profile.html')
+
+
+新建users/templates/users/profile.html,加入如下:
+
+{% extends "blog/base.html" %}
+{% load crispy_forms_tags %}
+{% block content %}
+    <h1>{{ user.username }}</h1>      # user是django内置的
+{% endblock content %}
+
+添加访问的路径
+修改django_project/urls.py文件,添加
+
+path('profile/', user_views.profile, name='profile'),
+
+在导航栏上添加profile
+修改blog/templates/blog/base.html
+修改如下
+
+<!-- Navbar Right Side -->
+            <div class="navbar-nav">
+                {% if user.is_authenticated %}
+                    <a class="nav-item nav-link" href="{% url 'profile' %}">Profile</a>
+                    <a class="nav-item nav-link" href="{% url 'logout' %}">Logout</a>
+                {% else %}
+                    <a class="nav-item nav-link" href="{% url 'login' %}">Login</a>
+                    <a class="nav-item nav-link" href="{% url 'register' %}">Register</a>
+                {% endif %}
+            </div>
+
+
+给个人设置页面添加一部分样式及内容
+修改users/views.py,添加
+
+from django.contrib.auth.decorators import login_required
+
+及修改
+
+@login_required     # django的内置功能,将查看profile的前置条件全部来自django自己的功能
+def profile(request):
+    return render(request, 'users/profile.html')
+
+默认情况下当导航栏上的profile点击链接是不存在的,因此需要定向到一个存在的链接
+修改django_project/settings.py
+
+在 LOGIN_REDIRECT_URL 后添加
+
+LOGIN_URL = 'login'
+
+
+# 用户配置 profile 的具体配置
+
+修改 users/models.py 文件,添加
+
+from django.db import models
+from django.contrib.auth.models import User
+
+
+class Profile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    image = models.ImageField(default='default.jpg', upload_to='profile_pics')
+
+    def __str__(self):
+        return f'{self.user.username} Profile'
+
+这里是关于图片上传的内容
+
+$ pip install Pillow    # 关于图片处理的库
+
+$ python manage.py makemigrations
+$ python manage.py migrate
+
+
+在 admin 页面上注册这个profile页面,修改 users/admin.py 文件
+
+from django.contrib import admin
+from .models import Profile
+
+admin.site.register(Profile)
+
+此时可以在admin页面上看见profile这个链接
+
+同时会在django_project的根目录下生成一个profile_pics(与blog,django_project,users同级)的目录,存放的是上传的图片
+
+
+通过shell的模式查阅数据库里的信息,如果用户添加了profile内容,但是没有添加图片,则系统会提供一个默认的图片
+python manage.py shell
+Python 3.8.10 (default, Jun  2 2021, 10:49:15) 
+[GCC 9.4.0] on linux
+Type "help", "copyright", "credits" or "license" for more information.
+(InteractiveConsole)
+>>> from django.contrib.auth.models import User
+>>> user = User.objects.filter(username='jack').first()
+>>> user
+<User: jack>
+>>> user.profile
+<Profile: jack Profile>
+>>> user.profile.image
+<ImageFieldFile: profile_pics/41815263_2171681626453513_1030599238288932864_n1.jpg>
+>>> user.profile.image.width
+636
+>>> user.profile.image.url
+'/profile_pics/41815263_2171681626453513_1030599238288932864_n1.jpg'
+
+
+由于上述的方式添加的所有profile的图片都会在profile_pics这个目录里,为了将各个项目的图片分开到不同的目录,
+修改 django_project/settings.py文件
+
+添加 
+
+import os
+
+在 STATIC_URL 这一行后添加两行
+
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_URL = '/media/'
+
+此时会生成一个和 blog,users,django_project 同级的目录media,对应上面的 MEDIA_ROOT中的media
+目录中有profile_pics目录
+
+
+
+https://raw.githubusercontent.com/CoreyMSchafer/code_snippets/master/Django_Blog/08-Profile-And-Images/django_project/users/templates/users/profile.html
+
+
+
+
+
+
+
+
+
+
+
+
+## 
+请求访问路线如下
+
+client reques -> django_project/urls.py[include部分] -> blog/urls.py[urlpatterns部分 - views.home] -> views.
+py[home函数] -> .html(template & other)
+
+
+在views.py中建立了函数home,在urls.py中的urlpatterns中引用了此函数views.home
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

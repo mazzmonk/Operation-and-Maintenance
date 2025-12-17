@@ -1,0 +1,38 @@
+#!/bin/bash
+# author:jack
+# date:20170209
+# startup kube-scheduler service
+# FILENAME:srv.kube-scheduler
+###########################
+set -e
+set -x
+
+if [ -e GLOBAL-ENV ];then
+  source GLOBAL-ENV
+else
+  echo 'File GLOBAL-ENV does not exist.'
+  echo -1
+fi
+
+LOGS_PATH="$KUBERNETES_PREFIX/server/logs"
+
+$KUBERNETES_PREFIX/server/bin/kube-scheduler \
+--address="0.0.0.0" \
+--algorithm-provider="DefaultProvider" \
+--alsologtostderr=false \
+--contention-profiling=true  \
+--kube-api-burst="100"  \
+--kube-api-content-type="application/vnd.kubernetes.protobuf"  \
+--kube-api-qps="50" \
+--log-dir="$LOGS_PATH/"  \
+--log-flush-frequency="2s"  \
+--logtostderr=false  \
+--master="http://127.0.0.1:8080"  \
+--profiling=true \
+--stderrthreshold="4"  \
+--v="4"
+
+#--master="127.0.0.1:6443"  \
+#--stderrthreshold="0"  \
+#--log-backtrace-at=":0" \
+

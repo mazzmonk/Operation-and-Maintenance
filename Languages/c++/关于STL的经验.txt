@@ -1,0 +1,650 @@
+"STL"意思是与迭代器合作的C++标准库的一部分.包括标准容器(包括string),iostream库的一部分,函数对象和算法.它不包括标准容器适配器(stack,queue和priority_queue)以及bitset和valarray容器,因为它们缺乏迭代器支持.它不包括数组.真的,数组以指针的形式支持迭代器,但数组是C++语言的一部分,并非库.
+
+重载了函数调用操作符(即,operator())的任何类叫做仿函数类.从这样的类建立的对象称为函数对象或仿函数.
+函数bind1st和bind2nd称为绑定器
+
+通常,常数时间操作运行得比要求对数时间的快,而对数时间操作运行得比线性的快.
+
+条款1:仔细选择你的容器		- Effective C++:改善程序与设计的55个具体做法:第3版[p]
+
+● 标准STL序列容器:vector、string、deque和list.
+● 标准STL关联容器:set、multiset、map和multimap.
+● 非标准序列容器slist和rope.slist是一个单向链表,rope本质上是一个重型字符串.
+● 非标准关联容器hash_set、hash_multiset、hash_map和hash_multimap
+● vector<char>可以作为string的替代品
+● vector作为标准关联容器的替代品.有时候vector可以在时间和空间上都表现得比标准关联容器好.
+● 几种标准非STL容器,包括数组、bitset、valarray、stack、queue和priority_queue
+
+
+以下的在vector、deque和list之间作选择的指导方案:
+vector、list和deque提供给程序员不同的复杂度,因此应该这么用:vector是一种可以默认使用的序列类型,当很频繁地对序列中部进行插入和删除时应该用list,当大部分插入和删除发生在序列的头或尾时可以选择deque这种数据结构.
+
+
+连续内存容器和基于节点的容器
+
+连续内存容器(也叫做基于数组的容器)在一个或多个(动态分配)的内存块中保存它们的元素.如果一个新元素被查入或者已存元素被删除,其他在同一个内存块的元素就必须向上或者向下移动来为新元素提供空间或者填充原来被删除的元素所占的空间.这种移动影响了效率和异常安全(就像我们将会看到的).标准的连续内存容器是vector、string和deque.非标准的rope也是连续内存容器.
+
+基于节点的容器在每个内存块(动态分配)中只保存一个元素.容器元素的插入或删除只影响指向节点的指针,而不是节点自己的内容.所以当有东西插入或删除时,元素值不需要移动.表现为链表的容器——比如list和slist——是基于节点的,所有的标准关联容器也是(它们的典型实现是平衡树).非标准的散列容器使用不同的基于节点的实现
+
+
+我们已经准备好描述一些大多数关于在容器间选择的问题
+● 你需要“可以在容器的任意位置插入一个新元素”的能力吗?如果是,你需要序列容器,关联容器做不到.
+● 你关心元素在容器中的顺序吗?如果不,散列容器就是可行的选择.否则,你要避免使用散列容器.
+● 必须使用标准C++中的容器吗?如果是,就可以除去散列容器、slist和rope.
+● 你需要哪一类迭代器?如果必须是随机访问迭代器,在技术上你就只能限于vector、deque和string,但你也可能会考虑rope.如果需要双向迭代器,你就用不了slist和散列容器的一般实现
+● 当插入或者删除数据时,是否非常在意容器内现有元素的移动?如果是,你就必须放弃连续内存容器
+● 容器中的数据的内存布局需要兼容C吗?如果是,你就只能用vector
+● 查找速度很重要吗?如果是,你就应该看看散列容器,排序的vector和标准的关联容器——大概是这个顺序.
+● 你介意如果容器的底层使用了引用计数吗?如果是,你就得避开string,因为很多string的实现是用引用计数.你也不能用rope,因为权威的rope实现是基于引用计数的
+于是你得重新审核你的string,你可以考虑使用vector<char>.
+● 你需要插入和删除的事务性语义吗?也就是说,你需要有可靠地回退插入和删除的能力吗?如果是,你就需要使用基于节点的容器.如果你需要多元素插入的事务性语义,你就应该选择list,因为list是唯一提供多元素插入事务性语义的标准容器.事务性语义对于有兴趣写异常安全代码的程序员来说非常重要.
+● 你要把迭代器、指针和引用的失效次数减到最少吗?如果是,你就应该使用基于节点的容器,因为在这些容器上进行插入和删除不会使迭代器、指针和引用失效(除非它们指向你删除的元素).一般来说,在连续内存容器上插入和删除会使所有指向容器的迭代器、指针和引用失效.
+● 你需要具有有以下特性的序列容器吗:1)可以使用随机访问迭代器;2)只要没有删除而且插入只发生在容器结尾,指针和引用的数据就不会失效?这个一个非常特殊的情况,但如果你遇到这种情况,deque就是你梦想的容器.(有趣的是,当插入只在容器结尾时,deque的迭代器也可能会失效,deque是唯一一个“在迭代器失效时不会使它的指针和引用失效”的标准STL容器.)
+
+
+条款2:小心对“容器无关代码”的幻想		- Effective C++:改善程序与设计的55个具体做法:第3版
+
+STL是建立在泛化之上的.数组泛化为容器,参数化了所包含的对象的类型.函数泛化为算法,参数化了所用的迭代器的类型.指针泛化为迭代器,参数化了所指向的对象的类型.
+关联容器提供对数时间复杂度的lower_bound、upper_bound和equal_range成员函数,但序列容器却没有
+
+
+条款3:使容器里对象的拷贝操作轻量而正确		- Effective C++:改善程序与设计的55个具体做法:第3版
+
+当你向容器中添加一个对象(比如通过insert或push_back等),进入容器的是你指定的对象的拷贝.拷进去,拷出来.这就是STL的方式.
+
+如果你从vector、string或deque中插入或删除了什么,现有的容器元素会移动(拷贝).如果你使用了任何排序算法:next_permutation或者previous_permutation;remove、unique或它们的同类;rotate或reverse等,对象会移动(拷贝).是的,拷贝对象是STL的方式.
+
+当然由于继承的存在,拷贝会导致分割.那就是说,如果你以基类对象建立一个容器,而你试图插入派生类条款3:使容器里对象的拷贝操作轻量而正确对象,那么当对象(通过基类的拷贝构造函数)拷入容器的时候对象的派生部分会被删除:
+
+vector<Widget> vw;
+class SpecialWidget: // SpecialWidget从上面的Widget派生
+public Widget {...};
+SpecialWidget sw;
+vw.push_back(sw);	// sw被当作基类对象拷入vw
+					// 当拷贝时它的特殊部分丢失了
+
+分割问题暗示了把一个派生类对象插入基类对象的容器几乎总是错的.
+
+一个使拷贝更高效、正确而且对分割问题免疫的简单的方式是建立指针的容器而不是对象的容器
+
+
+条款4:用empty来代替检查size()是否为0		- Effective C++:改善程序与设计的55个具体做法:第3版
+
+对于所有的标准容器,empty是一个常数时间的操作,但对于一些list实现,size花费线性时间.
+
+
+条款5:尽量使用区间成员函数代替它们的单元素兄弟		- Effective C++:改善程序与设计的55个具体做法:第3版
+
+我们已经确定两个尽量使用区间成员函数代替它们的单元素兄弟的理由.
+● 一般来说使用区间成员函数可以输入更少的代码.
+● 区间成员函数会导致代码更清晰更直接了当.
+
+避免开销的关键是使用list的insert区间形式
+● 区间构造.所有标准容器都提供这种形式的构造函数:
+
+container::container(InputIterator begin,	// 区间的起点
+						InputIterator end);	// 区间的终点
+
+● 区间插入.所有标准序列容器都提供这种形式的insert:
+
+void container::insert(iterator position,	// 区间插入的位置
+						InputIterator begin, // 插入区间的起点
+						InputIterator end); // 插入区间的终点
+
+关联容器使用它们的比较函数来决定元素要放在哪里,所以它们了省略position参数.
+
+void container::insert(lnputIterator begin, InputIterator end);
+
+● 区间删除.每个标准容器都提供了一个区间形式的erase,但是序列和关联容器的返回类型不同.序列容器提供了这个:
+
+iterator container::erase(iterator begin, iterator end);
+
+而关联容器提供这个:
+
+void container::erase(iterator begin, iterator end);
+
+● 区间赋值.就像我在这个条款的一开始提到的,所有标准列容器都提供了区间形式的assign:
+
+void container::assign(InputIterator begin, InputIterator end);
+
+
+条款6:警惕C++最令人恼怒的解析		- Effective C++:改善程序与设计的55个具体做法:第3版
+
+现在让我们再看看三个函数声明.第一个声明了一个函数g,它带有一个参数,那个参数是指向一个没有参数、返回double的函数的指针:
+
+int g(double (*pf)()); // g带有一个指向函数的指针作为参数
+
+这是完成同一件事的另一种方式.唯一的不同是pf使用非指针语法来声明(一个在C和C++中都有效的语法):
+
+int g(double pf());	// 同上;pf其实是一个指针
+
+照常,参数名可以省略,所以这是g的第三种声明,去掉了pf这个名字:
+
+int g(double ());	// 同上;参数名省略
+
+注意参数名左右的括号(就像f的第二种声明中的d)和单独的括号(正如本例)之间的区别.参数名左右的括号被忽略,但单独的括号指出存在一个参数列表:它们声明了存在指向函数的指针的参数.
+
+用这些f和g的声明做了热身,我们准备检查本条款开头的代码.这里再写一遍:
+
+list<int> data(istream_iterator<int>(dataFile), istream_iterator<int>());
+
+打起精神,这声明了一个函数data,它的返回类型是list<int>.这个函数data带有两个参数:
+● 第一个参数叫做dataFile.它的类型是istream_iterator<int>.dataFile左右的括号是多余的而且被忽略.
+● 第二个参数没有名字.它的类型是指向一个没有参数而且返回istream_iterator<int>的函数的指针.
+
+
+条款9:在删除选项中仔细选择		- Effective C++:改善程序与设计的55个具体做法:第3版
+
+如果你有一个连续内存容器(vector、deque或string——参见条款1),最好的方法是erase-remove惯用法:
+
+c.erase(remove(c.begin(), c.end(), 1963),	// 当c是vector、string
+				c.end());	// 或deque时,
+							// erase-remove惯用法
+							// 是去除特定值的元素
+							// 的最佳方法
+
+这方法也适合于list,但是,正如条款44解释的,list的成员函数remove更高效:
+
+c.remove(1963);	// 当c是list时,
+				// remove成员函数是去除
+				// 特定值的元素的最佳方法
+
+对于关联容器,解决问题的适当方法是调用erase:条款9:在删除选项中仔细选择
+
+c.erase(1963);	// 当c是标准关联容器时
+				// erase成员函数是去除
+				// 特定值的元素的最佳方法
+
+这不仅是正确的,而且很高效,只花费对数时间.(序列容器的基于删除的技术需要线性时间.)并且,关联容器的erase成员函数有基于等价而不是相等的优势
+
+
+让我们现在稍微修改一下这个问题.不是从c中除去每个有特定值的物体,让我们消除下面判断式返回真的每个对象:
+
+bool badValue(int x); // 返回x是否是“bad”
+
+对于序列容器(vector、string、deque和list),我们要做的只是把每个remove替换为remove_if,然后就完成了:
+
+c.erase(remove_if(c.begin(), c.end(), badValue),	// 当c是vector、string
+					c.end());// 或deque时这是去掉
+							// badValue返回真
+							// 的对象的最佳方法
+c.remove_if(badValue);	// 当c是list时这是去掉
+						// badValue返回真
+						// 的对象的最佳方法
+
+
+对于标准关联容器,它不是很直截了当.
+两种方法处理该问题,一个更容易编码,另一个更高效.“更容易但效率较低”的解决方案用remove_copy_if把我们需要的值拷贝到一个新容器中,然后把原容器的内容和
+新的交换:
+
+AssocContainer<int> c;	// c现在是一种
+...						// 标准关联容器
+AssocContainer<int> goodValues;		// 用于容纳不删除
+									// 的值的临时容器
+remove_copy_if(c.begin(), c.end(),	// 从c拷贝不删除
+				inserter(goodValues,	// 的值到
+				goodValues.end()),		// goodValues
+				badValue);
+c.swap(goodValues);		// 交换c和goodValues条款9:在删除选项中仔细选择
+						// 的内容
+
+对这种方法的缺点是它拷贝了所有不删除的元素,而这样的拷贝开销可能大于我们感兴趣支付的.
+
+
+我们可以通过直接从原容器删除元素来避开那笔帐单.不过,因为关联容器没有提供类似remove_if的成员函数,所以我们必须写一个循环来迭代c中的元素,和原来一样删除元素.
+
+AssocContainer<int> c;
+...
+for (AssocContainer<int>::iterator i = c.begin(); // for循环的第三部分
+	i != c.end();	// 是空的;i现在在下面
+	/*nothing*/ ){	// 自增
+	if (badValue(*i)) c.erase(i++);	// 对于坏的值,把当前的
+	else ++i;	// i传给erase,然后
+}	// 作为副作用增加i;
+	// 对于好的值,
+	// 只增加i
+
+这种调用erase的解决方法可以工作,因为表达式i++的值是i的旧值,但作为副作用,i增加了.因此,我们把i的旧值(没增加的)传给erase,但在erase开始执行前i已经自增了.那正好是我们想要的
+
+结论:
+● 去除一个容器中有特定值的所有对象:
+  如果容器是vector、string或deque,使用erase-remove惯用法.
+  如果容器是list,使用list::remove.
+  如果容器是标准关联容器,使用它的erase成员函数.
+● 去除一个容器中满足一个特定判定式的所有对象:
+  如果容器是vector、string或deque,使用erase-remove_if惯用法.
+  如果容器是list,使用list::remove_if.
+  如果容器是标准关联容器,使用remove_copy_if和swap,或写一个循环来遍历容器元素,当你把迭代器传给erase时记得后置递增它.
+● 在循环内做某些事情(除了删除对象之外):
+  如果容器是标准序列容器,写一个循环来遍历容器元素,每当调用erase时记得都用它的返回值更新你的迭代器.
+  如果容器是标准关联容器,写一个循环来遍历容器元素,当你把迭代器传给erase时记得后置递增它.
+
+如你所见,与仅仅调用erase相比,有效地删除容器元素有更多的东西.解决问题的最好方法取决于你是怎样鉴别出哪个对象是要被去掉的,储存它们的容器的类型,和当你删除它们的时候你还想要做什么(如果有的话).
+
+
+条款14:使用reserve来避免不必要的重新分配		- Effective C++:改善程序与设计的55个具体做法:第3版
+
+关于STL容器,最神奇的事情之一是只要不超过它们的最大大小,它们就可以自动增长到足以容纳你放进去的数据.(要知道这个最大值,只要调用名叫max_size的成员函数.)对于vector和string,只要需要更多空间,就以realloc等价的思想来增长.这个类似于realloc的操作有四个部分:
+
+1. 分配新的内存块,它有容器目前容量的几倍.在大部分实现中,vector和string的容量每次以2为因数增长.也就是说,当容器必须扩展时,它们的容量每次翻倍.
+2. 把所有元素从容器的旧内存拷贝到它的新内存.
+3. 销毁旧内存中的对象.
+4. 回收旧内存.
+
+reserve成员函数允许你最小化必须进行的重新分配的次数,因而可以避免真分配的开销和迭代器/指针/引用失效.在标准容器中,只有vector和string提供了所有这些函数.
+● size()告诉你容器中有多少元素.它没有告诉你容器为它容纳的元素分配了多少内存
+● capacity()告诉你容器在它已经分配的内存中可以容纳多少元素.那是容器在那块内存中总共可以容纳多少元素,而不是还可以容纳多少元素.
+● resize(Container::size_type n)强制把容器改为容纳n个元素.调用resize之后,size将会返回n.如果n小于当前大小,容器尾部的元素会被销毁.如果n大于当前大小,新默认构造的元素会添加到容器尾部.如果n大于当前容量,在元素加入之前会发生重新分配.
+● reserve(Container::size_type n)强制容器把它的容量改为至少n,提供的n不小于当前大小.这一般强迫进行一次重新分配,因为容量需要增加.
+
+这个简介明确表示了只要有元素需要插入而且容器的容量不足时就会发生重新分配(包括它们维护的原始内存分配和回收,对象的拷贝和析构和迭代器、指针和引用的失效).所以,避免重新分配的关键是使用reserve尽快把容器的容量设置为足够大,最好在容器被构造之后立刻进行.
+
+
+条款16: 如何将vector和string的数据传给遗留的API		- Effective C++:改善程序与设计的55个具体做法:第3版
+
+最常见的一个就是已经存在的遗留的C风格API接受的是数组和char*指针,而不是vector和string对象.
+如果你有一个vector对象v,而你需要得到一个指向v中数据的指针,以使得它可以被当作一个数组,只要使用&v[0]就可以了.对于string对象s,相应的咒语是简单的s.c_str().
+
+给定一个
+
+vector<int> v;
+
+表达式v[0]生产一个指向vector中第一个元素的引用,所以,&v[0]是指向那个首元素的指针.vector中的元素被C++标准限定为存储在连续内存中,就像是一个数组,所以,如果我们想要传递v给这样的C风格的API:
+
+void doSomething(const int* pInts, size_t numInts);
+
+我们可以这么做:
+
+doSomething(&v[0], v.size());
+
+一个较安全的方法是这样:
+if (!v.empty()) {
+  doSomething(&v[0], v.size());
+}
+
+类似从vector上获取指向内部数据的指针的方法,对string不是可靠的,因为(1)string中的数据并没有保证被存储在独立的一块连续内存中,(2)string的内部表示形式并没承诺以一个null字符结束.这解释了string的成员函数c_str存在的原因,它返回一个按C风格设计的指针,指向string的值.
+
+对象s给这个函数,
+
+void doSomething(const char *pString);
+
+像这样:
+
+doSomething(s.c_str());
+
+即使是字符串的长度为0,它都能工作.在那种情况下,c_str将返回一个指向null字符的指针
+
+对于vector,有更多一点点灵活性.如果你将v传给一个修改其元素的C风格API的话,典型情况都是没问题,但被调用的函数绝不能试图改变vector中元素的个数.比如,它绝不能试图在vector还未使用的容量上“创建”新的元素.如果这么干了,v的内部状态将会变得不一致,因为它再也不知道自己的正确大小了.v.size()将会得到一个不正确的结果.并且,如果被调用的函数试图在一个大小和容量相等的vector上追加数据的话,真的会发生灾难性事件.
+
+事实上,让C风格API把数据放入一个vector,然后拷到你实际想要的STL容器中的主意总是有效的:
+
+size_t fillArray(double *pArray, size_t arraySize); // 同上
+
+vector<double> vd(maxNumDoubles);	// 一样同上
+vd.resize(fillArray(&vd[0], vd.size())); 
+
+deque<double> d(vd.begin(), vd.end());	// 拷贝数据到deque
+list<double> l(vd.begin(), vd.end());	// 拷贝数据到list
+set<double> s(vd.begin(), vd.end());	// 拷贝数据到set
+
+此外,这也提示了vector和string以外的STL容器如何将它们的数据传给C风格API.只要将容器的每个数据拷到vector,然后将它们传给API:
+
+void doSomething(const int* pints, size_t numInts);		// C API (同上)
+set<int> intSet;	// 保存要传递给API数据的set
+...
+vector<int> v(intSet.begin(), intSet.end());	// 拷贝set数据到vector
+if (!v.empty()) doSomething(&v[0], v.size());	// 传递数据到API
+
+
+条款17:使用“交换技巧”来修整过剩容量		- Effective C++:改善程序与设计的55个具体做法:第3版
+
+要避免你的vector持有它不再需要的内存,你需要有一种方法来把它从曾经最大的容量减少到它现在需要的容量.这样减少容量的方法常常被称为“收缩到合适
+
+这是你怎么修整你的竞争者vector过剩容量的方法:
+
+vector<Contestant>(contestants).swap(contestants);
+
+表达式vector<Contestant>(contestants)建立一个临时vector,它是contestants的一份拷贝:vector的拷贝构造函数做了这个工作.但是,vector的拷贝构造函数只分配拷贝的元素需要的内存,所以这个临时vector没有多余的容量.然后我们让临时vector和contestants交换数据,这时我们完成了,contestants只有临时变量的修整过的容量,而这个临时变量则持有了曾经在contestants中的发胀的容量.在这里(这个语句结尾),临时vector被销毁,因此释放了以前contestants使用的内存.
+
+同样的技巧可以应用于string:
+string s;
+...	// 使s变大,然后删除所有条款17:使用“交换技巧”来修整过剩容量
+	// 它的字符
+string(s).swap(s);	// 在s上进行“收缩到合适”
+
+另外,交换技巧的变体可以用于清除容器和减少它的容量到你的实现提供的最小值.你可以简单地和一个默认构造的临时vector或string做个交换:
+
+vector<Contestant> v;
+string s;
+...			// 使用v和s
+vector<Contestant>().swap(v);	// 清除v而且最小化它的容量
+string().swap(s);				// 清除s而且最小化它的容量
+
+
+条款19:了解相等和等价的区别		- Effective C++:改善程序与设计的55个具体做法:第3版
+
+STL充满了比较对象是否有同样的值.比如,当你用find来定位区间中第一个有特定值的对象的位置,find必须可以比较两个对象,看看一个的值是否与另一个相等.同样,当你尝试向set中插入一个新元素时,set::insert必须可以判断那个元素的值是否已经在set中了.
+
+find算法和set的insert成员函数是很多必须判断两个值是否相同的函数的代表.但它们以不同的方式完成,find对“相同”的定义是相等,基于operator==.set::insert对“相同”的定义是等价,通常基于operator<.因为有定义不同,所以有可能一个定义规定了两个对象有相同的值而另一个定义判定它们没有.结果,如果你想有效使用STL,那么你必须明白相等和等价的区别.
+
+操作上来说,相等的概念是基于operator==的.如果表达式“x == y”返回true,x和y有相等的值,否则它们
+没有.这很直截了当,但要牢牢记住,因为x和y有相等的值并不意味着所有它们的成员有相等的值.
+
+等价是基于在一个有序区间中对象值的相对位置.等价一般在每种标准关联容器(比如,set、multiset、map和multimap)的一部分——排序顺序方面有意义.两个对象x和y如果在关联容器c的排序顺序中没有哪个排在另一个之前,那么它们关于c使用的排序顺序有等价的值.
+
+举一个例子,一个set<Widget> s.两个Widget w1和w2,如果在s的排序顺序中没有哪个在另一个之前,那么关于s它们有等价的值.set<Widget>的默认比较函数是less<Widget>,而默认的less<Widget>简单地对Widget调用operator<,所以w1和w2关于operator<有等价的值如果下面表达式为真:
+
+!(w1 < w2)	// w1 < w2时它非真
+&&			// 而且
+!(w2<w1)	// w2 < w1时它非真
+
+这个有意义:两个值如果没有哪个在另一个之前(关于某个排序标准),那么它们等价(按照那个标准).
+
+
+在一般情况下,用于关联容器的比较函数不是operator<或甚至less,它是用户定义的判断式.每个标准关联容器通过它的key_comp成员函数来访问排序判断式,所以如果下式求值为真,两个对象x和y关于一个关联容器c的排序标准有等价的值:
+
+!c.key_comp()(x, y) && !c.key_comp()(y, x)	// 在c的排序顺序中
+											// 如果x在y之前它非真,
+											// 同时在c的排序顺序中
+											// 如果y在x之前它非真
+
+
+条款20:为指针的关联容器指定比较类型		- Effective C++:改善程序与设计的55个具体做法:第3版
+
+要点是无论何时
+你建立一个指针的标准关联容器,你必须记住容器会以指针的值排序.这基本上不是你想要的,所以你几乎总是需要建立自己的仿函数类作为比较类型.
+
+注意到我写的是“比较类型”.你可能奇怪为什么必须特意创造一个仿函数类而不是简单地为set写一个比较函数.例如,你可能想试试:
+
+bool stringPtrLess(const string* ps1,	// 将成为用于
+					const string* ps2)	// 按字符串值
+{										// 排序的string*指针
+	return *ps1 < *ps2;					// 的比较函数
+}
+
+set<string*, stringPtrLess> ssp;		// 假设使用stringPtrLess
+										// 作为ssp的比较函数;
+										// 这不能编译
+
+这里的问题是每个set模板的第三个参数都是一种类型.令人遗憾的是,stringPtrLess不是一种类型,它是一个函数.这就是为什么尝试使用stringPtrLess作为set的比较函数不能编译的原因,set不要一个函数,它要的是能在内部用实例化建立函数的一种类型.
+
+无论何时你建立指针的关联容器,注意你也得指定容器的比较类型.大多数时候,你的比较类型只是解引用指针并比较所指向的对象(就像上面的StringPtrLess做的那样).鉴于这种情况,你手头最好也能有一个用于那种比较的仿函数模板.像这样:
+
+struct DereferenceLess {
+template <typename PtrType>
+	bool operator()(PtrType pT1,			// 参数是值传递的,
+				PtrType pT2) const			// 因为我们希望它们
+	{// 是(或行为像)指针
+		return *pT1 < *pT2;
+	}
+};
+
+这样的模板消除了写像StringPtrLess那样的类的需要,因为我们可以改为使用DereferenceLess:
+
+set<string*, DereferenceLess> ssp;		// 行为就像条款20:为指针的关联容器指定比较类型
+										// set<string*, StringPtrLess>
+
+本条款是关于指针的关联容器,但它也可以应用于表现为指针的对象的容器,例如,智能指针和迭代器.如果你有一个智能指针或迭代器的关联容器,那也得为它指定比较类型.幸运的是,指针的这个解决方案也可以用于类似指针的对象.正如DereferenceLess适合作为T*的关联容器的比较类型一样,它也可以作为T对象的迭代器和智能指针容器的比较类型.
+
+
+条款23:考虑用有序vector代替关联容器		- Effective C++:改善程序与设计的55个具体做法:第3版
+
+当需要一个提供快速查找的数据结构时,很多STL程序员立刻会想到标准关联容器:set、multiset、map和multimap.如果查找速度真得很重要,的确也值得考虑使用非标准的散列容器.如果使用了合适的散列函数,则可以认为散列容器提供了常数时间的查找.对于多数应用,被认为是常数时间查找的散列容器要好于保证了对数时间查找的set、map和它们的multi同事.
+
+数据结构的使用可以总结为这样的三个截然不同的阶段:
+1. 建立.通过插入很多元素建立一个新的数据结构.在这个阶段,几乎所有的操作都是插入和删除.几乎没有或根本没有查找.
+2. 查找.在数据结构中查找指定的信息片.在这个阶段,几乎所有的操作都是查找.几乎没有或根本没有插入和删除.
+3. 重组.修改数据结构的内容,也许通过删除所有现有数据和在原地插入新数据.从动作上说,这个阶段等价于阶段1.一旦这个阶段完成,应用程序返回阶段2.
+
+当然,有序vector的大缺点是它必须保持有序!当一个新元素插入时,大于这个新元素的所有东西都必须向上移一位.它和听起来一样昂贵,如果vector必须重新分配它的内在内存,则会更昂贵,因为vector中所有的元素都必须拷贝.同样的,如果一个元素从vector中被删除,所有大于它的元素都要向下移动.vector的插入和删除都很昂贵,但是关联容器的插入和删除则很轻量.这就是为什么只有当你知道你的数据结构使用的时候查找几乎不和插入和删除混合时,使用有序vector代替关联容器才有意义.
+
+
+条款29:需要一个一个字符输入时考虑使用istreambuf_iterator		- Effective C++:改善程序与设计的55个具体做法:第3版
+
+假设我们要把一个文本文件拷贝到一个字符串对象中.似乎可以用一种很有道理的方法完成:
+
+ifstream inputFile("interestingData.txt");
+string fileData((istream_iterator<char>(inputFile)),	// 把inputFile读入
+				istream_iterator<char>());				// fileData;关于为什么
+														// 它不是很正确请看下文
+
+很快你就会发现这种方法无法把文件中的空格拷贝到字符串中.那是因为istream_iterators使用operator>>函数来进行真的读取,而且operator>>函数在默认情况下忽略空格.
+
+假如你想保留空格,你要的做就是覆盖默认情况.只要清除输入流的skipws标志就行了:
+
+ifstream inputFile("interestingData.txt");
+inputFile.unset(ios::skipws);	// 关闭inputFile的
+								// 忽略空格标志
+string fileData((istream_iterator<char>(inputFile)), istream_iterator<char>());
+
+现在inputFile中的所有字符都拷贝到fileData中了.
+
+你会发现它们的拷贝速度不像你想象的那么快
+
+一个更高效的方法是使用STL最好的秘密武器之一:istreambuf_iterators.你可以像istream_iterator一样使用istreambuf_iterator,但istream_iterator<char>对象使用operator>>来从输入流中读取单个字符.
+
+ifstream inputFile("interestingData.txt");
+string fileData((istreambuf_iterator<char>(inputFile)),
+istreambuf_iterator<char>());
+
+注意这里不需要“unset”skipws标志,istreambuf_iterator不忽略任何字符.它们只抓取流缓冲区的下一个字符.
+
+ostreambuf_iterator用于相应的无格式一个一个字符输出的作.它们没有了ostream_iterator的开销(和灵活性),所以它们通常也做得更好.
+
+
+条款31:了解你的排序选择		- Effective C++:改善程序与设计的55个具体做法:第3版
+
+如果你有一个Widget的vector,你想选择20个质量最高的Widget发送给你最忠实的客户,你需要做的只是排序以鉴别出20个最好的Widget,剩下的可以保持无序.你需要的是部分排序,有一个算法叫做partial_sort,它能准确地完成它的名字所透露的事情:
+
+bool qualityCompare(const Widget& lhs, const Widget& rhs)
+{
+	// 返回lhs的质量是不是比rhs的质量好
+}
+...
+partial_sort(widgets.begin(),	// 把最好的20个元素
+widgets.begin() + 20,			// (按顺序)放在widgets的前端
+widgets.end(),
+qualityCompare);
+...								// 使用widgets...
+
+
+调用完partial_sort后,widgets的前20个元素是容器中最好的而且它们按顺序排列,也就是,质量最高的Widget是widgets[0],第二高的是widgets[1]等.
+
+如果你关心的只是能把20个最好的Widget给你的20个最好的客户,但你不关心哪个Widget给哪个客户,partial_sort就给了你多于需要的东西.在那种情况下,你需要的只是任意顺序的20个最好的Widget.它叫做nth_element.
+
+nth_element(widgets.begin(),	// 把最好的20个元素
+widgets.begin() + 19,			// 放在widgets前端,
+widgets.end(),					// 但不用担心
+qualityCompare);				// 它们的顺序
+
+正如你所见,调用nth_element本质上等价于调用partial_sort.它们结果的唯一区别是partial_sort排序了在位置1-20的元素,而nth_element不.
+
+那引出一个重要的问题.当有元素有同样质量的时候这些算法怎么办?比如假设有12个元素质量是1级(可能是最好的),15个元素质量是2级(第二好的).在这种情况下,选择20个最好的Widget就是选择12个1级的和15个中的8个2级的.partial_sort和nth_element怎么判断15个中的哪些要放到最好的20个中?对于这个问题,当多个元素有等价的值时sort怎么判断元素的顺序?
+
+partial_sort和nth_element以任何它们喜欢的方式排序值等价的元素,而且你不能控制它们在这方面行为.
+
+
+对于完整的排序,你有稍微多一些的控制权.有些排序算法是稳定的.在稳定排序中,如果一个区间中的两个元素有等价的值,它们的相对位置在排序后不改变.因此,如果在(未排序的)widgets vector中Widget A在Widget B之前,而且两者都有相同的质量等级,那么稳定排序算法会保证在这个vector排序后,Widget A仍然
+在Widget B之前.不稳定的算法没做这个保证.
+
+partial_sort是不稳定的.nth_element、sort也没有提供稳定性,但是有一个算法——stable_sort.如果当你排序的时候你需要稳定性,你可能要使用stable_sort.STL并不包含partial_sort和nth_element的稳定版本.
+
+现在谈谈nth_element,这个名字奇怪的算法是个引人注目的多面手.除了能帮你找到区间顶部的n个元素,它也可以用于找到区间的中值或者找到在指定百分点的元素:
+
+vector<Widget>::iterator begin(widgets.begin());// 方便地表示widgets的
+vector<Widget>::iterator end(widgets.end());	// 起点和终点
+												// 迭代器的变量
+vector<Widget>::iterator goalPosition;			// 这个迭代器指示了
+												// 下面代码要找的
+												// 中等质量等级的Widget
+												// 的位置
+goalPosition = begin + widgets.size() / 2;		// 兴趣的Widget
+												// 会是有序的vector的中间
+nth_element(begin, goalPosition, end,			// 找到widgets中中等
+qualityCompare);								// 质量等级的值
+...								// goalPosition现在指向
+								// 中等质量等级的Widget
+
+								// 下面的代码能找到
+								// 质量等级为75%的Widget
+vector<Widget>::size_type goalOffset =		// 指出兴趣的Widget
+0.25 * widgets.size();						// 离开始有多远
+nth_element(begin, begin + goalOffset, end,		// 找到质量值为
+qualityCompare);			// 75%的Widget
+...							// begin + goalOffset现在指向
+							// 质量等级为75%的Widget
+
+比如假设,你不需要鉴别出20个质量最高的Widget.取而代之的是,你需要鉴别出所有质量等级为1或2的
+一个更好的策略是使用partition算法,它重排区间中的元素以使所有满足某个标准的元素都在区间的开头
+
+算法sort、stable_sort、partial_sort和nth_element需要随机访问迭代器,所以它们可能只能用于vector、string、deque和数组.对标准关联容器排序元素没有意义,因为这样的容器使用它们的比较函数来在任何时候保持有序.唯一我们可能会但不能使用sort、stable_sort、partial_sort或nth_element的容器是list,list通过提供sort成员函数做了一些补偿.(有趣的是,list::sort提供了稳定排序.)
+
+partition和stable_partition,它们只需要双向迭代器.因此你可以在任何标准序列迭代器上使用partition和stable_partition.
+
+我们总结一下你的排序选择:
+● 如果你需要在vector、string、deque或数组上进行完全排序,你可以使用sort或stable_sort.
+● 如果你有一个vector、string、deque或数组,你只需要排序前n个元素,应该用partial_sort.
+● 如果你有一个vector、string、deque或数组,你需要鉴别出第n个元素或你需要鉴别出最前的n个元素,而不用知道它们的顺序,nth_element是你应该注意和调用的.
+● 如果你需要把标准序列容器的元素或数组分隔为满足和不满足某个标准,你大概就要找partition或stable_partition.
+● 如果你的数据是在list中,你可以直接使用partition和stable_partition,你可以使用list的sort来代替sort和stable_sort.如果你需要partial_sort或nth_element提供的效果,你就必须间接完成这个任务,但正如我在上面勾画的,会有很多选择.
+
+你可以通过把数据放在标准关联容器中的方法以保持在任何时候东西都有序.你也可能会考虑标准非STL容器priority_queue,它也可以总是保持它的元素有序.
+priority_queue并没有迭代器
+
+
+条款32:如果你真的想删除东西的话就在类似remove的算法后接上erase		- Effective C++:改善程序与设计的55个具体做法:第3版
+
+remove接收指定它操作的元素区间的一对迭代器.它不接收一个容器,所以remove不知道它作用于哪个容器.此外,remove也不可能发现容器,因为没有办法从一个迭代器获取对应于它的容器.
+remove不可能从一个容器中除去元素.这解释了另一个令人沮丧的观点——从一个容器中remove元素不会改变容器中元素的个数
+
+一旦你知道了remove不能“真的”从一个容器中删除东西,和erase联合使用就变成理所当然了.你要记住的唯一其他的东西是remove不是唯一这种情况的算法.另外有两种“类似remove”的算法:remove_if和unique.
+remove和remove_if之间的相似性很直截了当.所以我不会细讲,但unique行为也像remove.它用来从一个区间删除东西(邻近的重复值)而不用访问持有区间元素的容器.结果,如果你真的要从容器中删除元素,你也必须成对调用unique和erase,unique在list中也类似于remove.正像list::remove真的删除东西(而且比erase-
+remove惯用法高效得多).list::unique也真的删除邻近的重复值(也比erase-unique高效).
+
+
+条款33:提防在指针的容器上使用类似remove的算法		- Effective C++:改善程序与设计的55个具体做法:第3版
+
+资源泄漏的理由现在很明朗了.指向Widget B和C的“删除的”指针被vector中后面的“不删除的”指针覆盖.
+在很多情况下,你会发现partition算法(参见条款31)是合理的替代品.
+
+如果你无法避免在那样的容器上使用remove,排除这个问题一种方法是在应用erase-remove惯用法之前先删除指针并设置它们为空,然后除去容器中的所有空指针:
+
+void delAndNullifyUncertified(Widget*& pWidget)		// 如果*pWidget是一个
+{									// 未通过检验Widget,
+if (!pWidget->isCertified()) {		// 删除指针
+delete pWidget;						// 并且设置它为空
+pWidget = 0;
+}
+}
+for_each(v.begin(), v.end(),		// 把所有指向未通过检验Widget的
+delAndNullifyUncertified); 			// 指针删除并且设置为空
+
+v.erase(remove(v.begin(), v.end(),	// 从v中除去空指针
+static_cast<Widget*>(0)), 			// 0必须映射到一个指针,
+v.end());			// 让C++可以
+					// 正确地推出remove的
+					// 第三个参数的类型
+
+这假设vector并不容纳任何你想保留的空指针.如果有的话,你可能必须自己写循环来按你的方式删除指针.
+
+如果你把指针的容器替换成执行引用计数的智能指针的容器,删除相关的困难就不存在了
+
+
+条款35:通过mismatch或lexicographical比较实现简单的忽略大小写字符串比较		- Effective C++:改善程序与设计的55个具体做法:第3版
+
+如果你忽略国际化问题而且只关注于设计成字符串strcmp那样的类型,这个任务很简单.如果你要有strcmp不具有的按语言处理字符串中的字符的能力(也就是,容纳文本的字符串是除了英语以外的语言)或程序使用了区域设置而不是默认的,这个任务很困难
+
+lexicographical_compare是strcmp的泛型版本.strcmp只对字符数组起作用,但lexicographical_compare对所有任何类型的值的区间都起作用.同时,strcmp总是比较两个字符来看看它们的关系是相等、小于或大于另一个.lexicographical_compare可以传入一个决定两个值是否满足一个用户定义标准的二元判断式.
+
+
+条款36:了解copy_if的正确实现		- Effective C++:改善程序与设计的55个具体做法:第3版
+
+这是copy_if正确的微不足道的实现:
+
+template<typename InputIterator,				// 一个copy_if的
+			typename OutputIterator,			// 正确实现
+			typename Predicate>
+OutputIterator copy_if(InputIterator begin,
+			InputIterator end,
+			OutputIterator destBegin,
+			Predicate p) {
+
+while (begin != end) {
+if (p(*begin))*destBegin++ = *begin;
+++begin;
+}
+return destBegin;
+}
+
+
+条款37:用accumulate或for_each来统计区间		- Effective C++:改善程序与设计的55个具体做法:第3版
+
+你需要用一些自定义的方式统计(summarize)区间,而且在那些情况中,你需要比count、count_if、min_element或max_element更灵活的东西.比如,你可能想要对一个容器中的字符串长度求和.你可能想要数的区间的乘积.你可能想要point区间的平均坐标.在那些情况中,你需要统计一个区间,但你需要有定义你需要统计的东西的能力.STL为你准备了那样的算法,它叫作accumulate.它和其他三个“数值算法”都在<numeric>中.(那三个其它的算法是inner_product、adjacent_difference和partial_sum.)
+
+accumulate存在两种形式.带有一对迭代器和初始值的形式可以返回初始值加由迭代器划分出的区间中值的和:
+
+list<double> ld;	// 建立一个list,放
+...					// 一些double进去
+double sum = accumulate(ld.begin(), Id.end(), 0.0);		// 计算它们的和,
+														// 从0.0开始
+
+在本例中,注意初始值指定为0.0,不是简单的0.这很重要.0.0的类型是double,所以accumulate内部使用了一个double类型的变量来存储计算的和
+
+进行数值算法是accumulate的默认行为.但当使用accumulate的另一种形式,带有一个初始和值与一个任意的
+统计函数,这变得一般很多.
+
+比如,考虑怎么使用accumulate来计算容器中的字符串的长度和.要计算这个和,accumulate需要知道两个东西.第一,同上,它必须知道和的开始.在我们的例子中,它是0.第二,它必须知道每次看到一个新的字符串时怎么更新这个和.要完成这个任务,我们写一个函数,它带有目前的和与新的字符串,而且返回更新的和:
+
+string::size_type		// string::size_type的内容
+stringLengthSum(string::size_type sumSoFar,		// 请看下文
+const string& s)
+{
+return sumSoFar + s.size();
+}
+
+这个函数的函数体非常简单,但你可能发现自己陷于string::size_type的出现.不要那样.每个标准STL容器都有一个typedef叫做size_type,那是容器计量东西的类型.
+
+
+条款38:把仿函数类设计为用于值传递		- Effective C++:改善程序与设计的55个具体做法:第3版
+
+C和C++都不允许你真的把函数作为参数传递给其他函数.取而代之的是,你必须传指针给函数比如,这里有一个标准库函数qsort的声明:
+
+void qsort(void *base, size_t nmemb, size_t size, int (*cmpfcn)(const void*, const void*));
+
+一个指向函数的指针,是从调用端拷贝(也就是,值传递)给qsort.这是C和C++标准库都遵循的一般准则,也就是,函数指针是值传递.
+
+所以STL中的习惯是当传给函数和从函数返回时函数对象也是值传递的(也就是拷贝)
+
+因为函数对象以值传递和返回,你的任务就是确保当那么传递(也就是拷贝)时你的函数对象行为良好.这暗示了两个东西.第一,你的函数对象应该很小.否则它们的拷贝会很昂贵.第二,你的函数对象必须单态(也就是,非多态)——它们不能用虚函数.那是因为派生类对象以值传递代入基类类型的参数会造成切割问题:在拷贝时,它们的派生部分被删除.
+
+禁止多态仿函数是不切实际的.的确有办法让大的和/或多态的函数对象仍然允许它们把以值传递仿函数的方式遍布STL.
+
+带着你要放进你的仿函数类的数据和/或多态,把它们移到另一个类中.然后给你的仿函数一个指向这个新类的指针.
+
+Bridge模式,Pimpl惯用法
+从STL的视角看来,要记住的最重要的东西是使用这种技术的仿函数类必须支持合理方式的拷贝
+
+
+条款45:注意count、find、binary_search、lower_bound、upper_bound和equal_range的区别		- Effective C++:改善程序与设计的55个具体做法:第3版
+
+我们的从哪儿着手?下面的表格道出了一切.
+									使用的算法										使用的成员函数
+你想知道的
+						在无序区间 	在有序区间 						在set或map上 	在multiset或multimap上
+期望值是否存在? 			find 		binary_search 					count 			find
+期望值是否存在?如果有,
+第一个等于这个值的对象
+在哪里? 					find 		equal_range 					find 			find或lower_bound(参见下面)
+第一个不在期望值之前的
+对象在哪里? 				find_if 	lower_bound 					lower_bound 	lower_bound
+第一个在期望值之后的对
+象在哪里? 				find_if 	upper_bound 					upper_bound 	upper_bound
+有多少对象等于期望值? 		count 		equal_range,然后distance 		count 			count
+等于期望值的所有对象在
+哪里? 					find(迭代) 	equal_range						equal_range		equal_range
+
+
+
+
+
+

@@ -1,0 +1,3 @@
+KUBE-MARK-MASQ  tcp  --  0.0.0.0/0            0.0.0.0/0            /* default/txxy-ofns-open: */ tcp dpt:31001
+KUBE-MARK-MASQ  tcp  --  0.0.0.0/0            0.0.0.0/0            /* default/txxy-ofns-cms: */ tcp dpt:31002
+KUBE-MARK-MASQ  tcp  --  0.0.0.0/0            0.0.0.0/0            /* kube-system/kubernetes-dashboard: */ tcp dpt:30000

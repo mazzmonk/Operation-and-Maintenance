@@ -1,0 +1,70 @@
+Environment:
+os: ubuntu 22.10
+kernel: 5.19.0-35-generic
+
+nginx:  1.22.0-1ubuntu1.1
+keepalived: snap-keepalived-2345.mount
+
+使用 nginx 作为 k8s apiserver 的负载均衡, keepalived 实现 nginx 的 vip 漂移功能,并使用脚本监控 nginx 进程
+
+IP                  软件                    角色                          端口
+192.168.1.101       nginx              LB for kube-apiserver        front: 16443  back: 6443
+192.168.1.102       nginx              LB for kube-apiserver        front: 16443  back: 6443
+192.168.1.103       nginx              LB for kube-apiserver        front: 16443  back: 6443
+
+192.168.1.101       keepalived         setup vip for nginx process
+192.168.1.102       keepalived         setup vip for nginx process
+192.168.1.103       keepalived         setup vip for nginx process
+192.168.1.100       keepalived         vip
+
+
+# 安装 
+apt-get update -y && apt-get upgrade -y
+apt-get install nginx -y
+systemctl stop ufw
+systemctl disable ufw
+
+systemctl start snap-keepalived-2345.mount
+systemcat start nginx
+
+# nginx 
+由于 nginx, keepalived, kube-apiserver 都安装在同一台机器, 因此, nginx的前端端口修改为 16443, 否则和 kube-apiserver 的默认端口冲突
+
+配置文件 /etc/nginx/nginx.conf
+
+注销如下行
+
+#include /etc/nginx/sites-enabled/*;
+
+添加 /etc/nginx/conf.d/k8s.conf 文件, 内容如下:
+
+upstream kube-apiserver {
+
+    server 192.168.1.101:6443;
+    server 192.168.1.102:6443;
+    server 192.168.1.103:6443;
+}
+
+server {
+    #listen 6443 ssl;
+    listen 16443;
+    location /{
+        proxy_pass http://kube-apiserver;
+
+    }
+
+}
+
+详细见 nginx.conf, k8s.conf  
+
+# keepalived
+
+配置文件 /etc/keepalived/keepalived.conf
+
+其中使用 /etc/keepalived/check-nginx.sh 来作为检测 nginx 的状态
+
+详细见 keepalived.conf, check-nginx.sh 文件
+
+
+
+

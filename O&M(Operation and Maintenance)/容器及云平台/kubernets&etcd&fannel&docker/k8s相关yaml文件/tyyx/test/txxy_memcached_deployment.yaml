@@ -1,0 +1,19 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: txxy-memcached
+  labels:
+    name: txxy-memcached
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        name: txxy-memcached
+    spec:
+      containers:
+      - name: txxy-memcached
+        image: 192.168.6.83:5000/tyyx/memcached:latest
+        ports:
+        - containerPort: 11211
+

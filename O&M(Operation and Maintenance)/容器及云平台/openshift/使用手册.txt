@@ -1,0 +1,16 @@
+在master　deployment时候，需要
+docker.io/openshift/origin-deployer:v3.6.0
+
+
+在docker的机器上则必须有
+docker.io/openshift/origin-pod:v3.6.0
+
+这个就是k8s上用的pause镜像，但是大很多
+
+
+当部署route时候，则会需要
+docker.io/openshift/origin-haproxy-router:v3.6.0
+
+
+当部署内部registry时，会用
+docker.io/openshift/origin-docker-registry:v3.6.0

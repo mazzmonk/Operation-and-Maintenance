@@ -1,0 +1,10 @@
+513afa34284c        goharbor/nginx-photon:v1.8.2                        "nginx -g 'daemon of…"   8 seconds ago       Up 7 seconds (health: starting)            0.0.0.0:28080->80/tcp       nginx
+10d04e50054a        goharbor/harbor-portal:v1.8.2                       "nginx -g 'daemon of…"   10 seconds ago      Up 7 seconds (health: starting)            80/tcp                      harbor-portal
+f038bbdb627f        goharbor/harbor-jobservice:v1.8.2                   "/harbor/start.sh"       10 seconds ago      Up 8 seconds                                                           harbor-jobservice
+b1efb2db44d9        goharbor/harbor-core:v1.8.2                         "/harbor/start.sh"       11 seconds ago      Up 9 seconds (health: starting)                                        harbor-core
+2f1ce266fe8b        goharbor/redis-photon:v1.8.2                        "docker-entrypoint.s…"   11 seconds ago      Up 10 seconds                              6379/tcp                    redis
+d39d5b9ad7cc        goharbor/registry-photon:v2.7.1-patch-2819-v1.8.2   "/entrypoint.sh /etc…"   11 seconds ago      Up Less than a second (health: starting)   5000/tcp                    registry
+3b2683a7b48f        goharbor/harbor-registryctl:v1.8.2                  "/harbor/start.sh"       11 seconds ago      Up 9 seconds (health: starting)                                        registryctl
+eca21875d280        goharbor/harbor-db:v1.8.2                           "/entrypoint.sh post…"   11 seconds ago      Up 10 seconds (health: starting)           5432/tcp                    harbor-db
+07db6da8ff77        goharbor/harbor-log:v1.8.2                          "/bin/sh -c /usr/loc…"   12 seconds ago      Up 11 seconds (health: starting)           127.0.0.1:1514->10514/tcp   harbor-log
+

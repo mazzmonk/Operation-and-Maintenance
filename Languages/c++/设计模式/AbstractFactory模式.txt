@@ -1,0 +1,126 @@
+/* product.h */
+#include <iostream>
+
+class AbstractProductA {
+ public:
+  virtual ~AbstractProductA() {
+  }
+ protected:
+  AbstractProductA() {
+  }
+};
+
+class AbstractProductB {
+ public:
+  virtual ~AbstractProductB() {
+  }
+ protected:
+  AbstractProductB() {
+  }
+};
+
+class ProductA1 : public AbstractProductA {
+ public:
+  ProductA1() {
+    std::cout << "ProductA1..." << std::endl;
+  }
+  ~ProductA1() {
+  }
+};
+
+class ProductA2 : public AbstractProductA {
+ public:
+  ProductA2() {
+    std::cout << "ProductA2..." << std::endl;
+  }
+  ~ProductA2() {
+  }
+};
+
+class ProductB1 : public AbstractProductB {
+ public:
+  ProductB1() {
+    std::cout << "ProductB1..." << std::endl;
+  }
+  ~ProductB1() {
+  }
+};
+
+class ProductB2 : public AbstractProductB {
+ public:
+  ProductB2() {
+    std::cout << "ProductB2..." << std::endl;
+  }
+  ~ProductB2() {
+  }
+};
+
+/* AbstractFactory.h */
+class AbstractProductA;
+class AbstractProductB;
+
+class AbstractFactory {
+ public:
+  virtual ~AbstractFactory() {
+  }
+  virtual AbstractProductA* CreateProductA() = 0;
+  virtual AbstractProductB* CreateProductB() =0;
+ protected:
+  AbstractFactory() {
+  }
+};
+
+class ConcreteFactory1 : public AbstractFactory {
+ public:
+  ConcreteFactory1() {
+  }
+  ~ConcreteFactory1() {
+  }
+  AbstractProductA* CreateProductA();
+  AbstractProductB* CreateProductB();
+};
+
+class ConcreteFactory2 : public AbstractFactory {
+ public:
+  ConcreteFactory2() {
+  }
+  ~ConcreteFactory2() {
+  }
+  AbstractProductA* CreateProductA();
+  AbstractProductB* CreateProductB();
+};
+
+/* AbstractFactory.cc */
+#include "AbstractFactory.h"
+#include "product.h"
+
+AbstractProductA* ConcreteFactory1::CreateProductA() {
+  return new ProductA1();
+}
+
+AbstractProductB* ConcreteFactory1::CreateProductB() {
+  return new ProductB1();
+}
+
+AbstractProductA* ConcreteFactory2::CreateProductA() {
+  return new ProductA2();
+}
+
+AbstractProductB* ConcreteFactory2::CreateProductB() {
+  return new ProductB2();
+}
+
+/* main.cc */
+#include "AbstractFactory.h"
+
+int main(int argc, char* argv[]) {
+  AbstractFactory* cf1 = new ConcreteFactory1();
+
+  cf1->CreateProductA();
+  cf1->CreateProductB();
+
+  AbstractFactory* cf2 = new ConcreteFactory2();
+  cf2->CreateProductA();
+  cf2->CreateProductB();
+}
+

@@ -1,0 +1,30 @@
+tomcat管理平台是每个tomcat解压包里自带的一个项目和ROOT目录平行
+可以用来管理tomcat项目，重启，查看状态等等
+
+1.首先需要保证webapps目录下的manager项目存在，该项目默认的压缩包里存在
+2.设置管理用的用户和相应的权限
+保证conf/tomcat-users.xml文件中有如下内容，
+
+  <role rolename="manager-script"/>
+  <role rolename="manager-gui"/>
+  <role rolename="manager-jmx"/>
+  <role rolename="manager-status"/>
+  <user username="deploy" password="8o2Gc1ZA2u" roles="manager-script,manager-gui,manager-jmx,manager-status"/>
+
+重启tomcat
+
+3.访问
+http://192.168.81.122:8142/manager/html
+使用上述用户和密码
+
+4使用命令行模式调用上述的http请求
+重启tomcat
+curl 'http://deploy:8o2Gc1ZA2u@192.168.81.122:8142/manager/text/reload?path=/'
+
+
+详细描述：
+http://wiki.jikexueyuan.com/project/tomcat/manager.html
+http://qa.helplib.com/855872
+
+
+

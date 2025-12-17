@@ -1,0 +1,19 @@
+链接:
+
+ zabbix 4.4.6版本
+
+主要是userparameter_redis.conf中的内容
+
+UserParameter=redis.local[*],/usr/local/bin/redis-cli -h 172.20.20.3 -p 6379 -a 'redis-alm'  info 2>/dev/null |grep $1|grep -v _human|cut -d : -f2
+UserParameter=redis.status[*],/usr/local/bin/redis-cli -h $1 -p $2 -a 'redis-alm' info 2>/dev/null |grep $3|grep -v _human|cut -d : -f2
+
+这里主要的问题是使用-a 这个参数的时候，会出现，如下
+# /usr/local/bin/redis-cli -h 172.20.20.3 -p 6379 -a 'redis-alm' info  |grep role|grep -v _human|cut -d : -f2           
+Warning: Using a password with '-a' or '-u' option on the command line interface may not be safe.
+master
+
+多一行Waring:内容，这对采集数据，是多余的，因此需要去掉，
+
+/usr/local/bin/redis-cli -h 172.20.20.3 -p 6379 -a 'redis-alm' info 2>/dev/null |grep role|grep -v _human|cut -d : -f2
+
+2>/dev/null将去掉标准错误输出

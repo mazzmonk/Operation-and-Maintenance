@@ -1,0 +1,57 @@
+docker对应版本为18.09
+
+
+docker 代理設定 
+
+1.创建docker服务插件目录
+sudo mkdir -p /etc/systemd/system/docker.service.d
+2.创建一个名为http-proxy.conf的文件
+sudo touch /etc/systemd/system/docker.service.d/http-proxy.conf 
+3.编辑http-proxy.conf的文件
+sudo vim /etc/systemd/system/docker.service.d/http-proxy.conf 
+4.写入内容(将代理ip和代理端口修改成你自己的)
+[Service]
+Environment="HTTP_PROXY=socks5://代理ip:代理端口/"
+5.重新加载服务程序的配置文件
+sudo systemctl daemon-reload
+6.重启docker
+sudo systemctl restart docker
+7.验证是否配置成功
+systemctl show --property=Environment docker
+
+
+此方式可以以root用户登录
+docker exec -u 0 -it a9f495be369e /bin/bash
+
+
+/etc/docker/daemon.json
+{
+  "exec-opts": ["native.cgroupdriver=cgroupfs"],
+  "insecure-registries": ["172.20.20.1:28080"]
+}
+
+参数设置,例子
+{
+  "bip": "192.168.1.5/24",
+  "fixed-cidr": "192.168.1.5/25",
+  "fixed-cidr-v6": "2001:db8::/64",
+  "mtu": 1500,
+  "default-gateway": "10.20.1.1",
+  "default-gateway-v6": "2001:db8:abcd::89",
+  "dns": ["10.20.1.2","10.20.1.3"]
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

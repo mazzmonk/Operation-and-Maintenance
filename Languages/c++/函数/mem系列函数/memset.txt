@@ -1,0 +1,57 @@
+cstring.h
+
+在C中 malloc和memset是2个常用的对内存操作的函数。首先还是来看一下这2个函数的函数原型。
+1.malloc函数
+malloc函数用于从堆上分配指定字节的内存空间。
+
+void * malloc(size_t n);
+
+其中，形参n为要求分配的内存字节数。如果执行成功，函数范围获得的内存空间的首地址；执行失败，返回值为NULL。由于函数返回值值的类型为void的指针，因此，可以将void指针类型转换后赋值给任意类型指针，这样就可以通过操作该类型指针来操作从堆上获得的内存空间。
+需要注意的是malloc函数分配得到的内存空间是未初始化的。有时候，在使用前需要对该内存空间进行初始化，memset就派上用场了。
+
+2.memset函数
+
+void * memset (void * p,int c,size_t n);
+
+其中，指针p为所操作的内存空间的首地址，c为每个字节所赋的值，n为所操作内存空间的字节长度，也就是内存被赋值为c的字节数。
+在使用memset时经常要注意的它是以字节为单位进行赋值的，所赋值的范围是0x00～0xFF。若想要对一个double或int型的数组赋值时，就特别需要注意这一点：
+
+example1:
+char a[4];
+memset(a, '\0', 4);
+
+example2:
+int a[4];
+memset(a, 1, 4);//这里改成memset(a,1,5*sizeof(int))也是不可以的
+
+第一个例子是正确的，memset对字符数组里的每个char类型元素赋值为NULL。第二个例子显然得到的结果不是把int型数组里的每个元素赋值为了1。因为memset函数以字节为单位进行赋值，那么数组中一个int型元素的4个字节都将被赋值为1(或者说ASCII码1所对应的字符)，实际上它所表示的整数是0x01010101。
+另外，在使用malloc为一个二维数组分配内存空间时，要特别注意使用memset进行初始化可能会出错。
+
+    
+int m = 2;
+int n = 3;
+int i;
+
+//二位数组a[m][n]
+int **a;
+
+a = (int **) malloc(m * sizeof(int *));
+
+for(i=0; i<m; ++i)
+{
+    a[i] = (int *) malloc(n * sizeof(int));
+}
+
+memset(a, 0, sizeof(int) * m * n);
+
+对所有二维以上的数组使用memset时，若此多维数组是通过多次调用malloc函数搭积木分配得到的，那么该数组的内存空间可能不连续。使用memset函数进行连续的统一赋值就毫无意义了。直接声明的多维数组如a[2][3]的内存空间显然是连续的，此时使用memset函数初始化就没有问题。
+
+
+void *memset(void *s, char ch, size_t n);
+函数解释：将s中前n个字节 （typedef unsigned int size_t）用 ch 替换并返回 s 。
+memset：作用是在一段内存块中填充某个给定的值，它是对较大的结构体或数组进行清零操作的一种最快方法
+
+一定要记住如果要把一个char a[20]清零，一定是 memset(a,0,20);
+
+
+

@@ -1,0 +1,60 @@
+docker run -m 2048m --name rundeck -e RUNDECK_GRAILS_URL=http://10.24.26.56:34440 -p 34440:4440 -v /home/blue/data/rundeck/server/data:/home/rundeck/server/data -dit rundeck/rundeck:3.1.3-20191204
+
+环境: 
+docker 容器 rundeck:3.1.3-20191204
+
+
+# 添加远程节点,通过用户名和密码
+这里有个描述: https://blog.csdn.net/lsysafe/article/details/83246762
+
+1. 添加key,点击右上角齿轮图标 -> key Storage -> Add or Upload a Key
+Key Type: Password
+Enter text: xxxxxx						# 密码
+Storage path: keys/abc			# abc表示用户名
+Name: abc									# 远程ssh的用户
+
+save
+
+2. 添加项目
+在Default Node Executor页面上,选择
+SSH Password Storage Path: keys/abc		# 对应上边的设置
+SSH Authentication: password					
+
+save
+
+在Default File Copier页面上,同样和上述的设置相同,然后save
+
+3. 在容器中的建立容器和目录
+/home/rundeck/projects/Docker/etc/resources.xml
+内容如下:
+
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+<node name="172.20.20.2"
+  description="172.20.20.2"
+  tags="172.20.20.2"
+  hostname="172.20.20.2"
+  osFamily="Linux"
+  osName="ubuntu 19.x"
+  username="blue"
+  />
+<node name="172.20.20.3"
+  description="172.20.20.3"
+  tags="172.20.20.3"
+  hostname="172.20.20.3"
+  osFamily="Linux"
+  osName="ubuntu 19.x"
+  username="blue"
+  />
+</project>
+
+在添加节点的时候,选择"File"模式
+Format: resourcexml
+File Path: /home/rundeck/projects/Docker/etc/resources.xml
+
+
+
+
+
+
+/home/rundeck/projects/test/etc

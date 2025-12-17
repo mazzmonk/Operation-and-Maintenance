@@ -1,0 +1,33 @@
+yum install wget git net-tools bind-utils yum-utils iptables-services bridge-utils bash-completion kexec-tools sos psacct
+yum update
+yum install docker-1.13.1
+
+
+/etc/sysconfig/docker
+OPTIONS='--insecure-registry=172.30.0.0/16 --selinux-enabled --log-opt max-size=1M --log-opt max-file=3'
+
+./oc cluster up --public-hostname=192.168.1.10
+
+
+
+The server is accessible via web console at:
+    https://192.168.1.10:8443
+
+You are logged in as:
+    User:     developer
+    Password: <any value>
+
+To login as administrator:
+    oc login -u system:admin
+
+
+
+# 查询信息
+oc get svc/docker-registry -n default
+
+# 使用Dynatrace监控openshift
+
+
+
+
+

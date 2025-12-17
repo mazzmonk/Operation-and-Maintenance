@@ -1,0 +1,255 @@
+kubernets二进制下载路径。
+https://github.com/kubernetes/kubernetes/releases
+
+当前使用的是1.3.0版本
+
+kubernets与docker版本的对应
+
+kubernets分为master及minion端
+master用于调度docker及pods的相关内容
+
+
+master端
+kube-apiserver,kube-controller-manager,kubectl,kube-scheduler
+
+###############################################################
+#!/bin/bash
+
+/home/blue/apps/kubernetes/server/bin/kube-controller-manager --v=0 --log-dir="/home/blue/apps/kubernetes/server/logs" --master=127.0.0.1:8080 >> /home/blue/apps/kubernetes/server/logs/kubernetes_controller_manager.log  2>&1 &
+###############################################################
+
+
+###############################################################
+#!/bin/bash
+
+/home/blue/apps/kubernetes/server/bin/kube-scheduler --v=0 --log-dir="/home/blue/apps/kubernetes/server/logs" --master=127.0.0.1:8080 >> /home/blue/apps/kubernetes/server/logs/kubernetes_scheduler.log  2>&1 &
+###############################################################
+
+
+###############################################################
+#!/bin/bash
+
+/home/blue/apps/kubernetes/server/bin/kube-apiserver --allow-privileged=true --insecure-bind-address=0.0.0.0 --insecure-port=8080 --v=0 --log-dir="/home/blue/apps/kubernetes/server/logs" --service-cluster-ip-range=10.0.0.0/16 --etcd-servers="http://192.168.81.4:4001,http://192.168.81.5:4001,
+http://192.168.81.6:4001" --cert-dir="/home/blue/apps/kubernetes/server/var/run/kubernetes"  >> /home/blue/apps/kubernetes/server/logs/kubernetes_server.log  2>&1 &
+###############################################################
+
+
+
+
+minion端
+
+kubelet,kube-proxy
+
+这里千万注意，有个--hostname-override参数，填写自己的ip
+
+###############################################################
+#!/bin/bash
+
+/home/blue/apps/kubernetes/client/bin/kubelet \
+--address=0.0.0.0 \
+--allow-privileged=true \
+--api-servers="http://192.168.81.3:8080" \
+--port=10250 \
+--cert-dir="/home/blue/apps/kubernetes/client/var/run/kubernetes" \
+--cluster-dns="192.168.81.3" \
+--cluster-domain="cluster.my" \
+--config="/home/blue/apps/kubernetes/kubelet/etc" \
+--container-hints="/home/blue/apps/kubernetes/client/etc/cadvisor/container_hints.json" \
+--container-runtime="docker" \
+--docker="unix:///home/blue/apps/docker/var/run/socket" \
+--docker-endpoint="unix:///home/blue/apps/docker/var/run/socket" \
+--docker-root="/home/blue/apps/docker/var/lib/docker" \
+--hostname-override="192.168.81.95" \
+--healthz-bind-address=0.0.0.0 \
+--healthz-port=10248 \
+--kubeconfig="/home/blue/apps/kubernetes/kubelet/etc/kubeconfig" \
+--machine-id-file="/home/blue/apps/kubernetes/kubelet/etc/machine-id" \
+--network-plugin-dir="/home/blue/apps/kubernetes/kubelet/plugins/net/exec"  \
+--pod-infra-container-image="kubernetes/pause" \
+--root-dir="/home/blue/apps/kubernetes/kubelet" \
+--seccomp-profile-root="/home/blue/apps/kubernetes/kubelet/seccomp" \
+--volume-plugin-dir="/home/blue/apps/kubernetes/kubelet/plugins/volume/exec"  \
+--v=0 --log-dir="/home/blue/apps/kubernetes/client/logs" --log-cadvisor-usage=true >> /home/blue/apps/kubernetes/client/logs/kubernetes_kubelet.log  2>&1 &
+
+
+###############################################################
+
+
+这里千万注意，有个--hostname-override参数，填写自己的ip
+
+###############################################################
+#!/bin/bash
+
+/home/blue/apps/kubernetes/client/bin/kube-proxy --bind-address=0.0.0.0 --healthz-bind-address=0.0.0.0 --master="http://192.168.81.3:8080"    --healthz-port=10249 --hostname-override="192.168.81.98" --kubeconfig="/home/blue/apps/kubernetes/kube-proxy/etc/kubeconfig" --v=0 --log-dir="/home/blue/apps/kubernetes/client/logs" >> /home/blue/apps/kubernetes/client/logs/kubernetes_kube-proxy.log 2>&1 &
+
+###############################################################
+
+
+
+
+配置路径及目录
+
+mkdir -p /home/blue/apps/kubernetes/{client/{bin,etc,logs,var/run/kubernetes},flannel/bin,kubelet/{etc,plugins/{net/exec,volume/exec},pods,seccomp},kube-proxy/etc}
+touch /home/blue/apps/kubernetes/client/logs/{kubernetes_kubelet.log,kubernetes_kube-proxy.log}
+touch /home/blue/apps/kubernetes/kubelet/etc/{kubeconfig,machine-id}
+touch /home/blue/apps/kubernetes/kube-proxy/etc/kubeconfig
+
+mkdir -p /home/blue/apps/docker/{etc,logs,var/{lib/docker,run/docker}}
+touch /home/blue/apps/docker/logs/docker.log
+
+
+
+启动pods时需要去google下载一个pause的容器，因此需要下把容器放到私有库中。
+如下是需要的私有库及pause的容器
+
+[blue@BJ-YZ-103R-81-97 backup]$ docker images
+REPOSITORY                 TAG                 IMAGE ID            CREATED             SIZE
+registry                   0.9.1               56cfd79a53f5        6 months ago        422.8 MB
+192.168.81.97:5000/pause   latest              f9d5de079539        2 years ago         239.8 kB
+kubernetes/pause           latest              f9d5de079539        2 years ago         239.8 kB
+
+
+kubernets相关的yaml文件
+
+建立pods需要的文件
+
+blue_portal.yaml
+************************************************************
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: blue-portal
+  labels:
+    name: blue-portal
+spec:
+  replicas: 5
+  selector:
+    name: blue-portal
+  template:
+    metadata:
+      labels:
+        name: blue-portal
+    spec:
+      containers:
+      - name: blue-portal
+        image: 192.168.81.97:5000/project/blue_portal:latest	#从私有库里pull镜像
+        ports:
+        - containerPort: 8080                               	#容器中服务启动的端口
+
+************************************************************
+
+kubectl create -f blue_portal.yaml
+
+
+建立service
+
+现在，在集群上我们有了一个运行着niginx并且有分配IP地址空间的的Pod，理论上你可以直接访问这些pods，但是如果node宕机了怎么办，这些pods也会跟着挂掉，然后RC会在另一个健康的node上重新创建新的pods来代替，这些Pod分配的IP地址也会跟着变化。针对这个问题service可以解决。
+Service是一个抽象的概念，其定义了一组运行在集群之上的Pod的逻辑集合，这些Pod是重复的，复制出来的，所以提供相同的功能。创建后每个service都会分配到一个唯一的IP地址(也称clusterIP)。这个地址和service的生命周期相关联，而且只要service一直运行，这个地址都不会改变。Pods进行配置来和这个Service进行交互，之后Service将会自动做负载均衡到Service中的Pod。
+
+非负载均衡模式，这里实际上在pods所在的机器上启动了一个iptables的策略。具体如后：
+
+blue_portal_service.yaml
+************************************************************
+apiVersion: v1
+kind: Service
+metadata:
+  name: blue-portal
+  labels:
+    name: blue-portal
+spec:
+  ports:
+  - port: 8080			#这里是pods中启动的端口，如果只有一个容器的话，就是这个容器中启动的服务的端口，比如在容器中有nginx，启动了80端口，这里就是80端口
+  selector:
+    name: blue-portal
+
+************************************************************
+
+kubectl create -f blue_portal_service.yaml
+
+
+***************  重要   *********************************************
+Kubernetes是Google开源的容器集群管理系统，是Docker容器的主要集群管理系统之一。
+其中，Kubernetes中管理主要有三种类型的IP:Pod IP 、Cluster IP 和 外部IP。
+Pod IP
+Kubernetes的最小部署单元是Pod。利用Flannel作为不同HOST之间容器互通技术时，由Flannel和etcd维护了一张节点间的路由表。Flannel的设计目的就是为集群中的所有节点重新规划IP地址的使用规则，从而使得不同节点上的容器能够获得“同属一个内网”且”不重复的”IP地址，并让属于不同节点上的容器能够直接通过内网IP通信。 
+每个Pod启动时，会自动创建一个镜像为gcr.io/google_containers/pause:0.8.0的容器，容器内部与外部的通信经由此容器代理，该容器的IP也可以称为Pod IP。
+Cluster IP
+Pod IP 地址是实际存在于某个网卡(可以是虚拟设备)上的，但Service Cluster IP就不一样了，没有网络设备为这个地址负责。它是由kube-proxy使用Iptables规则重新定向到其本地端口，再均衡到后端Pod的。
+就拿上面我们提到的图像处理程序为例。当我们的Service被创建时，Kubernetes给它分配一个地址10.0.0.1。这个地址从我们启动API的service-cluster-ip-range参数(旧版本为portal_net参数)指定的地址池中分配，比如--service-cluster-ip-range=10.0.0.0/16。假设这个Service的端口是1234。集群内的所有kube-proxy都会注意到这个Service。当proxy发现一个新的service后，它会在本地节点打开一个任意端口，建相应的iptables规则，重定向服务的IP和port到这个新建的端口，开始接受到达这个服务的连接。
+当一个客户端访问这个service时，这些iptable规则就开始起作用，客户端的流量被重定向到kube-proxy为这个service打开的端口上，kube-proxy随机选择一个后端pod来服务客户。这个流程如下图所示：
+
+根据Kubernetes的网络模型，使用Service Cluster IP和Port访问Service的客户端可以坐落在任意代理节点上。外部要访问Service，我们就需要给Service外部访问IP。
+外部IP
+Service对象在Cluster IP range池中分配到的IP只能在内部访问，如果服务作为一个应用程序内部的层次，还是很合适的。如果这个Service作为前端服务，准备为集群外的客户提供业务，我们就需要给这个服务提供公共IP了。
+
+外部访问者是访问集群代理节点的访问者。为这些访问者提供服务，我们可以在定义Service时指定其spec.publicIPs，一般情况下publicIP 是代理节点的物理IP地址。和先前的Cluster IP range上分配到的虚拟的IP一样，kube-proxy同样会为这些publicIP提供Iptables 重定向规则，把流量转发到后端的Pod上。有了publicIP，我们就可以使用load balancer等常用的互联网技术来组织外部对服务的访问了。
+spec.publicIPs在新的版本中标记为过时了，代替它的是spec.type=NodePort，这个类型的service，系统会给它在集群的各个代理节点上分配一个节点级别的端口，能访问到代理节点的客户端都能访问这个端口，从而访问到服务。
+
+http://blog.csdn.net/xinghun_4/article/details/50492041
+这里也有port,target port,node port的描述
+
+总结来说就是：
+port 是service的暴露的端口，就是说是service对外的端口和ip用于与其他的service通讯
+nodePort 如果此service需要对外提供服务，写在这里
+targetPort pod的对外端口
+
+
+
+这里介绍下环境
+机器一
+node ip: 192.168.81.95 docker0 ip: 172.17.9.1 flannel0 172.17.19.0/255.255.0.0	#实体机器ip为192.168.81.95,容器网桥172.17.9.1,flannel0用于所有机器容器的通讯
+
+service配置
+******************************
+apiVersion: v1
+kind: Service
+metadata:
+  name: blue-portal
+  labels:
+    name: blue-portal
+spec:
+  ports:
+  - port: 8080
+    targetPort: 8080
+    nodePort: 30001      # --service-node-port-range=:   Example: '30000-32767'.  对外访问用的端口，默认：30000-32767，
+  selector:              # 通过kube-apiserver启动参数--service-node-port-range=来启动
+    name: blue-portal
+  type: NodePort
+******************************
+
+kubectl describe svc blue-portal
+Name:			blue-portal
+Namespace:		default
+Labels:			name=blue-portal
+Selector:		name=blue-portal
+Type:			LoadBalancer
+IP:			10.0.54.29
+Port:			<unset>	8080/TCP
+NodePort:		<unset>	30001/TCP
+Endpoints:		172.17.56.2:8080,172.17.6.2:8080,172.17.6.3:8080 + 2 more...
+Session Affinity:	None
+No events.
+
+******************************
+
+
+port是service端口，这个端口用于多个service之间通讯使用，ip地址来之api service启动参数--service-cluster-ip-range=10.0.0.0/16这个参数，从这个参数，上述配置得到10.0.54.29的地址
+targetPort是pod的端口，这里pod中就一个容器，开启了8080端口
+nodePort是service的对外访问端口，实际就在每个pod所在的机器上开启了一个30001端口的iptables策略，此时，就可以通过192.168.81.95的30001端口访问
+
+因此如果要访问此服务器，必须在前端负载均衡上把所有的pod的地址都加上，比如当前的192.168.81.95/97/98/99上都有此pod，因此需要把这几个机器的ip及端口30001加到前端负载均衡
+
+
+介绍下
+nodePort跟LoadBalancer其实是同一种方式。
+
+区别在于LoadBalancer比nodePort多了一步，就是可以调用cloud provider去创建LB来向节点导流。cloud provider好像支持了openstack、gce等系统。
+
+nodePort的原理在于在node上开了一个端口，将向该端口的流量导入到kube-proxy，然后由kube-proxy进一步导给对应的pod。
+
+所以service采用nodePort的方式，正确的方法是在前面有一个lb，然后lb的后端挂上所有node的对应端口。这样即使node1挂了。lb也可以把流量导给其他node的对应端口。
+
+***************  重要   *********************************************
+
+
+

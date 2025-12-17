@@ -1,0 +1,65 @@
+
+升级 tensorflow 版本
+$ sudo pip install --upgrade tensorflow
+# 注意: 
+# 如果有 /usr/lib/python3/dist-packages/setuptools/installer.py:27: SetuptoolsDeprecationWarning: setuptools.installer is deprecated. Requirements should be satisfied by a PEP 517 installer. 报错
+# 则使用 
+# $ sudo pip install --use-pep517 --upgrade tf-models-officialCollecting tf-models-official
+$ sudo pip install --upgrade tf-models-official    # 
+
+升级 keras 版本
+$ sudo pip install --upgrade keras
+
+
+安装 python 3.12 对应的软件,需要使用 pipx 这个软件替代原来的 pip 来用
+当使用 python 3.12 以后的版本时,通过 pipx install 安装软件的时候有如下的提示:
+# apt install pipx
+error: externally-managed-environment
+
+× This environment is externally managed
+╰─> To install Python packages system-wide, try apt install
+    python3-xyz, where xyz is the package you are trying to
+    install.
+
+    If you wish to install a non-Debian-packaged Python package,
+    create a virtual environment using python3 -m venv path/to/venv.
+    Then use path/to/venv/bin/python and path/to/venv/bin/pip. Make
+    sure you have python3-full installed.
+
+    If you wish to install a non-Debian packaged Python application,
+    it may be easiest to use pipx install xyz, which will manage a
+    virtual environment for you. Make sure you have pipx installed.
+
+    See /usr/share/doc/python3.12/README.venv for more information.
+
+解决: 使用
+# apt install pipx
+# pipx install tensorflow
+命令,但是会在 /root/.local 中生成需要的文件,如此无法保证普通用户的使用,建议使用普通用户来执行上述的命令
+$ pipx install tensorflow
+就会在 $HOME/.local/下的目录中生成需要的文件
+$ pipx ensurepath   # 将 $HOME/.local/bin 加入到 PAHT 环境变量中,这个步骤可以手动操作到 .bashrc 文件中
+
+安装 tensorflow
+$ pipx install tensorflow
+
+安装 keras
+$ pipx install keras --include-deps
+
+注意: 使用 pip 安装的软件会在如下的类似的目录中
+/home/jack/.local/bin/f2py
+而 pipx 则会在
+/home/jack/.local/share/pipx/venvs/keras/bin/f2py
+
+因此如果出现冲突,则需要将 /home/jack/.local/bin/ 目录下的文件删掉,避免冲突
+
+$ pipx install matplotlib --include-deps
+
+通常使用 pipx 安装的软件包在 $HOME/.local/bin目录中,但是为了配合使用 pycham 这个 IDE,因此所有软件包不要通过
+pipx 安装,而是在 pycham 中设置 .venv在 $HOME/.local 下,然后运行 pycham 中的文件,会安装到 $HOME/.local/.venv目录中
+然后在本地的 .bashrc 文件中中指定 $HOME/.local/.venv 目录的路径以保证命令行的时候能识别到 python 因此所有软件包不要通过
+
+因为通过 pipx 安装的软件包在 $HOME/.local/目录中,而pycham则是在自己的.venv的目录中,因此总会有不统一,所以采用上述的办法
+
+
+

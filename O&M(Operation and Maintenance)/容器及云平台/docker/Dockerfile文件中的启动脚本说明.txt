@@ -1,0 +1,60 @@
+文件名称docker-entrypoint.sh或者entrypoint.sh
+#############################################################################################
+#!/bin/bash
+set -e
+
+# Add kibana as command if needed
+if [[ "$1" == -* ]]; then                         #这里表示$1以"-"开头的所有参数
+	set -- kibana "$@"                        #意思是设置脚本所有的参数前面加上内容"kibana"
+fi                                                #和set kibana "$@"作用一样
+                                                  #比如:./a -abc时候,执行的就是./a kibana -abc
+# Run as user "kibana" if the command is "kibana"
+if [ "$1" = 'kibana' ]; then
+	if [ "$ELASTICSEARCH_URL" ]; then
+		sed -ri "s!^(\#\s*)?(elasticsearch\.url:).*!\2 '$ELASTICSEARCH_URL'!" /etc/kibana/kibana.yml
+	fi
+
+	set -- gosu kibana tini -- "$@"
+fi
+
+exec "$@"
+#############################################################################################
+
+上述脚本是kibana的镜像启动时候使用的脚本docker-entrypoint.sh中的内容
+
+脚本执行的命令:
+/docker-entrypoint.sh kibana
+
+容器运行时候的命令:
+docker run --name kibana-5.6.5 -e ELASTICSEARCH_URL=http://172.17.0.9:9200 -p 5601:5601 -d kibana:5.6.5
+
+
+
+逻辑实际上就是脚本的第一个参数如果是以"-"开始的就在所有的参数前面加上kibana,而kibana是在系统中直接可以执行的命令(将kibana可执行文件的路径设置到了环境变量PATH中),此时脚本参数将变成了"kibana xxx xxx"这样的模式,此时在次判断第一个参数是否为"kibana",然后判断是否存在$ELASTICSEARCH_URL,实际就是docker run命令执行的时候-e(其实在这里是定义了一个环境变量ELASTICSEARCH_URL)参数中定义的,用此参数的值替换掉/etc/kibana/kibana.yml中有elasticsearch.url的部分,此行的原始内容为"#elasticsearch.url: 'http://localhost:9200'",替换以后就是"elasticsearch.url: 'http://172.17.0.9:9200'",然后在所有的参数前加上gosu kibana tini,此时脚本所有的参数变为"gosu kibana tini kibana ",也就是"$@"的内容,最后执行"$@"
+
+
+另外:set在脚本中设置变量的时候的作用
+比如:
+set a b
+echo $1 $2 
+
+此时$1的值就是a,$2的值就是b
+
+
+docker官方建议使用gosu代替sudo来用普通用户执行命令,上述的gosu kibana就是用kibana账户执行后边的命令
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

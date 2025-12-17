@@ -1,0 +1,57 @@
+
+直接按照官方的
+链接: https://www.cacti.net/download_cacti.php
+
+环境: docker  ubuntu 18.04 
+
+apt-get install cacti
+
+apt-get install software-properties-common
+
+apt install snmp snmpd snmp-mibs-downloader
+
+配置文件在/usr/share/cacti/site/include
+修改config.php,global.php 2个文件,否则会出现无法连接数据库的提示
+
+spine安装
+apt install build-essential dos2unix dh-autoreconf help2man libssl-dev libmysql++-dev  librrds-perl libsnmp-dev libmysqlclient-dev libmysqld-dev  
+
+然后下载对应的spine,编译
+
+# 拷贝spine.conf.dist到/etc/cacti/spine.conf
+修改其中的数据库设置,本地和远程都必须改
+
+目前这个版本spine和cacti有bug,不能用,因此切回cmd.php
+
+# rra无法生成图像文件, 需要保持apache启动用户和rra这个目录的用户一致,或者组一致,根本原因是目录属于root,apache的用户写入不行,及时设置777权限也有问题
+可以用
+
+* * * * * gosu root /usr/bin/php /usr/share/cacti/site/poller.php
+
+强行使用
+
+# 安装phpize
+apt-get install php7.x-dev
+
+
+
+# 配置mongodb的监控
+主要使用ss_get_by_ssh.php这个脚本,以及percona_mongodb_server_ht.xml模板
+
+脚本里需要修改开头的use_ssh常量改成FALSE,如此使用非ssh登录的模式,然后需要安装mongodb的客户端
+
+# apt install mongodb-clients
+
+
+# snmp安装及配置
+链接: https://forums.cacti.net/viewtopic.php?t=15353
+
+apt-get -y install libsnmp-base libsnmp30 snmp snmpd
+
+
+
+
+
+
+
+

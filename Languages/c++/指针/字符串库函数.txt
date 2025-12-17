@@ -1,0 +1,59 @@
+strlen(str)
+字符串的长度表示此字符串有多少个字符,但不包括空字符('\0').
+
+strcpy(str1,str2)
+表示从str2字符串的第1个字符,逐一复制到str1字符串.第一个参数str1是接收者,第二个参数str2是提供者.
+
+strncpy(str1,str2,n)
+将str2的前n个字符拷贝到str1.
+
+strcat(str1,str2)
+将str2字符串连接到str1字符串的尾端,str1必须要分配足够的空间.
+
+strncat(str1,str2,n)
+将str2的前n个字符连接到str1
+
+
+#include <stdio.h>
+#include <stdlib.h>
+
+int main() {
+	char str1[] = "Honda Civic";
+	char str2[] = "Honda Civic";
+
+	if (str1 == str2)
+		printf("str1和str2相等\n");
+	else
+		printf("str1和str2是不相等的\n");
+	return 0;
+}
+
+上述是在比较str1和str2的地址是否相等,而不是在比较其内容是否相等.因为str1和str2是数组名,表示的是数组第1个元素的地址,所以这里并不是在比较字符串的内容.
+
+#include <stdio.h>
+#include <stdlib.h>
+
+int main()
+{
+	char *str1 = "Honda Civic";
+	char *str2 = "Honda Civic";
+	char *str3 = "Honda Accord";
+
+	if (str1 == str2)
+		printf("str1和str2相等\n");
+	else 
+		printf("str1和str2不相等\n");
+
+	if (str1 == str3)	
+		printf("str1和str3相等\n");
+	else 
+		printf("str1和str3不相等\n");
+
+	return 0;
+}
+
+上述例子也是在比较地址,因为指针变量是地址.str1与str2的地址相等的,因为指针变量str1与str2都指向相同的字符串.而str3指向不同,所以str3指向的地址和str1与str2不同.
+
+strcmp(str1,str2)
+比较str1与str2两个字符串是否相等.
+

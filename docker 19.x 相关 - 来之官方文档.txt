@@ -1,0 +1,3894 @@
+## Docker run参考(7)– Restart策略(–restart)
+
+运行容器时使用 restart 参数可以指定一个 restart 策略,来指示在退出时容器应该如何重启或不应该重启.
+当容器启用 restart 策略时,将会在 docker ps 显示Up或者 Restarting 状态.也可以使用 docker events 命令来生效中的 restart 策略.
+
+docker 支持如下 restart 策略:
+
+no – 容器退出时不要自动重启.这个是默认值.
+on-failure[:max-retries] – 只在容器以非 0 状态码退出时重启.可选的,可以退出 docker daemon 尝试重启容器的次数.
+always – 不管退出状态码是什么始终重启容器.当指定 always 时,docker daemon 将无限次数地重启容器.容器也会在 daemon 启动时尝试重启,不管容器当时的状态如何.
+unless-stopped – 不管退出状态码是什么始终重启容器,不过当 daemon 启动时,如果容器之前已经为停止状态,不要尝试启动它.
+在每次重启容器之前,不断地增加重启延迟[上一次重启的双倍延迟,从 100 毫秒开始]来防止影响服务器.这意味着 daemon 将等待 100ms,然后 200 ms, 400, 800, 1600 等等,直到超过 on-failure 限制,或执行 docker stop 或 docker rm -f.
+如果容器重启成功[容器启动后并运行至少 10 秒],然后 delay 重置为默认的 100ms.
+你可以使用 on-failure 策略指定 docker 尝试重启容器的最大次数.默认下 docker 将无限次数重启容器.可以通过 docker inspect 来查看已经尝试重启容器了多少次.例如,获取容器 "my-container" 的重启次数:
+
+$ docker inspect -f "{{ .RestartCount }}" my-container
+# 2
+
+或者获取上一次容器重启时间:
+
+$ docker inspect -f "{{ .State.StartedAt }}" my-container
+# 2015-03-04T23:47:07.691840179Z
+
+示例
+$ docker run --restart=always redis
+这运行了一个 restart 策略为 always 的 redis 容器,以使得容器退出时,docker 将重启它.
+
+$ docker run --restart=on-failure:10 redis
+这个运行了一个 restart 策略为 on-failure,最大重启次数为 10 的 redis 容器.如果 redis 以非 0 状态退出连续退出超过 10 次,那么docker 将中断尝试重启这个容器.只有 on-failure 策略支持设置最大重启次数限制.
+
+
+----
+$ kubectl describe pod/kubernetes-dashboard-7d75c474bb-jr9qv -n kube-system
+详细描述pod kubernetes-dashboard-7d75c474bb-jr9qv在命令空间kube-system
+
+
+----
+docker 对应版本为19.03
+
+## docker 代理設定
+
+1.创建 docker 服务插件目录
+sudo mkdir -p/etc/systemd/system/docker.service.d
+2.创建一个名为 http-proxy.conf 的文件
+sudo touch/etc/systemd/system/docker.service.d/http-proxy.conf
+3.编辑 http-proxy.conf 的文件
+sudo vim/etc/systemd/system/docker.service.d/http-proxy.conf
+4.写入内容(将代理ip和代理端口修改成你自己的)
+[Service]
+Environment="HTTP_PROXY=socks5://代理ip:代理端口/"
+Environment="HTTP_PROXY=http://proxy.example.com:80"
+Environment="HTTPS_PROXY=http://proxy.example.com:443"
+5.重新加载服务程序的配置文件
+sudo systemctl daemon-reload
+6.重启 docker
+sudo systemctl restart docker
+7.验证是否配置成功
+systemctl show --property=Environment docker
+
+----
+此方式可以以 root 用户登录
+docker exec -u 0 -it a9f495be369e/bin/bash
+
+----
+/etc/docker/daemon.json
+{
+  "exec-opts": ["native.cgroupdriver=cgroupfs"],
+  "insecure-registries": ["172.20.20.1:28080"]
+}
+
+参数设置,例子
+{
+  "bip": "192.168.1.5/24",
+  "fixed-cidr": "192.168.1.5/25",
+  "fixed-cidr-v6": "2001:db8::/64",
+  "mtu": 1500,
+  "default-gateway": "10.20.1.1",
+  "default-gateway-v6": "2001:db8:abcd::89",
+  "dns": ["10.20.1.2","10.20.1.3"]
+}
+
+
+---
+
+### 来之官方文档(docker 19.03.6)###
+---
+ubuntu 19.x 安装 docker 19.03.6
+
+文档链接: https://docs.docker.com/engine/install/ubuntu/
+
+$ sudo apt-get remove docker docker-engine docker.io containerd runc
+$ sudo apt-get update
+$ sudo apt-get install \
+    apt-transport-https \
+    ca-certificates \
+    curl \
+    gnupg \
+    lsb-release
+$ curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o/usr/share/keyrings/docker-archive-keyring.gpg
+$ echo \
+  "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu \
+  $(lsb_release -cs)stable" | sudo tee/etc/apt/sources.list.d/docker.list >/dev/null
+$ sudo apt-get update
+$ sudo apt-get install docker-ce docker-ce-cli containerd.io
+
+
+
+---
+## ENTRYPOINT(运行时执行的默认命令)
+
+    --entrypoint="": Overwrite the default entrypoint set by the image
+
+该 ENTRYPOINT image 是类似 COMMAND,因为它指定了可执行文件运行容器启动时,但它是(特意)更难以覆盖.在 ENTRYPOINT 给出了一个容器,它的默认性质或行为,所以,当你设置一个 ENTRYPOINT 可以运行的容器,就好像它是二进制,完全使用默认选项,并且可以在通过更多的选择传递 COMMAND.但是,有时用户可能希望在容器内运行其他内容,因此可以 ENTRYPOINT 在运行时通过使用字符串来指定新的 ENTRYPOINT.
+
+其实就是在启动的时候将在 dockerfile 文件中的设置的 cmd 覆盖掉(是否会覆盖 entrypoint ?)
+
+以下是如何在已设置为自动运行其他内容(如/usr/bin/redis-server)的容器中运行 shell 的示例:
+
+$ docker run -it --entrypoint/bin/bash example/redis
+
+或如何将更多参数传递给该 ENTRYPOINT 的两个示例:
+
+$ docker run -it --entrypoint/bin/bash example/redis -c ls -l
+$ docker run -it --entrypoint/usr/bin/redis-cli example/redis --help
+
+可以通过传递一个空字符串来重置容器入口点,例如:
+
+$ docker run -it --entrypoint="" mysql bash
+
+注意: 传递 --entrypoint 将清除 image 上设置的任何默认命令(即 CMD 用于构建它的 Dockerfile 中的任何指令)
+
+
+---
+一旦登陆到一个容器,用户就可以从它分离出来并使用 CTRL-p CTRL-q 键让它继续运行,而不中断此容器
+
+
+# 可以 -a=[] 在单个命令行中多次指定选项,例如在这些命令中:
+
+$ docker run -a stdin -a stdout -i -t ubuntu/bin/bash
+$ docker run -a stdin -a stdout -a stderr ubuntu/bin/ls
+
+
+---
+##  Docker 允许使用 attach 命令与运行中的容器交互,Docker attach 可以 attach 到一个已经运行的容器的 stdin,然后进行命令执行的动作.并且可以随时观察容器內进程的运行状况
+
+docker attach [OPTIONS] CONTAINER 用法
+
+用于 docker attach 使用容器的 ID 或名称将终端的标准输入.输出和错误(或三者的任意组合)登录到正在运行的容器.这允许查看其正在进行的输出或以交互方式控制它,就好像命令直接在的终端中运行一样.
+
+注意:
+1. 该 attach 命令将显示 ENTRYPOINT/CMD 进程的输出.这看起来好像 attach 命令被挂起,而实际上当时进程可能根本没有与终端交互.
+2. 可以从 Docker 主机上的不同会话同时多次登录到同一个包含的进程.
+3. 要停止容器,请使用 CTRL-c. 此命令将发送SIGKILL到容器.如果 --sig-proxy 为 true(默认值),则将 CTRL-ca 发送 SIGINT 到容器.如果容器使用 -i 和运行 -t,可以从容器中分离并使用 CTRL-p CTRL-q 键使其继续运行.
+
+
+---
+## docker build 配置
+# 虽然我们不会在本教程中深入探讨它,但多阶段构建是一个非常强大的工具,可以帮助使用多个阶段来创建 image.它们有几个优点:
+
+将构建时依赖项与运行时依赖项分开
+通过仅传送的应用程序需要运行的内容来减少整体 image 大小
+
+示例
+在构建 React 应用程序时,我们需要一个 Node 环境来将 JS 代码(通常是 JSX).SASS 样式表等编译成静态 HTML.JS 和 CSS.如果我们不进行服务器端渲染,我们甚至不需要用于生产构建的 Node 环境.为什么不在静态 nginx 容器中传送静态资源？
+
+# syntax=docker/dockerfile:1
+FROM node:12 AS build
+WORKDIR/app
+COPY package* yarn.lock ./
+RUN yarn install
+COPY public ./public
+COPY src ./src
+RUN yarn run build
+
+FROM nginx:alpine
+COPY --from=build/app/build/usr/share/nginx/html
+
+在这里,我们使用 node:12image 来执行构建(最大化层缓存),然后将输出复制到 nginx 容器中.很酷吧？
+
+
+# 指定目标构建阶段(--target)
+在构建具有多个构建阶段的 Dockerfile 时,--target 可用于按名称指定中间构建阶段作为结果映像的最后阶段. 目标阶段之后的命令将被跳过.
+
+FROM debian AS build-env
+...
+
+FROM alpine AS production-env
+...
+$ docker build -t mybuildimage --target build-env .
+
+
+---
+## docker container COMMAND
+
+这个命令的描述是管理容器,很诡异,和 docker 的某些管理容器的命令作用一模一样,如下
+
+Command                              Description
+docker container attach      Attach local standard input, output, and error streams to a running container
+docker container commit    Create a new image from a container’s changes
+docker container cp            Copy files/folders between a container and the local filesystem
+docker container create     Create a new container    # 与 docker run 不同之处在于,此命令只是创建了一个容器,即容器是 Created 状态,如果要启动的,还需要start,另外,没有-d这个参数了
+docker container diff          Inspect changes to files or directories on a container’s filesystem
+docker container exec        Run a command in a running container
+docker container export     Export a container’s filesystem as a tar archive
+docker container inspect    Display detailed information on one or more containers
+docker container kill           Kill one or more running containers
+docker container logs         Fetch the logs of a container
+docker container ls             List containers
+docker container pause      Pause all processes within one or more containers
+docker container port         List port mappings or a specific mapping for the container
+docker container prune      Remove all stopped containers
+docker container rename   Rename a container
+docker container restart    Restart one or more containers
+docker container rm           Remove one or more containers
+docker container run          Run a command in a new container
+docker container start        Start one or more stopped containers
+docker container stats        Display a live stream of container(s)resource usage statistics
+docker container stop         Stop one or more running containers
+docker container top           Display the running processes of a container
+docker container unpause   Unpause all processes within one or more containers
+docker container update     Update configuration of one or more containers
+docker container wait         Block until one or more containers stop, then print their exit codes
+
+*
+1. 上述的 docker container attach 和 docker attach 命令的功能一样,应该是为了把分开管理 docker 命令的不同参数的作用
+2. docker container create 和 docker create 功能相同,都类似 docker run -d 但是不启动容器,并且新的容器状态为 Created
+
+
+---
+## docker context COMMAND
+
+这个命令的其中一种用法就是使用本地的 docker 客户端连接远程的 docker 进程,有些类似 mysql 的 client 端连接远程的 myslq server
+
+$ docker context ls   # 查看当前的 context,注意 NAME 这列的 * 表示当前正在使用,DOCKER ENDPOINT 这列表示连接 docker 服务用到的方式
+
+NAME                DESCRIPTION                                                      DOCKER ENDPOINT               KUBERNETES ENDPOINT   ORCHESTRATOR
+default *           Current DOCKER_HOST based configuration   unix:///var/run/docker.sock                                               swarm
+
+
+创建一个 context,用于远程连接
+$ docker context create host1 --description "remote host1" --docker "host=tcp://192.168.1.21:2376,ca=~/ca-file,cert=~/cert-file,key=~/key-file"
+
+$ docker context ls   # 就会多一行
+
+NAME                DESCRIPTION                                                      DOCKER ENDPOINT               KUBERNETES ENDPOINT   ORCHESTRATOR
+default *           Current DOCKER_HOST based configuration   unix:///var/run/docker.sock                                               swarm
+host1                remote host1                                                    tcp://192.168.1.21:2376
+
+$ docker context use host1    # 启用host1
+
+NAME                DESCRIPTION                                                     DOCKER ENDPOINT               KUBERNETES ENDPOINT   ORCHESTRATOR
+default             Current DOCKER_HOST based configuration   unix:///var/run/docker.sock                                               swarm
+host1 *             remote host1                                                    tcp://192.168.1.21:2376
+
+
+$  docker version     # 此命令应该是在远程机器上执行,因为远程机器没有开启 2376 这个服务
+Client: Docker Engine - Community
+ Version:           19.03.6
+ API version:       1.40
+ Go version:        go1.12.16
+ Git commit:        369ce74a3c
+ Built:             Thu Feb 13 01:27:49 2020
+ OS/Arch:           linux/amd64
+ Experimental:      false
+Cannot connect to the Docker daemon at tcp://192.168.1.21:2376. Is the docker daemon running?
+
+
+$ docker context rm  host1    # 删除 host1 这个context
+
+
+# 开启 docker 服务的远程连接
+编辑/usr/lib/systemd/system/docker.service 这个文件,在这行后边添加 -H tcp-H tcp://0.0.0.0:2376 如下:
+
+ExecStart=/usr/bin/dockerd -H fd://--containerd=/run/containerd/containerd.sock -H tcp://0.0.0.0:2376
+
+# systemctl daemon-reload
+# systemctl restart docker
+
+* 注意: 这里其实没有使用证书,如果是为了安全,需要单独的生成证书,可以参考其他资料
+
+
+---
+##  docker diff CONTAINER
+list自容器创建以来容器的文件系统中更改的文件和目录.跟踪三种不同类型的更改:
+
+标识    描述
+A        添加了文件或目录
+D        文件或目录被删除
+C        文件或目录已更改
+
+$ docker diff 1fdfd1f54c1b
+
+
+---
+##  docker events
+说明: 从服务器获取实时事件
+
+用法: docker events [OPTIONS]
+
+扩展说明: 用于 docker events 从服务器获取实时事件.这些事件因 Docker 对象类型而异.不同的事件类型有不同的作用域.本地范围的事件仅在发生它们的节点上可见,而群范围的事件在所有管理器上可见.
+
+仅返回最后 1000 个日志事件.可以使用过滤器进一步限制返回的事件数.
+
+对象类型
+
+Docker 容器报告以下事件:
+attach  commit  copy  create  destroy  detach  die  exec_create  exec_detach  exec_die  exec_start  export  health_status  kill  oom  pause  rename  resize  restart  start  stop  top  unpause  update
+
+Docker image 报告以下事件:
+delete  import  load  pull  push  save  tag  untag
+
+Docker 插件报告以下事件:
+enable  disable  install  remove
+
+Docker 卷报告以下事件:
+create  destroy  mount  unmount
+
+Docker 网络报告以下事件:
+create  connect  destroy  disconnect  remove
+
+Docker 守护进程报告以下事件:
+reload
+
+Docker 服务报告以下事件:
+create  remove  update
+
+Docker 节点报告以下事件:
+create  remove  update
+
+Docker 安全报告以下事件:
+create  remove  update
+
+Docker 配置报告以下事件:
+create  remove  update
+
+
+# 限制,过滤和格式化输出
+
+按时间限制事件
+---since 和 --unti l参数可以是 Unix 的时间戳,日期格式时间戳,或持续时间段(例如 10m,1h30m 相对于客户机的时间计算).如果不提供该 --sinc e选项,该命令将仅返回新的和/或实时事件.支持的格式为日期格式时间戳,包括 RFC3339Nano,RFC3339,2006-01-02T15:04:05, 2006-01-02T15:04:05.999999999,2006-01-02Z07:00 和 2006-01-02 如果不提供 Z或+-00:00, 则将使用客户端上的本地时区 +-00:00 时间戳末尾的时区偏移量.当提供 Unix 时间戳时,输入 seconds[.nanoseconds],其中 seconds 是自 1970 年 1 月 1 日(UTC/GMT 午夜)以来经过的秒数,不计算闰秒(又名 Unix 纪元或 Unix 时间),以及可选的 .纳秒字段是几分之一秒,长度不超过九位.
+
+仅返回最后 1000 个日志事件.可以使用过滤器进一步限制返回的事件数.
+
+
+过滤
+过滤标志(-f 或 --filter)格式为 "key=value".如果想使用多个过滤器,请传递多个标志(例如, --filter "foo=bar" --filter "bif=baz")
+
+多次使用相同的过滤器将作为 OR 处理;例如 --filter container=588a23dac085 --filter container=a8f7720b8c22 将显示容器 588a23dac085 或容器 a8f7720b8c22 的事件
+
+使用多个过滤器将作为 AND 处理;例如 --filter container=588a23dac085 --filter event=start 将显示容器容器 588a23dac085 的事件,并且事件类型为 start
+
+目前支持的过滤器有:
+
+config(config=<name or id>)
+container(container=<name or id>)
+daemon(daemon=<name or id>)
+even(event=<event action>)
+image(image=<repository or tag>)
+label(label=<key>or label=<key>=<value>)
+network(network=<name or id>)
+node(node=<id>)
+plugin(plugin=<name or id>)
+scope(scope=<local or swarm>)
+secret(secret=<name or id>)
+service(service=<name or id>)
+type(type=<container or image or volume or network or daemon or plugin or service or node or secret or config>)
+volume(volume=<name>)
+
+format
+如果 --format 指定了格式(),将执行给定的模板而不是默认格式.Go 的 text/template 包描述了格式的所有细节.
+
+如果格式设置为 {{json .}},则事件将作为有效的 JSON 行进行流式传输.有关 JSON 行的信息,请参阅 http://jsonlines.org/.
+
+有关此命令的使用示例,请参阅下面的示例部分.
+
+选项
+名称,简写  默认  描述
+--filter,-f             根据提供的条件过滤输出
+--format             使用给定的 Go 模板格式化输出
+--since                显示自时间戳以来创建的所有事件
+--until                流事件直到此时间戳
+
+例子: 基本例子
+
+对于此示例,将需要两个 shell.
+
+Shell 1:侦听事件:
+
+$ docker events
+
+Shell 2:启动和停止容器:
+
+$ docker create --name test alpine:latest top
+$ docker start test
+$ docker stop test
+
+Shell 1:(再次.. 现在显示事件):
+
+要退出docker events命令,请使用CTRL+C.
+
+按时间过滤事件
+可以使用以下不同的时间语法,通过主机上的绝对时间戳或相对时间来过滤输出:
+
+$ docker events --since 1483283804
+2017-01-05T00:35:41.241772953+08:00 volume create testVol(driver=local)
+2017-01-05T00:35:58.859401177+08:00 container create d9cd...4d70(image=alpine:latest, name=test)
+2017-01-05T00:36:04.703631903+08:00 network connect e2e1...29e2(container=0fdb...ff37, name=bridge, type=bridge)
+2017-01-05T00:36:04.795031609+08:00 container start 0fdb...ff37(image=alpine:latest, name=test)
+2017-01-05T00:36:09.830268747+08:00 container kill 0fdb...ff37(image=alpine:latest, name=test, signal=15)
+2017-01-05T00:36:09.840186338+08:00 container die 0fdb...ff37(exitCode=143, image=alpine:latest, name=test)
+2017-01-05T00:36:09.880113663+08:00 network disconnect e2e...29e2(container=0fdb...ff37, name=bridge, type=bridge)
+2017-01-05T00:36:09.890214053+08:00 container stop 0fdb...ff37(image=alpine:latest, name=test)
+
+$ docker events --since '2017-01-05'
+2017-01-05T00:35:41.241772953+08:00 volume create testVol(driver=local)
+2017-01-05T00:35:58.859401177+08:00 container create d9cd...4d70(image=alpine:latest, name=test)
+2017-01-05T00:36:04.703631903+08:00 network connect e2e1...29e2(container=0fdb...ff37, name=bridge, type=bridge)
+2017-01-05T00:36:04.795031609+08:00 container start 0fdb...ff37(image=alpine:latest, name=test)
+2017-01-05T00:36:09.830268747+08:00 container kill 0fdb...ff37(image=alpine:latest, name=test, signal=15)
+2017-01-05T00:36:09.840186338+08:00 container die 0fdb...ff37(exitCode=143, image=alpine:latest, name=test)
+2017-01-05T00:36:09.880113663+08:00 network disconnect e2e...29e2(container=0fdb...ff37, name=bridge, type=bridge)
+2017-01-05T00:36:09.890214053+08:00 container stop 0fdb...ff37(image=alpine:latest, name=test)
+
+$ docker events --since '2013-09-03T15:49:29'
+2017-01-05T00:35:41.241772953+08:00 volume create testVol(driver=local)
+2017-01-05T00:35:58.859401177+08:00 container create d9cd...4d70(image=alpine:latest, name=test)
+2017-01-05T00:36:04.703631903+08:00 network connect e2e1...29e2(container=0fdb...ff37, name=bridge, type=bridge)
+2017-01-05T00:36:04.795031609+08:00 container start 0fdb...ff37(image=alpine:latest, name=test)
+2017-01-05T00:36:09.830268747+08:00 container kill 0fdb...ff37(image=alpine:latest, name=test, signal=15)
+2017-01-05T00:36:09.840186338+08:00 container die 0fdb...ff37(exitCode=143, image=alpine:latest, name=test)
+2017-01-05T00:36:09.880113663+08:00 network disconnect e2e...29e2(container=0fdb...ff37, name=bridge, type=bridge)
+2017-01-05T00:36:09.890214053+08:00 container stop 0fdb...ff37(image=alpine:latest, name=test)
+
+$ docker events --since '10m'
+2017-01-05T00:35:41.241772953+08:00 volume create testVol(driver=local)
+2017-01-05T00:35:58.859401177+08:00 container create d9cd...4d70(image=alpine:latest, name=test)
+2017-01-05T00:36:04.703631903+08:00 network connect e2e1...29e2(container=0fdb...ff37, name=bridge, type=bridge)
+2017-01-05T00:36:04.795031609+08:00 container start 0fdb...ff37(image=alpine:latest, name=test)
+2017-01-05T00:36:09.830268747+08:00 container kill 0fdb...ff37(image=alpine:latest, name=test, signal=15)
+2017-01-05T00:36:09.840186338+08:00 container die 0fdb...ff37(exitCode=143, image=alpine:latest, name=test)
+2017-01-05T00:36:09.880113663+08:00 network disconnect e2e...29e2(container=0fdb...ff37, name=bridge, type=bridge)
+2017-01-05T00:36:09.890214053+08:00 container stop 0fdb...ff37(image=alpine:latest, name=test)
+
+$ docker events --since '2017-01-05T00:35:30' --until '2017-01-05T00:36:05'
+2017-01-05T00:35:41.241772953+08:00 volume create testVol(driver=local)
+2017-01-05T00:35:58.859401177+08:00 container create d9cd...4d70(image=alpine:latest, name=test)
+2017-01-05T00:36:04.703631903+08:00 network connect e2e1...29e2(container=0fdb...ff37, name=bridge, type=bridge)
+2017-01-05T00:36:04.795031609+08:00 container start 0fdb...ff37(image=alpine:latest, name=test)
+
+按条件过滤事件
+
+以下命令显示了过滤 docker event 输出的几种不同方法.
+
+$ docker events --filter 'event=stop'
+
+2017-01-05T00:40:22.880175420+08:00 container stop 0fdb...ff37(image=alpine:latest, name=test)
+2017-01-05T00:41:17.888104182+08:00 container stop 2a8f...4e78(image=alpine, name=kickass_brattain)
+
+$ docker events --filter 'image=alpine'
+
+2017-01-05T00:41:55.784240236+08:00 container create d9cd...4d70(image=alpine, name=happy_meitner)
+2017-01-05T00:41:55.913156783+08:00 container start d9cd...4d70(image=alpine, name=happy_meitner)
+2017-01-05T00:42:01.106875249+08:00 container kill d9cd...4d70(image=alpine, name=happy_meitner, signal=15)
+2017-01-05T00:42:11.111934041+08:00 container kill d9cd...4d70(image=alpine, name=happy_meitner, signal=9)
+2017-01-05T00:42:11.119578204+08:00 container die d9cd...4d70(exitCode=137, image=alpine, name=happy_meitner)
+2017-01-05T00:42:11.173276611+08:00 container stop d9cd...4d70(image=alpine, name=happy_meitner)
+
+$ docker events --filter 'container=test'
+
+2017-01-05T00:43:00.139719934+08:00 container start 0fdb...ff37(image=alpine:latest, name=test)
+2017-01-05T00:43:09.259951086+08:00 container kill 0fdb...ff37(image=alpine:latest, name=test, signal=15)
+2017-01-05T00:43:09.270102715+08:00 container die 0fdb...ff37(exitCode=143, image=alpine:latest, name=test)
+2017-01-05T00:43:09.312556440+08:00 container stop 0fdb...ff37(image=alpine:latest, name=test)
+
+$ docker events --filter 'container=test' --filter 'container=d9cdb1525ea8'
+
+2017-01-05T00:44:11.517071981+08:00 container start 0fdb...ff37(image=alpine:latest, name=test)
+2017-01-05T00:44:17.685870901+08:00 container start d9cd...4d70(image=alpine, name=happy_meitner)
+2017-01-05T00:44:29.757658470+08:00 container kill 0fdb...ff37(image=alpine:latest, name=test, signal=9)
+2017-01-05T00:44:29.767718510+08:00 container die 0fdb...ff37(exitCode=137, image=alpine:latest, name=test)
+2017-01-05T00:44:29.815798344+08:00 container destroy 0fdb...ff37(image=alpine:latest, name=test)
+
+$ docker events --filter 'container=test' --filter 'event=stop'
+
+2017-01-05T00:46:13.664099505+08:00 container stop a9d1...e130(image=alpine, name=test)
+
+$ docker events --filter 'type=volume'
+
+2015-12-23T21:05:28.136212689Z volume create test-event-volume-local(driver=local)
+2015-12-23T21:05:28.383462717Z volume mount test-event-volume-local(read/write=true, container=562f...5025, destination=/foo, driver=local, propagation=rprivate)
+2015-12-23T21:05:28.650314265Z volume unmount test-event-volume-local(container=562f...5025, driver=local)
+2015-12-23T21:05:28.716218405Z volume destroy test-event-volume-local(driver=local)
+
+$ docker events --filter 'type=network'
+
+2015-12-23T21:38:24.705709133Z network create 8b11...2c5b(name=test-event-network-local, type=bridge)
+2015-12-23T21:38:25.119625123Z network connect 8b11...2c5b(name=test-event-network-local, container=b4be...c54e, type=bridge)
+
+$ docker events --filter 'container=container_1' --filter 'container=container_2'
+
+2014-09-03T15:49:29.999999999Z07:00 container die 4386fb97867d(image=ubuntu-1:14.04)
+2014-05-10T17:42:14.999999999Z07:00 container stop 4386fb97867d(image=ubuntu-1:14.04)
+2014-05-10T17:42:14.999999999Z07:00 container die 7805c1d35632(imager=redis:2.8)
+2014-09-03T15:49:29.999999999Z07:00 container stop 7805c1d35632(image=redis:2.8)
+
+$ docker events --filter 'type=volume'
+
+2015-12-23T21:05:28.136212689Z volume create test-event-volume-local(driver=local)
+2015-12-23T21:05:28.383462717Z volume mount test-event-volume-local(read/write=true, container=562fe10671e9273da25eed36cdce26159085ac7ee6707105fd534866340a5025, destination=/foo, driver=local, propagation=rprivate)
+2015-12-23T21:05:28.650314265Z volume unmount test-event-volume-local(container=562fe10671e9273da25eed36cdce26159085ac7ee6707105fd534866340a5025, driver=local)
+2015-12-23T21:05:28.716218405Z volume destroy test-event-volume-local(driver=local)
+
+$ docker events --filter 'type=network'
+
+2015-12-23T21:38:24.705709133Z network create 8b111217944ba0ba844a65b13efcd57dc494932ee2527577758f939315ba2c5b(name=test-event-network-local, type=bridge)
+2015-12-23T21:38:25.119625123Z network connect 8b111217944ba0ba844a65b13efcd57dc494932ee2527577758f939315ba2c5b(name=test-event-network-local, container=b4be644031a3d90b400f88ab3d4bdf4dc23adb250e696b6328b85441abe2c54e, type=bridge)
+
+$ docker events --filter 'type=plugin'
+
+2016-07-25T17:30:14.825557616Z plugin pull ec7b87f2ce84330fe076e666f17dfc049d2d7ae0b8190763de94e1f2d105993f(name=tiborvass/sample-volume-plugin:latest)
+2016-07-25T17:30:14.888127370Z plugin enable ec7b87f2ce84330fe076e666f17dfc049d2d7ae0b8190763de94e1f2d105993f(name=tiborvass/sample-volume-plugin:latest)
+
+$ docker events -f type=service
+
+2017-07-12T06:34:07.999446625Z service create wj64st89fzgchxnhiqpn8p4oj(name=reverent_albattani)
+2017-07-12T06:34:21.405496207Z service remove wj64st89fzgchxnhiqpn8p4oj(name=reverent_albattani)
+
+$ docker events -f type=node
+
+2017-07-12T06:21:51.951586759Z node update 3xyz5ttp1a253q74z1thwywk9(name=ip-172-31-23-42, state.new=ready, state.old=unknown)
+
+$ docker events -f type=secret
+
+2017-07-12T06:32:13.915704367Z secret create s8o6tmlnndrgzbmdilyy5ymju(name=new_secret)
+2017-07-12T06:32:37.052647783Z secret remove s8o6tmlnndrgzbmdilyy5ymju(name=new_secret)
+
+$  docker events -f type=config
+2017-07-12T06:44:13.349037127Z config create u96zlvzdfsyb9sg4mhyxfh3rl(name=abc)
+2017-07-12T06:44:36.327694184Z config remove u96zlvzdfsyb9sg4mhyxfh3rl(name=abc)
+
+$ docker events --filter 'scope=swarm'
+
+2017-07-10T07:46:50.250024503Z service create m8qcxu8081woyof7w3jaax6gk(name=affectionate_wilson)
+2017-07-10T07:47:31.093797134Z secret create 6g5pufzsv438p9tbvl9j94od4(name=new_secret)
+
+格式化输出
+$ docker events --filter 'type=container' --format 'Type={{.Type}}  Status={{.Status}}  ID={{.ID}}'
+
+Type=container  Status=create  ID=2ee349dac409e97974ce8d01b70d250b85e0ba8189299c126a87812311951e26
+Type=container  Status=attach  ID=2ee349dac409e97974ce8d01b70d250b85e0ba8189299c126a87812311951e26
+Type=container  Status=start  ID=2ee349dac409e97974ce8d01b70d250b85e0ba8189299c126a87812311951e26
+Type=container  Status=resize  ID=2ee349dac409e97974ce8d01b70d250b85e0ba8189299c126a87812311951e26
+Type=container  Status=die  ID=2ee349dac409e97974ce8d01b70d250b85e0ba8189299c126a87812311951e26
+Type=container  Status=destroy  ID=2ee349dac409e97974ce8d01b70d250b85e0ba8189299c126a87812311951e26
+
+格式为 JSON
+$ docker events --format '{{json .}}'
+
+{"status":"create","id":"196016a57679bf42424484918746a9474cd905dd993c4d0f4..
+{"status":"attach","id":"196016a57679bf42424484918746a9474cd905dd993c4d0f4..
+{"Type":"network","Action":"connect","Actor":{"ID":"1b50a5bf755f6021dfa78e..
+{"status":"start","id":"196016a57679bf42424484918746a9474cd905dd993c4d0f42..
+{"status":"resize","id":"196016a57679bf42424484918746a9474cd905dd993c4d0f4..
+
+
+## 配置日志
+
+# dockerd 守护进程配置文件
+该 --config-file 选项允许以 JSON 格式为守护程序设置任何配置选项.该文件使用与键相同的标志名称,但允许多个条目的标志除外,它使用标志名称的复数形式,例如,labels 用于 label 标志.
+
+配置文件中设置的选项不得与通过标志设置的选项冲突.如果选项在文件和标志之间重复,无论它们的值如何,docker 守护程序都将无法启动.我们这样做是为了避免静默忽略配置重新加载中引入的更改.例如,如果在配置文件中设置守护进程标签并通过 --label 标志设置守护进程标签,守护进程将无法启动.当守护程序启动时,文件中不存在的选项将被忽略.
+
+在 Linux 上
+Linux 上配置文件的默认位置是/etc/docker/daemon.json. 该 --config-file 标志可用于指定非默认位置.
+
+这是 Linux 上允许的配置选项的完整示例:
+
+{
+  "allow-nondistributable-artifacts": [],
+  "api-cors-header": "",
+  "authorization-plugins": [],
+  "bip": "",
+  "bridge": "",
+  "cgroup-parent": "",
+  "cluster-advertise": "",
+  "cluster-store": "",
+  "cluster-store-opts": {},
+  "containerd": "/run/containerd/containerd.sock",
+  "containerd-namespace": "docker",
+  "containerd-plugin-namespace": "docker-plugins",
+  "data-root": "",
+  "debug": true,
+  "default-address-pools": [
+    {
+      "base": "172.80.0.0/16",
+      "size": 24
+    },
+    {
+      "base": "172.90.0.0/16",
+      "size": 24
+    }
+  ],
+  "default-cgroupns-mode": "private",
+  "default-gateway": "",
+  "default-gateway-v6": "",
+  "default-runtime": "runc",
+  "default-shm-size": "64M",
+  "default-ulimits": {
+    "nofile": {
+      "Hard": 64000,
+      "Name": "nofile",
+      "Soft": 64000
+    }
+  },
+  "dns": [],
+  "dns-opts": [],
+  "dns-search": [],
+  "exec-opts": [],
+  "exec-root": "",
+  "experimental": false,
+  "features": {},
+  "fixed-cidr": "",
+  "fixed-cidr-v6": "",
+  "group": "",
+  "hosts": [],
+  "icc": false,
+  "init": false,
+  "init-path": "/usr/libexec/docker-init",
+  "insecure-registries": [],
+  "ip": "0.0.0.0",
+  "ip-forward": false,
+  "ip-masq": false,
+  "iptables": false,
+  "ip6tables": false,
+  "ipv6": false,
+  "labels": [],
+  "live-restore": true,
+  "log-driver": "json-file",
+  "log-level": "",
+  "log-opts": {
+    "cache-disabled": "false",
+    "cache-max-file": "5",
+    "cache-max-size": "20m",
+    "cache-compress": "true",
+    "env": "os,customer",
+    "labels": "somelabel",
+    "max-file": "5",
+    "max-size": "10m"
+  },
+  "max-concurrent-downloads": 3,
+  "max-concurrent-uploads": 5,
+  "max-download-attempts": 5,
+  "mtu": 0,
+  "no-new-privileges": false,
+  "node-generic-resources": [
+    "NVIDIA-GPU=UUID1",
+    "NVIDIA-GPU=UUID2"
+  ],
+  "oom-score-adjust": -500,
+  "pidfile": "",
+  "raw-logs": false,
+  "registry-mirrors": [],
+  "runtimes": {
+    "cc-runtime": {
+      "path": "/usr/bin/cc-runtime"
+    },
+    "custom": {
+      "path": "/usr/local/bin/my-runc-replacement",
+      "runtimeArgs": [
+        "--debug"
+      ]
+    }
+  },
+  "seccomp-profile": "",
+  "selinux-enabled": false,
+  "shutdown-timeout": 15,
+  "storage-driver": "",
+  "storage-opts": [],
+  "swarm-default-advertise-addr": "",
+  "tls": true,
+  "tlscacert": "",
+  "tlscert": "",
+  "tlskey": "",
+  "tlsverify": true,
+  "userland-proxy": false,
+  "userland-proxy-path": "/usr/libexec/docker-proxy",
+  "userns-remap": ""
+}
+
+* 注意: 不能将 daemon.json 在守护程序启动时已设置的选项设置为标志.在 systemd 用于启动 Docker 守护程序的系统上,-H 已设置,因此无法使用 hosts 密钥 daemon.json 添加侦听地址
+
+
+# 配置日志驱动程序(守护进程)
+
+Docker 包含多种日志记录机制,可帮助 从正在运行的容器和服务中获取信息.这些机制称为日志驱动程序.每个 Docker 守护进程都有一个默认的日志驱动程序,除非将其配置为使用不同的日志驱动程序,或简称为 "log-driver",否则每个容器都会使用该驱动程序.
+
+默认情况下,Docker 使用 json-file logging driver,它在内部将容器日志缓存为 JSON.
+
+* 注意: 使用 "local" 日志驱动程序来防止磁盘耗尽
+
+默认情况下,不执行日志轮换.因此,默认 json-file 日志记录驱动程序存储的日志文件可能会导致大量磁盘空间用于生成大量输出的容器,从而导致磁盘空间耗尽.
+Docker 将 json-file 日志驱动程序(无日志轮换)作为默认设置,以保持与旧版本 Docker 的向后兼容性,以及在将 Docker 用作 Kubernetes 运行时的情况下.
+对于其他情况,建议使用"本地"日志驱动程序,因为它默认执行日志轮换,并使用更高效的文件格式.
+
+配置默认日志驱动
+要将 Docker 守护程序配置为默认使用特定的日志记录驱动程序,请设置 log-driver 为 daemon.json 配置文件中的日志记录驱动程序的名称.
+
+* 注意: log-opts 配置 daemon.json 文件中的配置选项必须以字符串形式提供.因此,布尔值和数字值(例如上例中的值 max-file)必须用引号(")括起来.
+
+如果未指定日志记录驱动程序,则默认为 json-file. 要查找 Docker 守护程序的当前默认日志记录驱动程序,请运行 docker info 并搜索 Logging Driver. 可以在 Linux,macOS 或 Windows 上的 PowerShell 上使用以下命令:
+
+ docker info --format '{{.LoggingDriver}}'
+
+* 注意: 更改守护程序配置中的默认日志驱动程序或日志驱动程序选项只会影响更改配置后创建的容器.现有容器保留创建时使用的日志驱动程序选项.要更新容器的日志驱动程序,必须使用所需的选项重新创建容器
+
+
+# 为容器配置日志驱动程序(注意是容器,不是守护进程)
+
+当启动一个容器时,可以使用 --log-driver 标志将其配置为使用不同于 Docker 守护程序默认值的日志记录驱动程序.如果日志驱动程序具有可配置选项,可以使用一个或多个 --log-opt <NAME>=<VALUE> 标志实例来设置它们.即使容器使用默认日志驱动程序,它也可以使用不同的可配置选项.
+
+以下示例使用 none 日志驱动程序启动 Alpine 容器.
+
+$ docker run -it --log-driver none alpine ash
+要查找正在运行的容器的当前日志记录驱动程序,如果守护程序正在使用 json-file 日志记录驱动程序,请运行以下 docker inspect 命令,用容器名称或 ID 替换 <CONTAINER>:
+
+$ docker inspect -f '{{.HostConfig.LogConfig.Type}}' <CONTAINER>
+
+
+# 配置日志消息从容器到日志驱动的传递方式
+Docker 提供了两种模式来将消息从容器传递到日志驱动程序:
+
+*(默认)direct,阻止从容器到驱动程序的提交
+* non-blocking 传递,将日志消息存储在中间每个容器的环形缓冲区中供驱动程序使用
+
+non-blocking 消息传递模式可防止应用程序因日志背压而阻塞.当 STDERR 或 STDOUT 流阻塞时,应用程序可能会以意想不到的方式失败.
+
+* 警告: 当缓冲区已满且新消息入队时,内存中最旧的消息将被丢弃.丢弃消息通常比阻止应用程序的日志写入过程更受欢迎.
+
+
+mode 日志选项控制是否使用 blocking(默认)或 non-blocking 消息传递.
+
+当 mode 设置为 non-blocking 时,max-buffer-size 日志选项控制用于中间消息存储的环形缓冲区的大小.max-buffer-size 默认为 1 兆字节.
+
+以下示例以非阻塞模式和 4 MB 缓冲区启动一个具有日志输出的 Alpine 容器:
+
+$ docker run -it --log-opt mode=non-blocking --log-opt max-buffer-size=4m alpine ping 127.0.0.1
+
+
+# 将环境变量或标签与日志驱动程序一起使用
+一些日志驱动程序将容器 --env|-e 或 --label 标志的值添加到容器的日志中.此示例使用 Docker 守护程序的默认日志记录驱动程序(让我们假设 json-file)启动一个容器,但设置了环境变量 os=ubuntu.
+
+ docker run -dit --label production_status=testing -e os=ubuntu alpine sh
+
+如果日志驱动程序支持它,这会向日志输出添加其他字段.以下输出由 json-file 日志驱动程序生成:
+
+"attrs":{"production_status":"testing","os":"ubuntu"}
+
+# 支持的日志驱动程序
+支持以下日志驱动程序.如果适用,请参阅每个驱动程序文档的链接以了解其可配置选项.如果使用 日志驱动程序插件,可能会看到更多选项.
+
+选项                    描述
+none                   容器 docker logs 没有可用的日志,并且不返回任何输出.
+local                    日志以自定义格式存储,旨在最大限度地减少开销.
+json-file              日志格式为 JSON.Docker 的默认日志驱动程序.
+syslog                 将日志消息写入 syslog 工具.该 syslog 守护程序必须在主机上运行.
+journald               将日志消息写入 journald. 该 journald 守护程序必须在主机上运行.
+gelf                     将日志消息写入 Graylog 扩展日志格式(GELF)端点,例如 Graylog 或 Logstash.
+fluentd                将日志消息写入 fluentd(转发输入).该 fluentd 守护程序必须在主机上运行.
+awslogs               将日志消息写入 Amazon CloudWatch Logs.
+splunk  splunk     使用 HTTP 事件收集器写入日志消息.
+etwlogs               将日志消息作为 Windows 事件跟踪(ETW)事件写入.仅在 Windows 平台上可用.
+gcplogs                将日志消息写入 Google Cloud Platform(GCP)Logging.
+logentries            将日志消息写入 Rapid7 Logentries.
+
+* 注意: 当使用 docker 引擎 19.03 或以上,该 docker logs 命令唯一的功能是 local,json-file 和 journald 日志记录的驱动程序.Docker 20.10 及更高版本引入了"双日志记录",它使用本地缓冲区,允许将 docker logs 命令用于任何日志记录驱动程序.
+
+
+---
+## 显示 image 的历史
+
+docker history [OPTIONS] IMAGE
+
+格式化选项(--format)将使用 Go 模板漂亮地打印历史输出.
+
+下面list了 Go 模板的有效占位符:
+
+占位符              描述
+.ID                    image 标识
+.CreatedSince    自创建 image 以来经过的时间 if --human=true,否则创建 image 时的时间戳
+.CreatedAt        创建 image 的时间戳
+.CreatedBy        用于创建 image 的命令
+.Size                  image 磁盘大小
+.Comment        评论 image
+
+使用该 --format 选项时,该 history 命令将完全按照模板声明的方式输出数据,或者在使用该 table 指令时,还将包括列标题.
+
+以下示例使用没有标题的模板,ID 并为 image 输出 CreatedSince 由冒号(:)分隔的 和条目 busybox:
+
+$ docker history --format "{{.ID}}: {{.CreatedSince}}" busybox
+
+f6e427c148a7: 4 weeks ago
+<missing>: 4 weeks ago
+
+* 另外有个比较有意思的地方就是 docker history IMAGE 和 docker image history IMAGE 输出一样,而前一个命令则是专门针对 image 的历史记录,有点像 docker create 和 docker container create 看起来是为了统一参数而如此做,而 docker image history  --format IMAGE 和 上述的 docker history --format 的作用一样,这里建议使用标准化的参数 docker container 和 docker image
+
+---
+## listimage
+docker images [OPTIONS] [REPOSITORY[:TAG]]
+
+选项
+名称,简写  默认    描述
+--all,-a                  显示所有 image(默认隐藏中间 image)
+--digests              显示摘要
+--filter,-f              根据提供的条件过滤输出
+--format              使用 Go 模板打印漂亮的image
+--no-trunc           不要截断输出
+
+例如,要list "java" 存储库中的所有 image,请运行以下命令:
+
+$ docker images java
+
+REPOSITORY          TAG                 IMAGE ID            CREATED             SIZE
+java                            8                   308e519aac60        6 days ago          824.5 MB
+java                            7                   493d82594c15        3 months ago        656.3 MB
+java                          latest              2711b1d6f3aa        5 months ago        603.9 MB
+
+$ docker images java:8
+
+REPOSITORY          TAG                 IMAGE ID            CREATED             SIZE
+java                8                   308e519aac60        6 days ago          824.5 MB
+
+$ docker images --digests
+
+REPOSITORY                                        TAG                 DIGEST                                                                    IMAGE ID            CREATED             SIZE
+localhost:5000/test/busybox        <none>              sha256:cbbf2f9a99b47fc460d422812b6a5adff7dfee951d8fa2e4a98caa0382cfbdbf   4986bf8c1536        9 weeks ago         2.43 MB
+
+
+# 过滤
+过滤标志(-f 或 --filter)格式为 "key=value".如果有多个过滤器,则传递多个标志(例如, --filter "foo=bar" --filter "bif=baz")
+
+目前支持的过滤器有:
+* dangling(boolean - true or false)
+* label(label=<key> or label=<key>=<value>)
+* before(<image-name>[:<tag>], <image id> or <image@digest>)- 过滤在给定 id 或引用之前创建的 image
+* since(<image-name>[:<tag>], <image id> or <image@digest>)- 过滤自给定 id 或引用以来创建的 image
+* reference(pattern of an image reference)- 过滤参考与指定模式匹配的 image
+
+
+显示 REPOSITORY(or | and )TAG 为 none 的 image(悬空)
+$ docker images --filter "dangling=true"
+
+
+可以删除这些 image,但是如果容器当前正在使用 image 时尝试删除,则会发出警告
+$ docker rmi $(docker images -f "dangling=true" -q)
+
+
+以下过滤器匹配带有 com.example.version 标签的 image,而不管其值如何.
+$ docker images --filter "label=com.example.version"
+
+
+以下过滤器匹配带有 com.example.version 标签和 1.0 值的 image.
+$ docker images --filter "label=com.example.version=1.0"
+
+
+按时间过滤 image
+
+该 before 过滤器只示出了与 image 给定id或参考 image 之前创建的.例如,有这些 image:
+
+$ docker images
+
+REPOSITORY          TAG                 IMAGE ID            CREATED              SIZE
+image1              latest              eeae25ada2aa        4 minutes ago        188.3 MB
+image2              latest              dea752e4e117        9 minutes ago        188.3 MB
+image3              latest              511136ea3c5a        25 minutes ago       188.3 MB
+
+过滤 before 会给出:
+
+$ docker images --filter "before=image1"
+
+REPOSITORY          TAG                 IMAGE ID            CREATED              SIZE
+image2              latest              dea752e4e117        9 minutes ago        188.3 MB
+image3              latest              511136ea3c5a        25 minutes ago       188.3 MB
+
+过滤 since 会给出:
+
+$ docker images --filter "since=image3"
+REPOSITORY          TAG                 IMAGE ID            CREATED              SIZE
+image1              latest              eeae25ada2aa        4 minutes ago        188.3 MB
+image2              latest              dea752e4e117        9 minutes ago        188.3 MB
+
+按 reference 过滤 image
+
+该 reference 过滤器只示出其参考与指定模式匹配的 image.
+
+$ docker images
+
+REPOSITORY          TAG                 IMAGE ID            CREATED             SIZE
+busybox             latest              e02e811dd08f        5 weeks ago         1.09 MB
+busybox             uclibc              e02e811dd08f        5 weeks ago         1.09 MB
+busybox             musl                733eb3059dce        5 weeks ago         1.21 MB
+busybox             glibc               21c16b6787c6        5 weeks ago         4.19 MB
+
+过滤 reference 会给出:
+
+$ docker images --filter=reference='busy*:*libc'
+
+REPOSITORY          TAG                 IMAGE ID            CREATED             SIZE
+busybox             uclibc              e02e811dd08f        5 weeks ago         1.09 MB
+busybox             glibc               21c16b6787c6        5 weeks ago         4.19 MB
+
+使用多个过滤 reference 将给出匹配 A 或 B:
+
+$ docker images --filter=reference='busy*:uclibc' --filter=reference='busy*:glibc'
+
+REPOSITORY          TAG                 IMAGE ID            CREATED             SIZE
+busybox             uclibc              e02e811dd08f        5 weeks ago         1.09 MB
+busybox             glibc               21c16b6787c6        5 weeks ago         4.19 MB
+
+
+格式化选项(--format)将使用 Go 模板漂亮地打印容器输出,与前面的 docker image history --format一样
+
+
+---
+## 显示系统范围的信息
+
+ docker info [OPTIONS]
+
+
+-D 选项导致所有 docker 命令输出调试信息
+$ docker -D info
+
+指定输出格式
+$ docker info --format '{{json .}}'   # 和上述的 --format 参数相同
+
+
+---
+## 返回有关 Docker 对象的低级信息
+
+ docker inspect [OPTIONS] NAME|ID [NAME|ID...]
+
+
+获取实例的 IP 地址
+在大多数情况下,可以以相当简单的方式从 JSON 中挑选出任何字段.
+
+$ docker inspect --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $INSTANCE_ID
+
+
+获取实例的 MAC 地址
+
+$ docker inspect --format='{{range .NetworkSettings.Networks}}{{.MacAddress}}{{end}}' $INSTANCE_ID
+
+
+获取实例的日志路径
+
+$ docker inspect --format='{{.LogPath}}' $INSTANCE_ID
+
+
+获取实例的 image 名称
+
+$ docker inspect --format='{{.Config.Image}}' $INSTANCE_ID
+
+
+list所有端口绑定
+可以在结果中遍历数组和映射以生成简单的文本输出:
+
+$ docker inspect --format='{{range $p, $conf := .NetworkSettings.Ports}} {{$p}} -> {{(index $conf 0).HostPort}} {{end}}' $INSTANCE_ID
+
+
+找到特定的端口映射
+在 .Field 当字段名称以数字开头,但模板语言的语法不工作 index 的功能一样.该 .NetworkSettings.Ports 部分包含内部端口映射到外部地址/端口对象列表的映射.要仅获取数字公共端口,请使用 index 查找特定端口映射,然后 index0 包含其中的第一个对象.然后我们要求该 HostPort 字段以获取公共地址.
+
+$ docker inspect --format='{{(index(index .NetworkSettings.Ports "8787/tcp")0).HostPort}}' $INSTANCE_ID
+
+
+获取 JSON 格式
+如果请求的字段本身是包含其他字段的结构,则默认情况下会获得内部值的 Go 风格转储.Docker 增加了一个模板函数,json 可用于获取 JSON 格式的结果.
+
+$ docker inspect --format='{{json .Config}}' $INSTANCE_ID
+
+
+---
+## 登录到 Docker 仓库
+docker login [OPTIONS] [SERVER]
+
+
+以下示例从文件中读取密码,并 docker login 使用 STDIN 以下命令将其传递给 命令:
+
+$ cat ~/my_password.txt | docker login --username foo --password-stdin
+
+
+* 可以登录拥有凭据的任何公共或私有存储库.当登录时,该命令通过下面描述的过程将凭据存储在 $HOME/.docker/config.json
+
+
+---
+## 获取容器的日志
+docker logs [OPTIONS] CONTAINER
+
+该docker logs命令批处理检索执行时存在的日志.
+
+* 注意: 此命令仅适用于使用 json-file 或 journald 日志驱动程序启动的容器 .
+
+docker logs --timestamps 命令将向每个日志条目添加一个 RFC3339Nano 时间戳 ,例如 2014-09-16T06:17:46.000000000Z.为了确保时间戳对齐,时间戳的纳秒部分将在必要时用零填充.
+
+docker logs --details 命令将添加在 --log-opt 创建容器时提供的额外属性,例如环境变量和标签.
+
+--since选项仅显示给定日期之后生成的容器日志.可以将日期指定为 RFC 3339 日期,UNIX 时间戳或 Go 持续时间字符串(例如1m30s,3h).除了 RFC3339 日期格式,还可以使用 RFC3339Nano 2006-01-02T15:04:05, 2006-01-02T15:04:05.999999999,2006-01-02Z07:00, 和2006-01-02.如果未在时间戳末尾提供时区偏移量Z或 +-00:00时区偏移量,则将使用客户端上的本地时区.当提供 Unix 时间戳时,输入 seconds[.nanoseconds],其中 seconds 是自 1970 年 1 月 1 日(UTC/GMT 午夜)以来经过的秒数,不计算闰秒(又名 Unix 纪元或 Unix 时间),以及可选的 .纳秒字段是几分之一秒,长度不超过九位.你可以结合 --since 选项与 --follow 或 --tail 选项之一或两者.
+
+
+选项
+名称,简写  默认        描述
+--details                  显示提供给日志的额外详细信息
+--follow,-f               跟踪日志输出
+--since                    显示自时间戳(例如 2013-01-02T13:23:37Z)或相关(例如 42m 为 42 分钟)以来的日志
+--tail,-n  all              从日志末尾显示的行数
+--timestamps,-t      显示时间戳
+--until                     API 1.35+
+                               在时间戳(例如 2013-01-02T13:23:37Z)或相关(例如 42m 为 42 分钟)之前显示日志
+
+
+---
+## docker 网络
+
+docker network COMMAND
+
+管理网络
+API 1.21+  客户端和守护进程 API 必须至少为 1.21 才能使用此命令.使用 docker version 客户端上的命令检查的客户端和守护程序 API 版本.
+
+命令                                      描述
+docker network connect      将容器连接到网络
+docker network create         创建网络
+docker network disconnect  断开容器与网络的连接
+docker network inspect       显示一个或多个网络的详细信息
+docker network ls                list网络
+docker network prune         删除所有未使用的网络
+docker network rm              删除一个或多个网络
+
+
+# docker network connect      -     将容器连接到网络
+
+docker network connect [OPTIONS] NETWORK CONTAINER
+
+将容器连接到网络.可以按名称或 ID 连接容器.连接后,容器可以与同一网络中的其他容器进行通信.
+
+
+将正在运行的容器连接到网络
+
+$ docker network connect multi-host-network container1
+
+
+启动时将容器连接到网络
+还可以使用该 docker run --network=<network-name> 选项启动容器并立即将其连接到网络.
+
+$ docker run -itd --network=multi-host-network busybox
+
+
+指定容器将在给定网络上使用的 IP 地址
+可以指定要分配给容器接口的 IP 地址.
+
+$ docker network connect --ip 10.10.36.122 multi-host-network container2
+
+
+为容器创建网络别名
+--alias 选项可用于通过正在连接的网络中的另一个名称解析容器.
+
+$ docker network connect --alias db --alias mysql multi-host-network container2
+
+停止、暂停或重启容器对网络的影响
+可以暂停、重新启动和停止连接到网络的容器.容器在运行时连接到其配置的网络.
+
+如果指定,则在重新启动停止的容器时重新应用容器的 IP 地址.如果 IP 地址不再可用,则容器无法启动.保证 IP 地址可用的一种方法是 --ip-range 在创建网络时指定一个,并从该范围之外选择静态 IP 地址.这可确保在此容器不在网络上时不会将 IP 地址提供给另一个容器.
+
+$ docker network create --subnet 172.20.0.0/16 --ip-range 172.20.240.0/20 multi-host-network
+$ docker network connect --ip 172.20.128.2 multi-host-network container2
+
+要验证容器已连接,请使用该 docker network inspect 命令.
+
+
+# docker network create     ---     创建网络
+
+docker network create [OPTIONS] NETWORK
+
+扩展说明
+创建一个新网络.在驱动层面接受 bridge 或者 overlay,它们是内置的网络驱动程序.如果安装了第三方或自己的自定义网络驱动程序,也可以在 DRIVER 处指定.如果不指定该 --driver 选项,该命令会自动为创建一个桥接网络.当安装 Docker Engine 时,它​​会自动创建一个桥接网络.该网络对应于 docker0 Engine 通常默认的网桥.当你启动一个新容器时, docker run 它会自动连接到这个桥接网络.无法删除此默认桥接网络,但可以使用该 network create 命令创建新的桥接网络.
+
+$ docker network create -d bridge my-bridge-network
+
+桥接网络是单个引擎安装上的隔离网络.如果要创建跨越多个 Docker 主机的网络,每个主机都运行一个引擎,则必须创建一个 overlay 网络.与桥接网络不同,覆盖网络需要一些预先存在的条件才能创建.这些条件是:
+
+* 访问键值存储.引擎支持 Consul、Etcd 和 ZooKeeper(分布式存储)键值存储.
+* 连接到键值存储的主机集群.
+* daemon集群中每台主机上正确配置的引擎.
+
+dockerd 支持 overlay 网络的选项有:
+--cluster-store
+--cluster-store-opt
+--cluster-advertise
+
+准备好 overlay 网络先决条件后,只需在集群中选择一个 Docker 主机并发出以下命令来创建网络:
+
+$ docker network create -d overlay my-multihost-network
+
+网络名称必须是唯一的.
+
+
+连接容器
+当启动容器时,请使用该 --network 标志将其连接到网络.此示例将 busybox 容器添加到 mynet 网络:
+
+$ docker run -itd --network=mynet busybox
+
+如果要在容器已运行后将容器添加到网络,请使用 docker network connect 子命令.
+可以将多个容器连接到同一个网络.连接后,容器可以仅使用另一个容器的 IP 地址或名称进行通信.对于 overlay 支持多主机连接的网络或自定义插件,连接到同一多主机网络但从不同引擎启动的容器也可以通过这种方式进行通信.
+
+
+# 指定高级选项
+创建网络时,引擎默认为网络创建一个不重叠的子网.该子网不是现有网络的细分.它纯粹是为了 ip 寻址的目的.可以使用该 --subnet 选项覆盖此默认值并直接指定子网值.在 bridge 网络上,只能创建一个子网:
+
+$ docker network create --driver=bridge --subnet=192.168.0.0/16 br0
+此外,还可以指定 --gateway --ip-range 和 --aux-address 选项.
+
+$ docker network create \
+  --driver=bridge \
+  --subnet=172.28.0.0/16 \
+  --ip-range=172.28.5.0/24 \
+  --gateway=172.28.5.254 \
+  br0
+如果省略该 --gateway 标志,引擎会从首选池中为选择一个.
+
+
+* 根据上述的描述做了如下的测试
+
+# docker network create --driver=bridge --subnet=192.168.0.0/16 br0
+
+# docker network inspect --format='{{json .Containers}}{{json .IPAM}}' br0
+
+{"bc4c01901d69985157a654384fb51e3537ebe84a0257a90cea9dc4cecf171dfe":{"Name":"friendly_matsumoto","EndpointID":"7e41e1ac88a9465774bccee9fd9364b15a1abb2ed1a30e5f30e08c5368c00e5d","MacAddress":"02:42:c0:a8:00:02","IPv4Address":"192.168.0.2/16","IPv6Address":""}}{"Driver":"default","Options":{},"Config":[{"Subnet":"192.168.0.0/16"}]}
+
+
+# docker network create --driver=bridge --subnet=172.28.0.0/16 --ip-range=172.28.5.0/24 --gateway=172.28.5.254   br1
+
+# docker network inspect --format='{{json .Containers}}{{json .IPAM}}' br1
+
+{"e9adb1e35f31f7ec08b43ca8b4117e8ac42e427614856dc954dc7694e769e4f2":{"Name":"br1-test","EndpointID":"66bfb5170904f676cd11d37a8b6a9ed6d1caca6dccf0b69cca827af3088c112c","MacAddress":"02:42:ac:1c:05:00","IPv4Address":"172.28.5.0/16","IPv6Address":""}}{"Driver":"default","Options":{},"Config":[{"Subnet":"172.28.0.0/16","IPRange":"172.28.5.0/24","Gateway":"172.28.5.254"}]}
+
+
+* --driver=bridge 这个参数是建立了一个本地的网桥, --subnet 则是给这个网桥分配子网,就是连接这个网桥的容器的地址段,如果没有指定 --gateway 这个参数,则会使用第一个可用地址(192.168.0.1)作为网关,同时也是 br0 这个网桥的地址,同时看 br0 的描述里 Containers 的内容 "IPv4Address":"192.168.0.2/16",这里是第一个容器可用的地址
+
+* 再看 br1 的描述, --ip-range=172.28.5.0/24 说明连接这个网桥的容器的都会分配到 172.28.5.0/24 这个段的地址,从后面启动的容器可以说明这点,而这里的 --gateway 的值是 172.28.5.254,因此后面的容器分配到的第一个地址是 172.28.5.0/16 的地址, 172.28.5.0 这样的地址居然可以用,比较有趣
+
+
+# docker run -dit --net=br0 alpine
+
+$ docker container inspect --format='{{json .NetworkSettings.Networks}}' bc4c01901d69
+{"br0":{"IPAMConfig":null,"Links":null,"Aliases":["bc4c01901d69"],"NetworkID":"ad6ccd0b235a23192abfce658ce8ccb453f134214a984ee9842fa5dbb9a5510a","EndpointID":"7e41e1ac88a9465774bccee9fd9364b15a1abb2ed1a30e5f30e08c5368c00e5d","Gateway":"192.168.0.1","IPAddress":"192.168.0.2","IPPrefixLen":16,"IPv6Gateway":"","GlobalIPv6Address":"","GlobalIPv6PrefixLen":0,"MacAddress":"02:42:c0:a8:00:02","DriverOpts":null}}
+
+
+# docker run -dit --net=br1 --name br1-test alpine
+
+# docker container inspect --format='{{json .NetworkSettings.Networks}}' e9adb1e35f31
+
+{"br1":{"IPAMConfig":null,"Links":null,"Aliases":["e9adb1e35f31"],"NetworkID":"07af1749ef8f29fd54893e94fb92ab6c45dda8e427d22e761ed9fc4b8dc1cd16","EndpointID":"66bfb5170904f676cd11d37a8b6a9ed6d1caca6dccf0b69cca827af3088c112c","Gateway":"172.28.5.254","IPAddress":"172.28.5.0","IPPrefixLen":16,"IPv6Gateway":"","GlobalIPv6Address":"","GlobalIPv6PrefixLen":0,"MacAddress":"02:42:ac:1c:05:00","DriverOpts":null}}
+
+* 从上面的描述可以看出来,从容器本身来看,并不论是否设置 gateway, subnet, ip-range 这几个参数,都会默认给一个
+
+
+对于 overlay 网络和支持它的网络驱动程序插件,可以创建多个子网.此示例使用两个/25 子网掩码来遵守当前的指导,即单个覆盖网络中的 IP 不超过 256 个.每个子网都有 126 个可用地址.
+
+*
+1. 如果不是使用了第三方插件,下列的命令执行会失败,提示需要 docker swarm 管理此节点,就是说,需要 swarm 的支持
+2. 如果服务器通过其他方式(非通过 docker )安装了第三方的网络插件,整个 overlay 网络的管理,docker 完全无法感知,比如使用 k8s 及 cni 的网络接口配置的网络,docker本身完全无法感知,通过 docker network ls 也只能看见如下的默认内容
+3. overlay 网络的安装应该是任意一台被插件管理的机器上配置即可,就可以解释如下的状态,有多个子网,多个网关的情况,对应的 overlay 网络,每台服务器都有自己的一段子网,一个网关
+
+NETWORK ID          NAME                DRIVER              SCOPE
+ed5893eb7f1c        bridge              bridge              local
+01a495850d38        host                host                local
+568bb90b50e1        none                null                local
+
+
+$ docker network create -d overlay \
+  --subnet=192.168.10.0/25 \
+  --subnet=192.168.20.0/25 \
+  --gateway=192.168.10.100 \
+  --gateway=192.168.20.100 \
+  --aux-address="my-router=192.168.10.5" --aux-address="my-switch=192.168.10.6" \
+  --aux-address="my-printer=192.168.20.5" --aux-address="my-nas=192.168.20.6" \
+  my-multihost-network
+
+默认情况下,当将容器连接到 overlay 网络时,Docker 还会将桥接网络连接到它以提供外部连接.如果要创建外部隔离 overlay 网络,可以指定该 --internal 选项.
+
+
+---
+## docker port
+
+list端口映射或容器的特定映射
+
+docker port CONTAINER [PRIVATE_PORT[/PROTO]]
+
+显示所有映射的端口
+可以通过不指定 PRIVATE_PORT 或仅指定特定映射来找出所有映射的端口:
+
+$ docker ps
+
+CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS                                            NAMES
+b650456536c7        busybox:latest      top                 54 minutes ago      Up 54 minutes       0.0.0.0:1234->9876/tcp, 0.0.0.0:4321->7890/tcp   test
+
+$ docker port test
+
+7890/tcp -> 0.0.0.0:4321
+9876/tcp -> 0.0.0.0:1234
+
+$ docker port test 7890/tcp
+
+0.0.0.0:4321
+
+$ docker port test 7890/udp
+
+2014/06/24 11:53:36 Error: No public port '7890/udp' published for test
+
+$ docker port test 7890
+
+0.0.0.0:4321
+
+* 注意: 通过 docker port 命令查看显示的结果是指 容器端口 -> 主机端口,看 docker ps 命令的显示可以看出
+
+
+---
+## docker ps
+
+ docker ps [OPTIONS]
+
+选项
+名称,简写  默认  描述
+--all, -a                显示所有容器(默认显示正在运行)
+--filter, -f            根据提供的条件过滤输出
+--format              使用 Go 模板的漂亮打印容器
+--last, -n  -1        显示 n 个最后创建的容器(包括所有状态)
+--latest, -l           显示最新创建的容器(包括所有状态)
+--no-trunc           不要截断输出
+--quiet, -q          仅显示容器 ID
+--size, -s            显示总文件大小
+
+# 过滤
+过滤标志(-f或--filter)格式是 key=value 对.如果有多个过滤器,则传递多个标志(例如 --filter "foo=bar" --filter "bif=baz")
+
+目前支持的过滤器有:
+
+筛选          描述
+id              容器的 ID
+name        容器名称
+label          表示键或键值对的任意字符串.表示为 <key> 或 <key>=<value>
+exited       表示容器退出代码的整数.仅对--all.
+status       created,restarting,running,removing,paused,exited,或者 dead 之一
+ancestor   过滤共享给定image作为祖先的容器.表示为 <image-name>[:<tag>], <image id>, 或 <image@digest>
+before      要么 since  过滤在给定容器 ID 或名称之前或之后创建的容器
+volume     过滤运行已安装给定卷或绑定安装的容器.
+network   过滤器运行连接到给定网络的容器.
+publish     要么 expose  过滤发布或公开给定端口的容器.表示为 <port>[/<proto>]或<startport-endport>/[<proto>]
+health      根据容器的健康检查状态过滤容器. - starting,healthy,unhealthy 或 none.
+isolation   仅 Windows 守护程序.其中一个 default,process 或 hyperv.
+is-task      过滤作为服务"任务"的容器.布尔选项(true或false)
+
+# label
+标签过滤器根据单独的标签或标签和值的存在来匹配容器.
+
+以下过滤器匹配带有 color 标签的容器,而不管其值如何.
+
+$ docker ps --filter "label=color"
+
+CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS               NAMES
+673394ef1d4c        busybox             "top"               47 seconds ago      Up 45 seconds                           nostalgic_shockley
+d85756f57265        busybox             "top"               52 seconds ago      Up 51 seconds                           high_albattani
+
+以下过滤器匹配 colo r标签为 blue 值的容器.
+
+$ docker ps --filter "label=color=blue"
+
+CONTAINER ID        IMAGE               COMMAND             CREATED              STATUS              PORTS               NAMES
+d85756f57265        busybox             "top"               About a minute ago   Up About a minute                       high_albattani
+
+# name
+该 name 过滤器上的容器的名字的全部或部分匹配.
+
+以下过滤器匹配名称包含 nostalgic_stallman 字符串的所有容器.
+
+$ docker ps --filter "name=nostalgic_stallman"
+
+CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS               NAMES
+9b6247364a03        busybox             "top"               2 minutes ago       Up 2 minutes                            nostalgic_stallman
+
+还可以过滤名称中的子字符串,如下所示:
+
+$ docker ps --filter "name=nostalgic"
+
+CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS               NAMES
+715ebfcee040        busybox             "top"               3 seconds ago       Up 1 second                             i_am_nostalgic
+9b6247364a03        busybox             "top"               7 minutes ago       Up 7 minutes                            nostalgic_stallman
+673394ef1d4c        busybox             "top"               38 minutes ago      Up 38 minutes                           nostalgic_shockley
+
+# exited
+该 exited 过滤器匹配的存在状态代码容器.例如,过滤成功退出的容器:
+
+$ docker ps -a --filter 'exited=0'
+
+CONTAINER ID        IMAGE             COMMAND                CREATED             STATUS                   PORTS                      NAMES
+ea09c3c82f6e        registry:latest  /srv/run.sh            2 weeks ago         Exited(0)2 weeks ago   127.0.0.1:5000->5000/tcp   desperate_leakey
+106ea823fe4e        fedora:latest    /bin/sh -c 'bash -l'   2 weeks ago         Exited(0)2 weeks ago                              determined_albattani
+48ee228c9464        fedora:20         bash                   2 weeks ago         Exited(0)2 weeks ago                              tender_torvalds
+
+# 按退出信号过滤
+可以使用过滤器来定位退出时状态 137 为已 SIGKILL(9)杀死它们的容器.
+
+$ docker ps -a --filter 'exited=137'
+
+CONTAINER ID        IMAGE               COMMAND                CREATED             STATUS                       PORTS               NAMES
+b3e1c0ed5bfe        ubuntu:latest       "sleep 1000"           12 seconds ago      Exited(137)5 seconds ago                       grave_kowalevski
+a2eb5558d669        redis:latest        "/entrypoint.sh redi   2 hours ago         Exited(137)2 hours ago                         sharp_lalande
+
+
+这些事件中的任何一个都会导致 137 状态:
+* init 容器的进程被手动杀死
+* docker kill 杀死容器
+* Docker 守护进程重新启动,这会杀死所有正在运行的容器
+
+# status
+该 status 过滤器的状态相匹配的容器.可以使用筛选 created,restarting,running,removing,paused,exited 和 dead.例如,过滤 running 容器:
+
+$ docker ps --filter status=running
+
+CONTAINER ID        IMAGE                  COMMAND             CREATED             STATUS              PORTS               NAMES
+715ebfcee040        busybox                "top"               16 minutes ago      Up 16 minutes                           i_am_nostalgic
+d5c976d3c462        busybox                "top"               23 minutes ago      Up 23 minutes                           top
+9b6247364a03        busybox                "top"               24 minutes ago      Up 24 minutes                           nostalgic_stallman
+过滤paused容器:
+
+$ docker ps --filter status=paused
+
+CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS                      PORTS               NAMES
+673394ef1d4c        busybox             "top"               About an hour ago   Up About an hour(Paused)                  nostalgic_shockley
+
+# ancestor
+该 ancestor 过滤器匹配基于容器的 image 或它的后代.该过滤器支持以下 image:
+
+* image
+* image:tag
+* image:tag@digest
+* short-id
+* full-id
+
+如果不指定 tag,则使用 latest 标签.例如,过滤使用最新 ubuntu image的容器:
+
+$ docker ps --filter ancestor=ubuntu
+
+CONTAINER ID        IMAGE               COMMAND             CREATED              STATUS              PORTS               NAMES
+919e1179bdb8        ubuntu-c1           "top"               About a minute ago   Up About a minute                       admiring_lovelace
+5d1e4a540723        ubuntu-c2           "top"               About a minute ago   Up About a minute                       admiring_sammet
+82a598284012        ubuntu              "top"               3 minutes ago        Up 3 minutes                            sleepy_bose
+bab2a34ba363        ubuntu              "top"               3 minutes ago        Up 3 minutes                            focused_yonath
+
+根据 ubuntu-c1 image 匹配容器,在这种情况下,它的子代 ubuntu:
+
+$ docker ps --filter ancestor=ubuntu-c1
+
+CONTAINER ID        IMAGE               COMMAND             CREATED              STATUS              PORTS               NAMES
+919e1179bdb8        ubuntu-c1           "top"               About a minute ago   Up About a minute                       admiring_lovelace
+
+根据 ubuntu 版本 12.04.5 image 匹配容器:
+
+$ docker ps --filter ancestor=ubuntu:12.04.5
+
+CONTAINER ID        IMAGE               COMMAND             CREATED              STATUS              PORTS               NAMES
+82a598284012        ubuntu:12.04.5      "top"               3 minutes ago        Up 3 minutes                            sleepy_bose
+
+以下基于层 d0e008c6cf02 或在其层堆栈中具有此层的 image 匹配的容器.
+
+$ docker ps --filter ancestor=d0e008c6cf02
+
+CONTAINER ID        IMAGE               COMMAND             CREATED              STATUS              PORTS               NAMES
+82a598284012        ubuntu:12.04.5      "top"
+
+# Create time
+before
+
+该 before 过滤器只显示容器与给定 id 或名称容器之前创建的.例如,创建这些容器:
+
+$ docker ps
+
+CONTAINER ID        IMAGE       COMMAND       CREATED              STATUS              PORTS              NAMES
+9c3527ed70ce        busybox     "top"         14 seconds ago       Up 15 seconds                          desperate_dubinsky
+4aace5031105        busybox     "top"         48 seconds ago       Up 49 seconds                          focused_hamilton
+6e63f6ff38b0        busybox     "top"         About a minute ago   Up About a minute                      distracted_fermat
+过滤before会给出:
+
+$ docker ps -f before=9c3527ed70ce
+
+CONTAINER ID        IMAGE       COMMAND       CREATED              STATUS              PORTS              NAMES
+4aace5031105        busybox     "top"         About a minute ago   Up About a minute                      focused_hamilton
+6e63f6ff38b0        busybox     "top"         About a minute ago   Up About a minute                      distracted_fermat
+
+# since
+该 since 过滤器只显示容器,因为与给定 id 或名称的容器中创建.例如,使用与 before 过滤器相同的容器:
+
+$ docker ps -f since=6e63f6ff38b0
+
+CONTAINER ID        IMAGE       COMMAND       CREATED             STATUS              PORTS               NAMES
+9c3527ed70ce        busybox     "top"         10 minutes ago      Up 10 minutes                           desperate_dubinsky
+4aace5031105        busybox     "top"         10 minutes ago      Up 10 minutes                           focused_hamilton
+
+# volume
+该 volume 过滤器只示出了该支架的特定体积或具有安装在一个特定的路径的容积的容器:
+
+$ docker ps --filter volume=remote-volume --format "table {{.ID}}\t{{.Mounts}}"
+
+CONTAINER ID        MOUNTS
+9c3527ed70ce        remote-volume
+
+$ docker ps --filter volume=/data --format "table {{.ID}}\t{{.Mounts}}"
+
+CONTAINER ID        MOUNTS
+9c3527ed70ce        remote-volume
+
+# network
+所述 network 唯一滤波器显示了连接到网络的具有给定名称或ID的容器.
+
+以下过滤器匹配所有连接到名称包含 net1.
+
+$ docker run -d --net=net1 --name=test1 ubuntu top
+$ docker run -d --net=net2 --name=test2 ubuntu top
+
+$ docker ps --filter network=net1
+
+CONTAINER ID        IMAGE       COMMAND       CREATED             STATUS              PORTS               NAMES
+9d4893ed80fe        ubuntu      "top"         10 minutes ago      Up 10 minutes                           test1
+
+网络过滤器匹配网络的名称和 ID.以下示例显示了所有附加到 net1 网络的容器,使用网络 ID 作为过滤器;
+
+$ docker network inspect --format "{{.ID}}" net1
+
+8c0b4110ae930dbe26b258de9bc34a03f98056ed6f27f991d32919bfe401d7c5
+
+$ docker ps --filter network=8c0b4110ae930dbe26b258de9bc34a03f98056ed6f27f991d32919bfe401d7c5
+
+CONTAINER ID        IMAGE       COMMAND       CREATED             STATUS              PORTS               NAMES
+9d4893ed80fe        ubuntu      "top"         10 minutes ago      Up 10 minutes                           test1
+
+# publish and expose
+publish 和 expose 过滤器仅显示已发布或暴露端口与给定的端口号,端口范围,和/或协议的容器. 当未指定时,默认协议是 tcp.
+
+以下过滤器匹配所有已发布端口为 80 的容器:
+
+$ docker run -d --publish=80 busybox top
+$ docker run -d --expose=8080 busybox top
+
+$ docker ps -a
+
+CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS                   NAMES
+9833437217a5        busybox             "top"               5 seconds ago       Up 4 seconds        8080/tcp                dreamy_mccarthy
+fc7e477723b7        busybox             "top"               50 seconds ago      Up 50 seconds       0.0.0.0:32768->80/tcp   admiring_roentgen
+
+$ docker ps --filter publish=80
+
+CONTAINER ID        IMAGE               COMMAND             CREATED              STATUS              PORTS                   NAMES
+fc7e477723b7        busybox             "top"               About a minute ago   Up About a minute   0.0.0.0:32768->80/tcp   admiring_roentgen
+
+以下过滤器匹配在 范围内公开 TCP 端口的所有容器 8000-8080:
+
+$ docker ps --filter expose=8000-8080/tcp
+
+CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS               NAMES
+9833437217a5        busybox             "top"               21 seconds ago      Up 19 seconds       8080/tcp            dreamy_mccarthy
+
+以下过滤器匹配所有暴露 UDP 端口的容器 80:
+
+$ docker ps --filter publish=80/udp
+
+CONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS               NAMES
+
+# format
+format 选项(--format)使用 Go 模板漂亮地打印容器输出.
+
+下面list了 Go 模板的有效占位符:
+
+占位符           描述
+.ID                  容器标识
+.Image            image标识
+.Command      引用命令
+.CreatedAt      创建容器的时间.
+.RunningFor    自容器启动以来经过的时间.
+.Ports              暴露的端口.
+.State              容器状态(例如;"已创建"、"正在运行"、"已退出").
+.Status            容器状态以及有关持续时间和健康状态的详细信息.
+.Size                容器磁盘大小.
+.Names            容器名称.
+.Labels            分配给容器的所有标签.
+.Label              此容器的特定标签的值.例如'{{.Label "com.docker.swarm.cpu"}}'
+.Mounts          安装在此容器中的卷的名称.
+.Networks      连接到此容器的网络的名称.
+
+使用该 --format 选项时.该 ps 命令将完全按照模板声明的方式输出数据.或者在使用该 table 指令时.还包括列标题.
+
+以下示例使用没有标题的模板.ID 并为所有正在运行的容器输出 Command 以冒号(:)分隔的和条目:
+
+$ docker ps --format "{{.ID}}: {{.Command}}"
+
+a87ecb4f327c:/bin/sh -c #(nop)MA
+01946d9d34d8:/bin/sh -c #(nop)MA
+c1d3b0166030:/bin/sh -c yum -y up
+41d50ecd2f57:/bin/sh -c #(nop)MA
+
+要以 label 格式list所有正在运行的容器及其标签.可以使用:
+
+$ docker ps --format "table {{.ID}}\t{{.Labels}}"
+
+CONTAINER ID        LABELS
+a87ecb4f327c        com.docker.swarm.node=ubuntu,com.docker.swarm.storage=ssd
+01946d9d34d8
+c1d3b0166030        com.docker.swarm.node=debian,com.docker.swarm.cpu=6
+41d50ecd2f57        com.docker.swarm.node=fedora,com.docker.swarm.cpu=3,com.docker.swarm.storage=ssd
+
+
+---
+## docker pull
+
+从 repository 中拉取映像或存储库
+
+ docker pull [OPTIONS] NAME[:TAG|@DIGEST]
+
+
+# 从不同的 repository 中拉取
+默认情况下,docker pull 从 Docker Hub 拉取镜像.也可以手动指定要从中拉取的 repository 的路径.例如,如果设置了一个本地 repository 中心,可以指定从它拉取的路径.repository 路径类似于 URL,但不包含协议说明符(https://).
+
+以下命令 testing/test-image 从侦听端口 5000(myregistry.local:5000)的本地 repository 中提取 image:
+
+$ docker pull myregistry.local:5000/testing/test-image
+
+# 拉取包含多个image的存储库
+默认情况下,从 repository 中 docker pull 提取单个 image.一个存储库可以包含多个 image.为了从仓库拉的所有 image,提供 -a(或 --all-tags使用时)选项 docker pull.
+
+此命令从 fedora 存储库中提取所有 image:
+
+$ docker pull --all-tags fedora
+
+Pulling repository fedora
+ad57ef8d78d7: Download complete
+105182bb5e8b: Download complete
+511136ea3c5a: Download complete
+73bd853d2ea5: Download complete
+....
+
+Status: Downloaded newer image for fedora
+
+
+---
+## docker rm
+
+删除 1 个或多个容器
+
+ docker rm [OPTIONS] CONTAINER [CONTAINER...]
+
+# 删除容器和卷
+
+$ docker rm -v redis
+redis
+
+这个命令删除容器及和容器关联的卷
+
+注意: 如果卷被制定了名称,则不能被删除
+
+
+# 删除容器并有选择地删除卷
+
+$ docker create -v awesome:/foo -v/bar --name hello redis
+hello
+
+$ docker rm -v hello
+
+在本示例中,for 的卷/foo保持不变,但 for 的卷已/bar被删除.相同的行为适用于继承自 --volumes-from.
+
+
+---
+## docker rmi
+
+删除一个或多个 image
+
+docker rmi [OPTIONS] IMAGE [IMAGE...]
+
+扩展说明
+从主机节点删除(和取消标记)一个或多个 image.如果一个 image 有多个 label,使用此命令以 label 为参数,只会去除 label .如果 label是 image 的唯一 label,则 image 和 label 都将被删除.
+
+这不会从 repository 中删除 image.除非使用该 -f 选项,否则无法删除正在运行的容器的 image.
+
+
+由 digests 提取的 image 没有与之关联的标签:
+
+$ docker images --digests
+
+REPOSITORY                     TAG       DIGEST                                                                    IMAGE ID        CREATED         SIZE
+localhost:5000/test/busybox    <none>    sha256:cbbf2f9a99b47fc460d422812b6a5adff7dfee951d8fa2e4a98caa0382cfbdbf   4986bf8c1536    9 weeks ago     2.43 MB
+
+要使用其 digests 删除image:
+
+$ docker rmi localhost:5000/test/busybox@sha256:cbbf2f9a99b47fc460d422812b6a5adff7dfee951d8fa2e4a98caa0382cfbdbf
+Untagged: localhost:5000/test/busybox@sha256:cbbf2f9a99b47fc460d422812b6a5adff7dfee951d8fa2e4a98caa0382cfbdbf
+Deleted: 4986bf8c15363d1c5d15512d5266f8777bfba4974ac56e3270e7760f6f0a8125
+Deleted: ea13149945cb6b1e746bf28032f02e9b5a793523481a0a18645fc77ad53c4ea2
+Deleted: df7546f9f060a2268024c8a230d8639878585defcc1bc6f79d2728a13957871b
+
+
+---
+## docker run
+
+docker run [OPTIONS] IMAGE [COMMAND] [ARG...]
+
+该 docker run 命令首先creates在指定映像上创建一个可写容器层,然后 starts 使用指定的命令.也就是说, docker run 相当于 API 中 /containers/create 然后 /containers/(id)/start.
+
+选项
+名称,简写  默认              描述
+--add-host                       添加自定义主机到 IP 映射(host:ip)
+--attach , -a                     附加到 STDIN、STDOUT 或 STDERR
+--blkio-weight                 Block IO(相对权重),在 10 到 1000 之间,或 0 表示禁用(默认为 0)
+--blkio-weight-device     块IO权重(相对设备权重)
+--cap-add                        添加 Linux 功能
+--cap-drop                       删除 Linux 功能
+--cgroup-parent              容器的可选父 cgroup
+--cgroupns                      API 1.41+
+                                       要使用的 Cgroup 命名空间(host|private)'host': 在 Docker 主机的 cgroup 命名空间中运行容器 'private': 在其自己的私有 cgroup 命名空间中运行容器 '':使用由
+                                       default-cgroupns-配置的 cgroup 命名空间守护进程的模式选项(默认)
+--cidfile                           将容器 ID 写入文件
+--cpu-count                     CPU 计数(仅限 Windows)
+--cpu-percent                  CPU 百分比(仅限 Windows)
+--cpu-period                    限制 CPU CFS(完全公平调度程序)周期
+--cpu-quota                     限制 CPU CFS(完全公平调度程序)配额
+--cpu-rt-period                API 1.25+
+                                       以微秒为单位限制 CPU 实时周期
+--cpu-rt-runtime             API 1.25+
+                                       以微秒为单位限制 CPU 实时运行时间
+--cpu-shares , -c              CPU 份额(相对权重)
+                                       --cpus    API 1.25+
+                                       CPU数量
+--cpuset-cpus                 允许执行的 CPU(0-3, 0,1)
+--cpuset-mems               允许执行的 MEM(0-3, 0,1)
+--detach , -d                    在后台运行容器并打印容器 ID
+--detach-keys                 覆盖用于分离容器的键序列
+--device                          将主机设备添加到容器
+--device-cgroup-rule       向 cgroup 允许的设备列表添加规则
+--device-read-bps           限制设备的读取速率(每秒字节数)
+--device-read-iops          限制设备的读取速率(每秒 IO)
+--device-write-bps          限制设备的写入速率(每秒字节数)
+--device-write-iops         限制设备的写入速率(每秒 IO)
+--disable-content-trust  true  跳过 image 验证
+--dns                                        设置自定义 DNS 服务器
+--dns-opt                                  设置 DNS 选项
+--dns-option                             设置 DNS 选项
+--dns-search                             设置自定义 DNS 搜索域
+--domainname                          容器NIS域名
+--entrypoint                             覆盖 image 的默认 ENTRYPOINT
+--env , -e                                  设置环境变量
+--env-file                                  读入环境变量文件
+--expose                                  公开一个端口或一系列端口
+--gpus                                      API 1.40+
+                                                要添加到容器中的 GPU 设备('all' 以传递所有 GPU)
+--group-add                              添加要加入的其他组
+--health-cmd                            运行以检查健康状况的命令
+--health-interval                      运行检查之间的时间(ms|s|m|h)(默认为 0s)
+--health-retries                       报告不健康需要连续失败
+--health-start-period               API 1.29+
+                                                在开始健康重试倒计时(ms|s|m|h)之前容器初始化的开始时间(默认为 0s)
+--health-timeout                     允许运行一次检查的最长时间(ms|s|m|h)(默认为 0s)
+--help                                      打印使用
+--hostname , -h                       容器主机名
+--init                                        API 1.25+
+                                                在容器内运行一个 init 来转发信号和收获进程
+--interactive , -i                        即使未连接,也要保持 STDIN 打开
+--io-maxbandwidth                   系统驱动器的最大 IO 带宽限制(仅限 Windows)
+--io-maxiops                             系统驱动器的最大 IOps 限制(仅限 Windows)
+--ip                                           IPv4 地址(例如 172.30.100.104)
+--ip6                                        IPv6 地址(例如,2001:db8::33)
+--ipc                                         使用IPC模式
+--isolation                                容器隔离技术
+--kernel-memory                     内核内存限制
+--label , -l                                 在容器上设置元数据
+--label-file                               读入一行分隔的标签文件
+--link                                       添加到另一个容器的链接
+--link-local-ip                           容器 IPv4/IPv6 链路本地地址
+--log-driver                              容器的日志驱动
+--log-opt                                  日志驱动程序选项
+--mac-address                         容器 MAC 地址(例如,92:d0:c6:0a:29:33)
+--memory , -m                         内存限制
+--memory-reservation             内存软限制
+--memory-swap                       交换限制等于内存加交换:"-1"启用无限交换
+--memory-swappiness  -1       调整容器内存交换(0 到 100)
+--mount                                   将文件系统挂载附加到容器
+--name                                     为容器指定名称
+--net                                        将容器连接到网络
+--net-alias                                为容器添加网络范围的别名
+--network                                将容器连接到网络
+--network-alias                        为容器添加网络范围的别名
+--no-healthcheck                     禁用任何容器指定的 HEALTHCHECK
+--oom-kill-disable                     禁用 OOM 杀手
+--oom-score-adj                       调整主机的 OOM 首选项(-1000 到 1000)
+--pid                                         要使用的 PID 命名空间
+--pids-limit                               调整容器 pids 限制(设置 -1 表示无限制)
+--platform                               API 1.32+
+                                               如果服务器支持多平台,则设置平台
+--privileged                             授予此容器的扩展权限
+--publish , -p                           将容器的端口发布到主机
+--publish-all , -P                      将所有暴露的端口发布到随机端口
+--pull  missing                         运行前拉取镜像("总是"|"缺失"|"从不")
+--read-only                             将容器的根文件系统挂载为只读
+--restart  no                           容器退出时应用的重启策略
+--rm                                        退出时自动移除容器
+--runtime                                用于此容器的运行时
+--security-opt                         安全选项
+--shm-size                              /dev/shm 的大小
+--sig-proxy  true                     代理接收到进程的信号
+--stop-signal                           SIGTERM  停止容器的信号
+--stop-timeout                       API 1.25+
+                                              停止容器的超时时间(以秒为单位)
+--storage-opt                         容器的存储驱动程序选项
+--sysctl                                   sysctl 选项
+--tmpfs                                   挂载一个 tmpfs 目录
+--tty , -t                                  分配一个伪 TTY
+--ulimit                                   超限选项
+--user , -u                               用户名或 UID(格式:<name|uid>[:<group|gid>])
+--userns                                 要使用的用户命名空间
+--uts                                       要使用的 UTS 命名空间
+--volume , -v                          绑定挂载卷
+--volume-driver                     容器的可选卷驱动程序
+--volumes-from                     从指定的容器挂载卷
+--workdir , -w                        容器内的工作目录
+
+例子
+
+* 捕获容器 ID(--cidfile)
+
+$ docker run --cidfile/tmp/docker_test.cid ubuntu echo "test"
+
+这将创建一个容器并打印test到控制台.该cidfile 标志使 Docker 尝试创建一个新文件并将容器 ID 写入其中.如果文件已经存在,Docker 将返回错误.Docker 会在docker run退出时关闭此文件.
+
+
+* 设置工作目录(-w)
+
+$ docker  run -w/path/to/dir/-i -t  ubuntu pwd
+
+该-w让所执行的命令目录里面给出,这里/path/to/dir/.如果路径不存在,则在容器内创建它.
+
+
+* 为每个容器设置存储驱动程序选项
+
+$ docker run -it --storage-opt size=120G fedora/bin/bash
+
+这(size)将允许在创建容器时将 rootfs 大小设置为 120G.此选项仅适用于 devicemapper,btrfs,overlay2, windowsfilter 和 zfs graph 驱动程序.对于 devicemapper,btrfs,windowsfilter 和 zfs image graph程序,用户无法设置 sieze 小于默认的 BaseFS 大小.对于 overlay2 存储驱动程序,仅当 backing fs 是 xfs 并且 mount 时使用 pquotamount 选项挂载时,只有 size 选项可用.在这些条件下,用户可以传递小于 backing fs 大小的任何 size.
+
+
+* 挂载 tmpfs(--tmpfs)
+
+$ docker run -d --tmpfs/run:rw,noexec,nosuid,size=65536k my_image
+
+该 --tmpfs 标志使用 rw, noexec, nosuid,size=65536k 选项将一个空的 tmpfs 挂载到容器中.
+
+
+* 挂载卷(-v,  -only)
+
+$ docker  run  -v `pwd`:`pwd` -w `pwd` -i -t  ubuntu pwd
+
+该 -v 标志将当前工作目录挂载到容器中(如果容器中不存在,将建立). -w 让容器中的任务工作在此目录内,pwd 查看路径.
+
+$ docker run -v /doesnt/exist:/foo -w /foo -i -t ubuntu bash
+
+当绑定挂载卷的主机目录不存在时,Docker 会自动在主机上为创建该目录.在上面的示例中,Docker 将 /doesnt/exist 在启动容器之前创建.
+
+$ docker run --read-only -v /icanwrite busybox touch /icanwrite/here
+
+卷可以结合使用 --read-only 来控制容器写入文件的位置.该 --read-only 标志将容器的根文件系统挂载为只读,禁止写入容器指定卷以外的位置.
+上述命令实际是在容器中创建了/icanwrite 这个目录,同时,只有这个目录可以写入内容
+另外,在这里不管 -v 后面的任何目录,在容器中都会表现为在根目录下,即使是 test/,在容器中都会变成 /test
+
+$ docker run -t -i -v /var/run/docker.sock:/var/run/docker.sock -v /path/to/static-docker-binary:/usr/bin/docker busybox sh
+
+通过绑定挂载 docker unix 套接字和静态链接的 docker 二进制文件(请参阅获取 linux 二进制文件),可以授予容器创建和操作主机的 Docker 守护程序的完全访问权限.
+
+注意: 使用 -v 时候主机目录一定要使用绝对路径
+
+* 使用 --mount 标志添加绑定挂载或卷
+
+--mount 标志允许挂载卷,主机目录,tmpfs 到容器中
+--mount 标志支持的大多数选项也被 -v 或者 --volume 标志支持,只是用不同的语法
+
+
+例子
+
+$ docker run --read-only --mount type=volume,target=/icanwrite busybox touch/icanwrite/here
+
+$ docker run -t -i --mount type=bind,src=/data,dst=/data busybox sh
+
+
+# 发布或公开端口(-p, --expose)
+
+$ docker run -p 127.0.0.1:80:8080/tcp ubuntu bash
+
+-p hostport:containerport
+--expose containerport
+
+该端口映射主机的 tcp 127.0.0.1:80 到容器的 8080 上.还可以指定 udp 和 sctp 端口.
+
+请注意,未绑定到主机(即,-p 80:80 而不是 -p 127.0.0.1:80:80)的端口将可以从外部访问.如果将 UFW 配置为阻止此特定端口,这也适用,因为 Docker 管理他自己的 iptables 规则
+
+$ docker run --expose 80 ubuntu bash
+
+这会公开容器的 80 端口,而不会将端口映射到主机的端口.
+
+
+# 设置环境变量(-e, --env, --env-file)
+
+$ docker run -e MYVAR1 --env MYVAR2=foo --env-file ./env.list ubuntu bash
+
+使用-e,--env和--env-file标志来设定简单(非数组)环境变量在你正在运行的image你正在运行的Dockerfile中定义的容器,或覆盖变量.
+
+可以在运行容器时定义变量及其值:
+
+$ docker run --env VAR1=value1 --env VAR2=value2 ubuntu env | grep VAR
+
+VAR1=value1
+VAR2=value2
+
+还可以使用已导出到本地环境的变量:
+
+export VAR1=value1
+export VAR2=value2
+
+$ docker run --env VAR1 --env VAR2 ubuntu env | grep VAR
+VAR1=value1
+VAR2=value2
+
+运行该命令时,Docker CLI 客户端会检查变量在本地环境中的值并将其传递给容器.如果没有 = 提供并且该变量未在本地环境中导出,则不会在容器中设置该变量.
+
+还可以从文件加载环境变量.此文件应使用语法<variable>=value(将变量设置为给定值)或 <variable>(从本地环境获取值),并#用于注释.
+
+$ cat env.list
+
+# This is a comment
+VAR1=value1
+VAR2=value2
+USER
+
+$ docker run --env-file env.list ubuntu env | grep VAR
+
+VAR1=value1
+VAR2=value2
+USER=denis
+
+
+# 在容器上设置元数据(-l, --label, --label-file)
+
+标签是 key=value 将元数据应用于容器.用两个标签标记一个容器:
+
+$ docker run -l my-label --label com.example.foo=bar ubuntu bash
+
+该 my-label 键不指定值,则默认值为空字符串("").要添加多个标签,请重复标签标志(-l 或 --label).
+
+key=value 必须是唯一的,以避免覆盖的标签值.如果指定具有相同键但不同值的标签,则每个后续值都会覆盖前一个值.Docker 使用提供的最后一个 key=value .
+
+使用 --label-file 标志从一个文件加载多个标签.使用 EOL 标记分隔文件中的每个标签.下面的示例从当前目录中的标签文件加载标签:
+
+$ docker run --label-file ./labels ubuntu bash
+
+标签文件格式类似于加载环境变量的格式.(与环境变量不同,标签对在容器内运行的进程不可见.)以下示例说明了标签文件格式:
+
+com.example.label1="a label"
+
+# this is a comment
+com.example.label2=another\ label
+com.example.label3
+
+可以通过提供多个--label-file标志来加载多个标签文件 .
+另外,标签只能通过 docker container inspect xxx 才能查看
+
+
+# 将容器连接到网络(--network)
+
+当启动容器时,使用该 --network 标志将其连接到网络.这会将 busybox 容器添加到 my-net 网络.
+
+$ docker run -itd --network=my-net busybox
+
+当在用户定义的网络上启动容器时,还可以使用 --ip 和 --ip6 标志为容器选择 IP 地址.
+
+$ docker run -itd --network=my-net --ip=10.10.9.75 busybox
+
+如果要将正在运行的容器添加到网络,请使用docker network connect子命令.
+
+可以将多个容器连接到同一个网络.连接后,容器只需使用另一个容器的 IP 地址或名称即可轻松通信.对于overlay支持多主机连接的网络或自定义插件,连接到同一多主机网络但从不同引擎启动的容器也可以通过这种方式进行通信.
+
+注意: 当服务发现在默认桥接网络上不可用时.默认情况下,容器可以通过其 IP 地址进行通信.要按名称进行通信,必须将它们链接起来.
+
+可以使用该docker network disconnect命令断开容器与网络的连接.
+
+
+# 从容器挂载卷(--volumes-from)
+
+$ docker run --volumes-from 777f7dc92da7 --volumes-from ba8c0c54f0f2:ro -i -t ubuntu pwd
+
+该 --volumes-from 标志从引用的容器安装所有定义的卷.容器可以通过参数的重复来指定 --volumes-from .容器 ID 可以有选择地添加后缀 :ro 或分别 :rw 以只读或读写模式安装卷.默认情况下,卷以与引用容器相同的模式(读写或只读)安装.
+
+SELinux 等标签系统要求在装入容器的卷内容上放置适当的标签.如果没有标签,安全系统可能会阻止容器内运行的进程使用内容.默认情况下,Docker 不会更改操作系统设置的标签.
+
+要更改容器上下文中的标签,可以添加两个后缀之一 :z 或添加 :Z 到卷安装中.这些后缀告诉 Docker 重新标记共享卷上的文件对象.z 选项告诉 Docker 两个容器共享卷内容.因此,Docker 使用共享内容标签来标记内容.共享卷标允许所有容器读/写内容. Z 选项告诉 Docker 使用私有的非共享标签来标记内容.只有当前容器可以使用私有卷.
+
+注意: 这个功能在多容器共享数据的时候,是个非常重要的功能,类似以前的 NFS,原理是先建立一个共享卷的容器然后其他的容器使用 --volumes-from 这个参数来指定被共享卷的容器的 name/id
+
+例子:
+
+创建一个共享容器 webpages,通过上述的方法,使用 -v 挂载共享目录
+
+docker run -dit --name webpages -v/usr/local/docker/volumn/pages:/usr/local/tomcat/webapp alpine
+
+挂载共享容器
+
+docker run -dit --name tomcat8000  -p 8000:8080 --volumes-from webpages alpine
+docker run -dit --name tomcat8001  -p 8001:8080 --volumes-from webpages alpine
+
+
+上述的 tomcat8000/tomcat8001 这2个容器中挂载的目录也会是/usr/local/tomcat/webapp,和 webpages 这个容器中的目录一样
+
+
+# 附加到 STDIN/STDOUT/STDERR(-a)
+
+该 -a 标志告诉docker run绑定到容器的 STDIN,STDOUT 或 STDERR.这使得可以根据需要操纵输出和输入.
+
+$ echo "test" | docker run -i -a stdin ubuntu cat -
+
+这会将数据通过管道传输到容器中,并通过仅附加到容器的STDIN.
+
+$ docker run -a stderr ubuntu echo test
+
+除非出现错误,否则不会打印任何内容,因为我们只附加到STDERR容器的 .容器的日志仍然存储写入STDERR和 的内容STDOUT.
+
+$ cat somefile | docker run -i -a stdin mybuilder dobuild
+
+这就是如何将文件管道传输到容器中以进行构建.构建完成后将打印容器的 ID,并且可以使用 检索构建日志docker logs.如果需要将文件或其他内容通过管道传输到容器中并在容器完成运行后检索容器的 ID,这将非常有用.
+
+
+# 将主机设备添加到容器(--device)
+
+$ docker run --device=/dev/sdc:/dev/xvdc \
+             --device=/dev/sdd --device=/dev/zero:/dev/nulo \
+             -i -t \
+             ubuntu ls -l/dev/{xvdc,sdd,nulo}
+
+brw-rw---- 1 root disk 8, 2 Feb  9 16:05/dev/xvdc
+brw-rw---- 1 root disk 8, 3 Feb  9 16:05/dev/sdd
+crw-rw-rw- 1 root root 1, 5 Feb  9 16:05/dev/nulo
+
+通常如果需要将设备直接暴露容器.该 --device 选项可以实现这一点.例如,可以将特定的块存储设备或循环设备或音频设备添加到非特权容器(不带--privileged标志)并让应用程序直接访问它.
+
+默认情况下,容器就可以 read,write 而 mknod 这些设备.这可以使用 :rwm 每个 --device 标志的第三组选项来覆盖.如果容器在特权模式下运行,则指定的权限将被忽略.
+
+$ docker run --device=/dev/sda:/dev/xvdc --rm -it ubuntu fdisk /dev/xvdc
+
+Command(m for help): q
+$ docker run --device=/dev/sda:/dev/xvdc:r --rm -it ubuntu fdisk /dev/xvdc
+
+You will not be able to write the partition table.
+
+Command(m for help): q
+
+$ docker run --device=/dev/sda:/dev/xvdc:rw --rm -it ubuntu fdisk /dev/xvdc
+
+Command(m for help): q
+
+$ docker run --device=/dev/sda:/dev/xvdc:m --rm -it ubuntu fdisk /dev/xvdc
+
+fdisk: unable to open/dev/xvdc: Operation not permitted
+
+注意: 该 --device 选项不能安全地用于临时设备.不应该将可能被删除的块设备添加到不受信任的容器中
+
+
+# 重启策略(--restart)
+
+使用 Docker --restart 来指定容器的重启策略.重启策略控制 Docker 守护进程是否在退出后重启容器.Docker 支持以下重启策略:
+
+策略                                  结果
+no                                      退出时不要自动重启容器.这是默认设置.
+on-failure[:max-retries]   仅当容器以非零退出状态退出时才重新启动.(可选)限制 Docker 守护程序尝试重新启动的次数.
+unless-stopped                除非明确停止或 Docker 本身停止或重新启动,否则重新启动容器.
+always                                无论退出状态如何,始终重新启动容器.当指定 always 时,Docker 守护进程将尝试无限期地重新启动容器.无论容器的当前状态如何,容器也                                             将始终在守护程序启动时启动.
+
+$ docker run --restart=always redis
+
+这将 redis 使用始终重启策略运行容器, 以便如果容器退出,Docker 将重启它.
+
+每次重新启动之前都会增加一个不断增加的延迟(前一个延迟的两倍,从 100 毫秒开始),以防止服务泛滥.这意味着守护程序将等待 100 毫秒,然后是 200 毫秒、400、800、1600 毫秒,依此类推,直到达到 on-failure 限制,或者 docker stop 或 docker rm -f 容器时.
+
+如果容器成功重启(容器启动并运行至少 10 秒),延迟将重置为其默认值 100 毫秒.
+
+可以指定 Docker 在使用 on-failure 策略时尝试重新启动容器的最大次数.默认情况下,Docker 将永远尝试重新启动容器.容器的(尝试)重启次数可以通过 获得 docker inspect.例如,获取容器"my-container"的重启次数;
+
+
+$ docker inspect -f "{{ .RestartCount }}" my-container
+# 2
+
+或者,获取容器上次(重新)启动的时间;
+
+$ docker inspect -f "{{ .State.StartedAt }}" my-container
+# 2015-03-04T23:47:07.691840179Z
+
+将 --restart(重新启动策略)与 --rm(清理)标志结合会导致错误.在容器重新启动时,连接的客户端断开连接
+
+例子
+$ docker run --restart=always redis
+
+这将 redis 使用始终重启策略运行容器, 以便如果容器退出,Docker 将重启它.
+
+$ docker run --restart=on-failure:10 redis
+
+这将 redis使用 on-failure 重启策略和最大重启次数 10 运行 redis 容器.如果容器以非零退出状态退出超过 10 次,Docker 将中止尝试重启容器.提供最大重启限制仅对 on-failure 策略有效 .
+
+
+# 将条目添加到容器主机文件(--add-host)
+
+可以使用一个或多个 --add-host 标志将其他主机添加到容器的/etc/hosts 文件中.此示例为主机添加静态地址 docker:
+
+$ docker run --add-host=docker:10.180.0.1 --rm -it debian
+
+有时需要从容器内连接到 Docker 主机.要启用此功能,请使用该 --add-host 标志将 Docker 主机的 IP 地址传递给容器.
+
+
+# 在容器中设置 ulimit(--ulimit)
+
+由于 ulimit 在容器中设置需要默认容器中不可用的额外权限,因此可以使用 --ulimit 标志进行设置. --ulimit 指定了软限制和硬限制,例如: <type>=<soft limit>[:<hard limit>],例如:
+
+$ docker run --ulimit nofile=1024:1024 --rm debian sh -c "ulimit -n"
+1024
+
+注意: 如果不提供 hard limit,则 soft limit 用于两个值.如果没有 ulimits 设置,它们将从 ulimits 守护程序上的默认设置继承.as 选项现已禁用.换句话说,不支持以下脚本:
+
+$ docker run -it --ulimit as=1024 fedora/bin/bash`
+
+这些值在设置时发送到适当的 syscall 位置.Docker 不执行任何字节转换.设置值时要考虑到这一点.
+
+
+# 对于nproc使用
+
+小心设置 nproc 与 ulimit 标志,nproc 被 Linux 设计成一个用户的可用最大进程数,而不是一个容器.例如,用 daemon 用户启动四个容器:
+
+$ docker run -d -u daemon --ulimit nproc=3 busybox top
+
+$ docker run -d -u daemon --ulimit nproc=3 busybox top
+
+$ docker run -d -u daemon --ulimit nproc=3 busybox top
+
+$ docker run -d -u daemon --ulimit nproc=3 busybox top
+
+第 4 个容器失败并报告"[8] 系统错误:资源暂时不可用"错误.这会失败,因为调用者设置 nproc=3 导致前三个容器用完为 daemon 用户设置的三个进程配额.
+
+
+# 在运行时配置命名空间内核参数
+
+所述 --sysctl 集命名空间在容器内核参数(sysctl项).例如,要在容器网络命名空间中打开 IP 转发,请运行以下命令:
+
+$ docker run --sysctl net.ipv4.ip_forward=1 someimage
+
+注意: 并非所有 sysctl 都是命名空间的.Docker 不支持在容器内更改 sysctl 同时修改主机系统.
+
+当前支持的 sysctl
+
+IPC 命名空间:
+
+* kernel.msgmax, kernel.msgmnb, kernel.msgmni, kernel.sem, kernel.shmall, kernel.shmmax, kernel.shmmni, kernel.shm_rmid_forced.
+* Sysctls 开头 fs.mqueue.*
+* 如果使用该--ipc=host选项,则不允许使用这些 sysctl.
+
+网络命名空间:
+
+* Sysctls 开头 net.*
+* 如果--network=host使用这些选项,则不允许使用这些 sysctls.
+
+**************************************************************************
+# 这部分官方的文档中没有详细描述
+# docker run 的 PID 设置(--pid)
+--pid=""  : Set the PID(Process)Namespace mode for the container,
+             'container:<name|id>': joins another container's PID namespace
+             'host': use the host's PID namespace inside the container
+
+默认情况下,所有容器都启用了 PID 命名空间.
+
+PID 命名空间提供进程分离.PID 命名空间移除了系统进程的视图,并允许重用进程 ID,包括 pid 1.
+
+在某些情况下,希望容器共享主机的进程命名空间,基本上允许容器内的进程查看系统上的所有进程.例如,可以使用 strace 或之类的调试工具构建容器 gdb,但希望在调试容器内的进程时使用这些工具.
+
+* --pid=host 的作用就是将物理机上的进程完全在容器中可以查看
+
+示例:在容器内运行 htop
+创建此 Dockerfile:
+
+FROM alpine:latest
+RUN apk add --update htop && rm -rf/var/cache/apk/*
+CMD ["htop"]
+构建 Dockerfile 并将image标记为myhtop:
+
+$ docker build -t myhtop .
+使用以下命令 htop 在容器内运行:
+
+$ docker run -it --rm --pid=host myhtop
+加入另一个容器的 pid 命名空间可用于调试该容器.
+
+
+例子
+启动一个运行 redis 服务器的容器:
+
+$ docker run --name my-redis -d redis
+
+通过运行另一个包含 strace 的容器来调试 redis 容器:
+
+$ docker run -it --pid=container:my-redis my_strace_docker_image bash
+$ strace -p 1
+
+* --pid=container:my-redis 的作用将容器 mysql-redis 的进程映射到 my_strace_docker_image 这个容器中,就是在 my_strace_docker_image 容器中能看见 mysql-redis 的进程,但是是否进程 ID 和全部的进程都在此容器中,需要测试
+
+**************************************************************************
+
+
+---
+## docker save
+
+将一张或多个 image 保存到 tar 存档(默认传输到 STDOUT)
+
+ docker save [OPTIONS] IMAGE [IMAGE...]
+
+可以使用 gzip 来保存 image 文件并使备份更小.
+
+docker save myimage:latest | gzip > myimage_latest.tar.gz
+
+
+甚至可以挑选 image 存储库的特定标签.
+
+$ docker save -o ubuntu.tar ubuntu:lucid ubuntu:saucy
+
+
+---
+## docker search
+
+在 Docker Hub 中搜索 images
+
+ docker search [OPTIONS] TERM
+
+名称,简写  默认  描述
+--filter , -f            根据提供的条件过滤输出
+--format              使用 Go 模板进行漂亮打印搜索
+--limit  25            最大搜索结果数
+--no-trunc            不要截断输出
+
+示例显示名称包含"busybox"的image,至少 3 颗星,并且输出中的描述不会被截断:
+
+$ docker search --filter=stars=3 --no-trunc busybox
+
+NAME                 DESCRIPTION                                                                               STARS     OFFICIAL   AUTOMATED
+busybox              Busybox base image.                                                                       325       [OK]
+progrium/busybox                                                                                               50                   [OK]
+radial/busyboxplus   Full-chain, Internet enabled, busybox made from scratch. Comes in git and cURL flavors.   8                    [OK]
+
+
+# 限制搜索结果(--limit)
+
+该标志 --limit 是搜索返回的最大结果数.此值可以在 1 到 100 之间的范围内.的默认值为 --limit 25.
+
+# 过滤
+
+过滤标志(-f 或 --filter)格式是 key=value 对.如果有多个过滤器,则传递多个标志(例如 --filter is-automated=true --filter stars=3)
+
+目前支持的过滤器有:
+
+* stars(int - image的星星数)
+* is-automated(boolean - true or false)- image 是否自动化
+* is-official(boolean - true or false)- image 是否官方
+
+# stars
+此示例显示名称包含 "busybox" 且至少有 3 颗星的 image:
+
+$ docker search --filter stars=3 busybox
+
+NAME                 DESCRIPTION                                     STARS     OFFICIAL   AUTOMATED
+busybox              Busybox base image.                             325       [OK]
+progrium/busybox                                                     50                   [OK]
+radial/busyboxplus   Full-chain, Internet enabled, busybox made...   8                    [OK]
+
+# 是自动化的
+
+此示例显示名称包含 "busybox" 且是自动构建的 image:
+
+$ docker search --filter is-automated=true busybox
+
+NAME                 DESCRIPTION                                     STARS     OFFICIAL   AUTOMATED
+progrium/busybox                                                     50                   [OK]
+radial/busyboxplus   Full-chain, Internet enabled, busybox made...   8                    [OK]
+
+# 是官方的
+
+此示例显示名称包含 "busybox"、至少 3 颗星且为官方版本的 image:
+
+$ docker search --filter is-official=true --filter stars=3 busybox
+
+NAME                 DESCRIPTION                                     STARS     OFFICIAL   AUTOMATED
+progrium/busybox                                                     50                   [OK]
+radial/busyboxplus   Full-chain, Internet enabled, busybox made...   8                    [OK]
+
+# 格式化输出
+格式化选项(--format)使用 Go 模板漂亮地打印搜索输出.
+
+Go 模板的有效占位符是:
+
+占位符            描述
+.Name              image名称
+.Description     image说明
+.StarCount       image的星数
+.IsOfficial         如果image是官方的,则"OK"
+.IsAutomated   如果image构建是自动的,则"OK"
+
+当使用该 --format 选项时,该 search 命令将完全按照模板声明的方式输出数据.如果使用该 table 指令,则还包括列标题.
+
+以下示例使用没有标题的模板,Name 并为所有 image 输出 StarCount 以冒号( : )分隔的条目:
+
+$ docker search --format "{{.Name}}: {{.StarCount}}" nginx
+
+nginx: 5441
+jwilder/nginx-proxy: 953
+richarvey/nginx-php-fpm: 353
+million12/nginx-php: 75
+webdevops/php-nginx: 70
+h3nrik/nginx-ldap: 35
+bitnami/nginx: 23
+evild/alpine-nginx: 14
+million12/nginx: 9
+maxexcloo/nginx: 7
+此示例输出表格格式:
+
+$ docker search --format "table {{.Name}}\t{{.IsAutomated}}\t{{.IsOfficial}}" nginx
+
+NAME                                     AUTOMATED           OFFICIAL
+nginx                                                        [OK]
+jwilder/nginx-proxy                      [OK]
+richarvey/nginx-php-fpm                  [OK]
+jrcs/letsencrypt-nginx-proxy-companion   [OK]
+million12/nginx-php                      [OK]
+webdevops/php-nginx                      [OK]
+
+
+---
+## docker stats
+
+显示容器资源使用统计的实时流
+
+ docker stats [OPTIONS] [CONTAINER...]
+
+docker stats 命令返回用于运行容器的实时数据流.要将数据限制到一个或多个特定容器,请指定由空格分隔的容器名称或 ID 列表.可以指定已停止的容器,但已停止的容器不会返回任何数据.
+
+注意: 在 Linux 上,Docker CLI 通过从总内存使用量中减去缓存使用量来报告内存使用量.API 不执行此类计算,而是提供总内存使用量和缓存中的数量,以便客户端可以根据需要使用数据.缓存使用率定义为 cgroup v1 主机上文件中 total_inactive_file 字段的值 memory.stat.
+
+在 Docker 19.03 及更早版本上,缓存使用被定义为 cache 字段的值.在 cgroup v2 主机上,缓存使用被定义为 inactive_file 字段的值 .
+
+注意: PIDS 列包含该容器创建的进程数和内核线程数.线程是 Linux 内核使用的术语.其他等效的术语是"轻量级进程"或"内核任务"等.PIDS 列中的大量数字与少量进程(如 ps 或 top 报告的那样)可能表明容器中的某些东西正在创建许多线程.
+
+
+选项
+名称.简写  默认   描述
+--all , -a                显示所有容器(默认显示正在运行)
+--format               使用 Go 模板打印漂亮的 image
+--no-stream         禁用流统计并只提取第一个结果
+--no-trunc            不要截断输出
+
+例子
+运行 docker stats 在所有运行集装箱针对 Linux 的守护进程.
+
+$ docker stats
+
+CONTAINER ID        NAME                                    CPU %               MEM USAGE/LIMIT     MEM %               NET I/O             BLOCK I/O           PIDS
+b95a83497c91        awesome_brattain                        0.28%               5.629MiB/1.952GiB   0.28%               916B/0B           147kB/0B          9
+67b2525d8ad1        foobar                                  0.00%               1.727MiB/1.952GiB   0.09%               2.48kB/0B         4.11MB/0B         2
+e5c383697914        test-1951.1.kay7x1lh1twk9c0oig50sd5tr   0.00%               196KiB/1.952GiB     0.01%               71.2kB/0B         770kB/0B          1
+4bda148efbc0        random.1.vnc8on831idyr42slu578u3cr      0.00%               1.672MiB/1.952GiB   0.08%               110kB/0B          578kB/0B          2
+
+如果未使用 指定格式字符串 --format.则会显示以下列.
+
+列名                                  描述
+CONTAINER ID 和 Name    容器的 ID 和名称
+CPU % 和 MEM %              容器使用的主机 CPU 和内存的百分比
+MEM USAGE/LIMIT             容器正在使用的总内存.以及允许使用的总内存量
+NET I/O                              容器通过其网络接口发送和接收的数据量
+BLOCK I/O                          容器从主机上的块设备读取和写入的数据量
+PIDs                                   容器创建的进程或线程数
+
+docker stats 针对 Linux 守护程序按名称和 ID 在多个容器上运行.
+
+$ docker stats awesome_brattain 67b2525d8ad1
+
+CONTAINER ID        NAME                CPU %               MEM USAGE/LIMIT     MEM %               NET I/O             BLOCK I/O           PIDS
+b95a83497c91        awesome_brattain    0.28%               5.629MiB/1.952GiB   0.28%               916B/0B           147kB/0B          9
+67b2525d8ad1        foobar              0.00%               1.727MiB/1.952GiB   0.09%               2.48kB/0B         4.11MB/0B         2
+
+运行 docker stats 与所有的自定义格式(运行和停止)的容器.
+
+$ docker stats --all --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}" fervent_panini 5acfcb1b4fd1 drunk_visvesvaraya big_heisenberg
+
+CONTAINER                CPU %               MEM USAGE/LIMIT
+fervent_panini           0.00%               56KiB/15.57GiB
+5acfcb1b4fd1             0.07%               32.86MiB/15.57GiB
+drunk_visvesvaraya       0.00%               0B/0B
+big_heisenberg           0.00%               0B/0B
+
+drunk_visvesvaraya 和 big_heisenberg 在上面的例子中是停止的容器.
+
+# 格式化
+格式化选项(--format)使用 Go 模板漂亮地打印容器输出.
+
+下面list了 Go 模板的有效占位符:
+
+占位符           描述
+.Container      容器名称或 ID(用户输入)
+.Name            容器名称
+.ID                  容器标识
+.CPUPerc        CPU百分比
+.MemUsage    内存使用情况
+.NetIO            网络IO
+.BlockIO          块 IO
+.MemPerc       内存百分比(不适用于 Windows)
+.PIDs              PID 的数量(在 Windows 上不可用)
+
+使用该 --format 选项时,该 stats 命令要么完全按照模板声明的方式输出数据,要么在使用该 table 指令时还包括列标题.
+
+以下示例使用没有标题的模板,Container 并为所有 image 输出 CPUPerc 以冒号(:)分隔的条目:
+
+$ docker stats --format "{{.Container}}: {{.CPUPerc}}"
+
+09d3bb5b1604: 6.61%
+9db7aa4d986d: 9.19%
+3f214c61ad1d: 0.00%
+
+要以表格格式list所有容器统计信息及其名称、CPU 百分比和内存使用情况,可以使用:
+
+$ docker stats --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}"
+
+CONTAINER           CPU %               PRIV WORKING SET
+1285939c1fd3        0.07%               796 KiB/64 MiB
+9c76f7834ae2        0.07%               2.746 MiB/64 MiB
+d1ea048f04e4        0.03%               4.583 MiB/64 MiB
+默认格式如下:
+
+在 Linux 上:
+
+"table {{.ID}}\t{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.NetIO}}\t{{.BlockIO}}\t{{.PIDs}}"
+
+
+---
+## docker system
+
+管理 Docker
+
+ docker system COMMAND
+
+子命令
+命令                                 描述
+docker system df             显示 docker 磁盘使用情况
+docker system events     从服务器获取实时事件
+docker system info          显示系统范围的信息
+docker system prune       删除未使用的数据
+
+
+# docker system df
+
+显示 docker 磁盘使用情况
+
+docker system df [OPTIONS]
+
+可以使用 -v, --verbose 标志请求更详细的视图:
+
+$ docker system df -v
+
+Images space usage:
+
+REPOSITORY          TAG                 IMAGE ID            CREATED             SIZE                SHARED SIZE         UNIQUE SIZE         CONTAINERS
+my-curl             latest              b2789dd875bf        6 minutes ago       11 MB               11 MB               5 B                 0
+my-jq               latest              ae67841be6d0        6 minutes ago       9.623 MB            8.991 MB            632.1 kB            0
+<none>              <none>              a0971c4015c1        6 minutes ago       11 MB               11 MB               0 B                 0
+alpine              latest              4e38e38c8ce0        9 weeks ago         4.799 MB            0 B                 4.799 MB            1
+alpine              3.3                 47cf20d8c26c        9 weeks ago         4.797 MB            4.797 MB            0 B                 1
+
+Containers space usage:
+
+CONTAINER ID        IMAGE               COMMAND             LOCAL VOLUMES       SIZE                CREATED             STATUS                      NAMES
+4a7f7eebae0f        alpine:latest       "sh"                1                   0 B                 16 minutes ago      Exited(0)5 minutes ago    hopeful_yalow
+f98f9c2aa1ea        alpine:3.3          "sh"                1                   212 B               16 minutes ago      Exited(0)48 seconds ago   anon-vol
+
+Local Volumes space usage:
+
+NAME                                                               LINKS               SIZE
+07c7bdf3e34ab76d921894c2b834f073721fccfbbcba792aa7648e3a7a664c2e   2                   36 B
+my-named-vol                                                       0                   0 B
+
+* SHARED SIZE  是 image 与另一个 image 共享的空间量(即它们的公共数据)
+* UNIQUE SIZE   是仅由给定 image 使用的空间量
+* SIZE                是 image 的虚拟尺寸,它是 SHARED SIZE 和 UNIQUE SIZE
+
+
+# docker system events
+
+从服务器获取实时事件 - 这个命令和 docker events 类似
+
+ docker system events [OPTIONS]
+
+* 对象类型
+容器
+Docker 容器报告以下事件:
+attach,commit,copy,create,destroy,detach,die,exec_create,exec_detach,exec_start,export,health_status,kill,oom,pause,rename,resize,restart,start,stop,top,unpause,update
+
+image
+Docker image 报告以下事件:
+delete,import,load,pull,push,save,tag,untag
+
+plugin
+Docker 插件报告以下事件:
+install,enable,disable,remove
+
+volume
+Docker 卷报告以下事件:
+create,mount,unmount,destroy
+
+网络
+Docker 网络报告以下事件:
+create,connect,disconnect,destroy
+
+守护进程
+Docker 守护进程报告以下事件:
+reload
+
+* 限制、过滤和格式化输出
+
+** 按时间限制事件
+--since 和 --until 参数可以是 Unix 的时间戳,日期格式时间戳,或转到持续时间串(例如 10m,1h30m 相对于客户机的时间计算的).如果不提供该 --since 选项,该命令将仅返回新的和/或实时事件.支持的格式为日期格式时间戳包括 RFC3339 Nano,RFC3339, ,2006-01-02T15:04:05, 2006-01-02T15:04:05.999999999,2006-01-02Z07:00和2006-01-02.如果不提供 Z 或 +-00:00 则将使用客户端上的本地时区 +-00:00 时间戳末尾的时区偏移量.当提供 Unix 时间戳时,输入 seconds[.nanoseconds],其中 seconds 是自 1970 年 1 月 1 日(UTC/GMT 午夜)以来经过的秒数,不计算闰秒(又名 Unix 纪元或 Unix 时间),以及可选的 .纳秒字段是几分之一秒,长度不超过九位.
+
+** 过滤
+过滤标志(-f 或 --filter)格式为"key=value".如果想使用多个过滤器,请传递多个标志(例如, --filter "foo=bar" --filter "bif=baz")
+
+多次使用相同的过滤器将作为 OR 处理;例如 --filter container=588a23dac085 --filter container=a8f7720b8c22 将显示容器 588a23dac085 或容器 a8f7720b8c22 的事件
+
+使用多个过滤器将作为 AND 处理;例如 --filter container=588a23dac085 --filter event=start 将显示容器容器 588a23dac085 的事件,并且事件类型为start
+
+目前支持的过滤器有:
+
+container(container=<name or id>)
+daemon(daemon=<name or id>)
+event(event=<event action>)
+image(image=<tag or id>)
+label(label=<key>或label=<key>=<value>)
+network(network=<name or id>)
+plugin(plugin=<name or id>)
+type(type=<container or image or volume or network or daemon or plugin>)
+volume(volume=<name or id>)
+
+** 格式
+如果 --format 指定了格式(),将执行给定的模板而不是默认格式.Go 的 text/template 包描述了格式的所有细节.
+
+如果格式设置为{{json .}},则事件将作为有效的 JSON 行进行流式传输.
+
+
+选项
+名称,简写  默认    描述
+--filter , -f             根据提供的条件过滤输出
+--format                使用给定的 Go 模板格式化输出
+--since                  显示自时间戳以来创建的所有事件
+--until                   流事件直到此时间戳
+
+例子
+基本例子
+对于此示例,将需要两个 shell.
+
+Shell 1:侦听事件:
+
+$ docker system events
+Shell 2:启动和停止容器:
+
+$ docker create --name test alpine:latest top
+$ docker start test
+$ docker stop test
+Shell 1:(再次.. 现在显示事件):
+
+要退出docker system events命令,请使用CTRL+C.
+
+按时间过滤事件
+可以使用以下不同的时间语法,通过主机上的绝对时间戳或相对时间过滤输出:
+
+$ docker system events --since 1483283804
+
+2017-01-05T00:35:41.241772953+08:00 volume create testVol(driver=local)
+2017-01-05T00:35:58.859401177+08:00 container create d9cd...4d70(image=alpine:latest, name=test)
+2017-01-05T00:36:04.703631903+08:00 network connect e2e1...29e2(container=0fdb...ff37, name=bridge, type=bridge)
+2017-01-05T00:36:04.795031609+08:00 container start 0fdb...ff37(image=alpine:latest, name=test)
+2017-01-05T00:36:09.830268747+08:00 container kill 0fdb...ff37(image=alpine:latest, name=test, signal=15)
+2017-01-05T00:36:09.840186338+08:00 container die 0fdb...ff37(exitCode=143, image=alpine:latest, name=test)
+2017-01-05T00:36:09.880113663+08:00 network disconnect e2e...29e2(container=0fdb...ff37, name=bridge, type=bridge)
+2017-01-05T00:36:09.890214053+08:00 container stop 0fdb...ff37(image=alpine:latest, name=test)
+
+$ docker system events --since '2017-01-05'
+
+2017-01-05T00:35:41.241772953+08:00 volume create testVol(driver=local)
+2017-01-05T00:35:58.859401177+08:00 container create d9cd...4d70(image=alpine:latest, name=test)
+2017-01-05T00:36:04.703631903+08:00 network connect e2e1...29e2(container=0fdb...ff37, name=bridge, type=bridge)
+2017-01-05T00:36:04.795031609+08:00 container start 0fdb...ff37(image=alpine:latest, name=test)
+2017-01-05T00:36:09.830268747+08:00 container kill 0fdb...ff37(image=alpine:latest, name=test, signal=15)
+2017-01-05T00:36:09.840186338+08:00 container die 0fdb...ff37(exitCode=143, image=alpine:latest, name=test)
+2017-01-05T00:36:09.880113663+08:00 network disconnect e2e...29e2(container=0fdb...ff37, name=bridge, type=bridge)
+2017-01-05T00:36:09.890214053+08:00 container stop 0fdb...ff37(image=alpine:latest, name=test)
+
+$ docker system events --since '2013-09-03T15:49:29'
+
+2017-01-05T00:35:41.241772953+08:00 volume create testVol(driver=local)
+2017-01-05T00:35:58.859401177+08:00 container create d9cd...4d70(image=alpine:latest, name=test)
+2017-01-05T00:36:04.703631903+08:00 network connect e2e1...29e2(container=0fdb...ff37, name=bridge, type=bridge)
+2017-01-05T00:36:04.795031609+08:00 container start 0fdb...ff37(image=alpine:latest, name=test)
+2017-01-05T00:36:09.830268747+08:00 container kill 0fdb...ff37(image=alpine:latest, name=test, signal=15)
+2017-01-05T00:36:09.840186338+08:00 container die 0fdb...ff37(exitCode=143, image=alpine:latest, name=test)
+2017-01-05T00:36:09.880113663+08:00 network disconnect e2e...29e2(container=0fdb...ff37, name=bridge, type=bridge)
+2017-01-05T00:36:09.890214053+08:00 container stop 0fdb...ff37(image=alpine:latest, name=test)
+
+$ docker system events --since '10m'
+
+2017-01-05T00:35:41.241772953+08:00 volume create testVol(driver=local)
+2017-01-05T00:35:58.859401177+08:00 container create d9cd...4d70(image=alpine:latest, name=test)
+2017-01-05T00:36:04.703631903+08:00 network connect e2e1...29e2(container=0fdb...ff37, name=bridge, type=bridge)
+2017-01-05T00:36:04.795031609+08:00 container start 0fdb...ff37(image=alpine:latest, name=test)
+2017-01-05T00:36:09.830268747+08:00 container kill 0fdb...ff37(image=alpine:latest, name=test, signal=15)
+2017-01-05T00:36:09.840186338+08:00 container die 0fdb...ff37(exitCode=143, image=alpine:latest, name=test)
+2017-01-05T00:36:09.880113663+08:00 network disconnect e2e...29e2(container=0fdb...ff37, name=bridge, type=bridge)
+2017-01-05T00:36:09.890214053+08:00 container stop 0fdb...ff37(image=alpine:latest, name=test)
+
+按条件过滤事件
+以下命令显示了过滤 docker event 输出的几种不同方法.
+
+$ docker system events --filter 'event=stop'
+
+2017-01-05T00:40:22.880175420+08:00 container stop 0fdb...ff37(image=alpine:latest, name=test)
+2017-01-05T00:41:17.888104182+08:00 container stop 2a8f...4e78(image=alpine, name=kickass_brattain)
+
+$ docker system events --filter 'image=alpine'
+
+2017-01-05T00:41:55.784240236+08:00 container create d9cd...4d70(image=alpine, name=happy_meitner)
+2017-01-05T00:41:55.913156783+08:00 container start d9cd...4d70(image=alpine, name=happy_meitner)
+2017-01-05T00:42:01.106875249+08:00 container kill d9cd...4d70(image=alpine, name=happy_meitner, signal=15)
+2017-01-05T00:42:11.111934041+08:00 container kill d9cd...4d70(image=alpine, name=happy_meitner, signal=9)
+2017-01-05T00:42:11.119578204+08:00 container die d9cd...4d70(exitCode=137, image=alpine, name=happy_meitner)
+2017-01-05T00:42:11.173276611+08:00 container stop d9cd...4d70(image=alpine, name=happy_meitner)
+
+$ docker system events --filter 'container=test'
+
+2017-01-05T00:43:00.139719934+08:00 container start 0fdb...ff37(image=alpine:latest, name=test)
+2017-01-05T00:43:09.259951086+08:00 container kill 0fdb...ff37(image=alpine:latest, name=test, signal=15)
+2017-01-05T00:43:09.270102715+08:00 container die 0fdb...ff37(exitCode=143, image=alpine:latest, name=test)
+2017-01-05T00:43:09.312556440+08:00 container stop 0fdb...ff37(image=alpine:latest, name=test)
+
+$ docker system events --filter 'container=test' --filter 'container=d9cdb1525ea8'
+
+2017-01-05T00:44:11.517071981+08:00 container start 0fdb...ff37(image=alpine:latest, name=test)
+2017-01-05T00:44:17.685870901+08:00 container start d9cd...4d70(image=alpine, name=happy_meitner)
+2017-01-05T00:44:29.757658470+08:00 container kill 0fdb...ff37(image=alpine:latest, name=test, signal=9)
+2017-01-05T00:44:29.767718510+08:00 container die 0fdb...ff37(exitCode=137, image=alpine:latest, name=test)
+2017-01-05T00:44:29.815798344+08:00 container destroy 0fdb...ff37(image=alpine:latest, name=test)
+
+$ docker system events --filter 'container=test' --filter 'event=stop'
+
+2017-01-05T00:46:13.664099505+08:00 container stop a9d1...e130(image=alpine, name=test)
+
+$ docker system events --filter 'type=volume'
+
+2015-12-23T21:05:28.136212689Z volume create test-event-volume-local(driver=local)
+2015-12-23T21:05:28.383462717Z volume mount test-event-volume-local(read/write=true, container=562f...5025, destination=/foo, driver=local, propagation=rprivate)
+2015-12-23T21:05:28.650314265Z volume unmount test-event-volume-local(container=562f...5025, driver=local)
+2015-12-23T21:05:28.716218405Z volume destroy test-event-volume-local(driver=local)
+
+$ docker system events --filter 'type=network'
+
+2015-12-23T21:38:24.705709133Z network create 8b11...2c5b(name=test-event-network-local, type=bridge)
+2015-12-23T21:38:25.119625123Z network connect 8b11...2c5b(name=test-event-network-local, container=b4be...c54e, type=bridge)
+
+$ docker system events --filter 'container=container_1' --filter 'container=container_2'
+
+2014-09-03T15:49:29.999999999Z07:00 container die 4386fb97867d(image=ubuntu-1:14.04)
+2014-05-10T17:42:14.999999999Z07:00 container stop 4386fb97867d(image=ubuntu-1:14.04)
+2014-05-10T17:42:14.999999999Z07:00 container die 7805c1d35632(imager=redis:2.8)
+2014-09-03T15:49:29.999999999Z07:00 container stop 7805c1d35632(image=redis:2.8)
+
+$ docker system events --filter 'type=volume'
+
+2015-12-23T21:05:28.136212689Z volume create test-event-volume-local(driver=local)
+2015-12-23T21:05:28.383462717Z volume mount test-event-volume-local(read/write=true, container=562fe10671e9273da25eed36cdce26159085ac7ee6707105fd534866340a5025, destination=/foo, driver=local, propagation=rprivate)
+2015-12-23T21:05:28.650314265Z volume unmount test-event-volume-local(container=562fe10671e9273da25eed36cdce26159085ac7ee6707105fd534866340a5025, driver=local)
+2015-12-23T21:05:28.716218405Z volume destroy test-event-volume-local(driver=local)
+
+$ docker system events --filter 'type=network'
+
+2015-12-23T21:38:24.705709133Z network create 8b111217944ba0ba844a65b13efcd57dc494932ee2527577758f939315ba2c5b(name=test-event-network-local, type=bridge)
+2015-12-23T21:38:25.119625123Z network connect 8b111217944ba0ba844a65b13efcd57dc494932ee2527577758f939315ba2c5b(name=test-event-network-local, container=b4be644031a3d90b400f88ab3d4bdf4dc23adb250e696b6328b85441abe2c54e, type=bridge)
+
+$ docker system events --filter 'type=plugin'
+
+2016-07-25T17:30:14.825557616Z plugin pull ec7b87f2ce84330fe076e666f17dfc049d2d7ae0b8190763de94e1f2d105993f(name=tiborvass/sample-volume-plugin:latest)
+2016-07-25T17:30:14.888127370Z plugin enable ec7b87f2ce84330fe076e666f17dfc049d2d7ae0b8190763de94e1f2d105993f(name=tiborvass/sample-volume-plugin:latest)
+
+格式化输出
+$ docker system events --filter 'type=container' --format 'Type={{.Type}}  Status={{.Status}}  ID={{.ID}}'
+
+Type=container  Status=create  ID=2ee349dac409e97974ce8d01b70d250b85e0ba8189299c126a87812311951e26
+Type=container  Status=attach  ID=2ee349dac409e97974ce8d01b70d250b85e0ba8189299c126a87812311951e26
+Type=container  Status=start  ID=2ee349dac409e97974ce8d01b70d250b85e0ba8189299c126a87812311951e26
+Type=container  Status=resize  ID=2ee349dac409e97974ce8d01b70d250b85e0ba8189299c126a87812311951e26
+Type=container  Status=die  ID=2ee349dac409e97974ce8d01b70d250b85e0ba8189299c126a87812311951e26
+Type=container  Status=destroy  ID=2ee349dac409e97974ce8d01b70d250b85e0ba8189299c126a87812311951e26
+
+格式为 JSON
+$ docker system events --format '{{json .}}'
+
+{"status":"create","id":"196016a57679bf42424484918746a9474cd905dd993c4d0f4..
+{"status":"attach","id":"196016a57679bf42424484918746a9474cd905dd993c4d0f4..
+{"Type":"network","Action":"connect","Actor":{"ID":"1b50a5bf755f6021dfa78e..
+{"status":"start","id":"196016a57679bf42424484918746a9474cd905dd993c4d0f42..
+{"status":"resize","id":"196016a57679bf42424484918746a9474cd905dd993c4d0f4..
+
+
+# docker system info
+
+显示系统范围的信息
+
+ docker system info [OPTIONS]
+
+
+# docker system prune
+
+删除未使用的数据
+
+docker system prune [OPTIONS]
+
+删除所有未使用的容器、网络、image(悬空和未引用)以及可选的卷.
+
+
+选项
+名称,简写  默认  描述
+--all , -a                删除所有未使用的image,而不仅仅是悬空的image
+--filter                  API 1.28+
+                            提供过滤器值(例如'label=<key>=<value>')
+--force , -f            不提示确认
+--volumes            修剪卷
+
+默认情况下,如果当前没有容器使用该卷,则不会删除卷以防止删除重要数据.--volumes 在运行命令时使用该标志来删除卷:
+
+$ docker system prune -a --volumes
+
+* 过滤
+过滤标志(--filter)格式为"key=value".如果有多个过滤器,则传递多个标志(例如,--filter "foo=bar" --filter "bif=baz")
+
+目前支持的过滤器有:
+
+* until(<timestamp>) - 只删除在给定时间戳之前创建的容器、image和网络
+* label(label=<key>, label=<key>=<value>, label!=<key>, or label!=<key>=<value>) - 仅删除带有(或不带有,如果label!=...使用)指定标签的容器、image、网络和卷.
+
+until 过滤器可以是 Unix 的时间戳,日期格式的时间戳,或转到时间字符串(例如 10m,1h30m 相对于守护机器的时间计算).支持的格式为日期格式时间戳包括RFC3339Nano,RFC3339, ,2006-01-02T15:04:05, 2006-01-02T15:04:05.999999999,2006-01-02Z07:00 和 2006-01-02.如果未在时间戳末尾提供时区偏移量 Z 或 +-00:00 时区偏移量,则将使用守护程序上的本地时区.当提供 Unix 时间戳时,输入 seconds[.nanoseconds],其中 seconds 是自 1970 年 1 月 1 日(UTC/GMT 午夜)以来经过的秒数,不计算闰秒(又名 Unix 纪元或 Unix 时间),以及可选的 .纳秒字段是几分之一秒,长度不超过九位.
+
+label 过滤器接受两种格式.一种是label=...(label=<key> 或 label=<key>=<value>),它删除具有指定标签的容器、image、网络和卷.另一种格式是 label!=...(label!=<key> 或 label!=<key>=<value>),它删除没有指定标签的容器、image、网络和卷.
+
+
+---
+## docker update
+
+更新一个或多个容器的配置
+
+ docker update [OPTIONS] CONTAINER [CONTAINER...]
+
+该 docker update 命令动态更新容器配置.可以使用此命令来防止容器从其 Docker 主机消耗过多资源.使用单个命令,可以对单个容器或多个容器进行限制.要指定多个容器,请提供以空格分隔的容器名称或 ID 列表.
+
+除了 --kernel-memory 选项之外,可以在正在运行或已停止的容器上指定这些选项.在 4.6 之前的内核版本上,只能 --kernel-memory 在已停止的容器或已初始化内核内存的正在运行的容器上进行更新.
+
+选项
+名称,简写  默认              描述
+--blkio-weight                 Block IO(相对权重),在 10 到 1000 之间,或 0 表示禁用(默认为 0)
+--cpu-period                    限制 CPU CFS(完全公平调度程序)周期
+--cpu-quota                      限制 CPU CFS(完全公平调度程序)配额
+--cpu-rt-period                API 1.25+
+                                        以微秒为单位限制 CPU 实时周期
+--cpu-rt-runtime              API 1.25+
+                                        以微秒为单位限制 CPU 实时运行时间
+--cpu-shares , -c              CPU份额(相对权重)
+--cpus                              API 1.29+
+                                        CPU 数量
+--cpuset-cpus                  允许执行的 CPU(0-3, 0,1)
+--cpuset-mems                允许执行的 MEM(0-3, 0,1)
+--kernel-memory            内核内存限制
+--memory , -m                  内存限制
+--memory-reservation    内存软限制
+--memory-swap              交换限制等于内存加交换:"-1"启用无限交换
+--pids-limit                      API 1.40+
+                                        调整容器 pids 限制(设置 -1 表示无限制)
+--restart                          容器退出时应用的重启策略
+
+例子
+以下部分说明了使用此命令的方法.
+
+# 更新容器的 cpu-shares
+要将容器的 cpu 份额限制为 512,首先要确定容器名称或 ID.可以使用 docker ps 来查找这些值.还可以使用从 docker run 命令返回的 ID .然后,执行以下操作:
+
+$ docker update --cpu-shares 512 abebf7571666
+
+使用 cpu-shares 和内存更新容器
+
+为多个容器更新多个资源配置:
+
+$ docker update --cpu-shares 512 -m 300M abebf7571666 hopeful_morse
+
+# 更新容器的内核内存限制
+可以使用该 --kernel-memory 选项更新容器的内核内存限制.在 4.6 之前的内核版本上,只有当容器以 --kernel-memory. 如果容器是在没有 --kernel-memory 更新内核内存之前停止容器的情况下启动的.
+
+注意: --kernel-memory自 Docker 20.10 起,该选项已被弃用.
+
+例如,如果使用以下命令启动了一个容器:
+
+$ docker run -dit --name test --kernel-memory 50M ubuntu bash
+
+可以在容器运行时更​​新内核内存:
+
+$ docker update --kernel-memory 80M test
+
+如果在没有初始化内核内存的情况下启动了一个容器:
+
+$ docker run -dit --name test2 --memory 300M ubuntu bash
+
+更新正在运行的容器的内核内存 test2 将失败.需要在更新 --kernel-memory 设置之前停止容器.下次启动它时,容器将使用新值.
+
+大于(包括)4.6 新的内核版本没有这个限制,你可以 --kernel-memory 像其他选项一样使用.
+
+# 更新容器的重启策略
+可以在正在运行的容器上更改容器的重启策略.docker update在容器上运行后,新的重启策略会立即生效.
+
+更新一个或多个容器的重启策略:
+
+$ docker update --restart=on-failure:3 abebf7571666 hopeful_morse
+
+请注意,如果容器以"--rm"标志启动,则无法为其更新重启策略.该 AutoRemove 和 RestartPolicy 是容器相互排斥.
+
+
+
+---
+## docker volume
+
+# docker volume create
+
+创建卷
+
+docker volume create [OPTIONS] [VOLUME]
+
+创建一个容器可以使用和存储数据的新卷.如果未指定名称,Docker 会生成一个随机名称.
+
+例子
+创建一个卷,然后配置容器以使用它:
+
+$ docker volume create hello
+
+hello
+
+$ docker run -d -v hello:/world busybox ls /world
+
+挂载是在容器/world目录中创建的.Docker 不支持容器内挂载点的相对路径.
+
+多个容器可以在同一时间段内使用相同的卷.如果两个容器需要访问共享数据,这很有用.例如,如果一个容器写入而另一个容器读取数据.
+
+卷名在驱动程序中必须是唯一的.这意味着不能对两个不同的驱动程序使用相同的卷名.如果尝试这样做会 docker 返回错误
+
+如果指定一个已在当前驱动程序上使用的卷名称,Docker 会假定要重新使用现有卷并且不会返回错误.
+
+* 特定于驱动程序的选项
+某些卷驱动程序可能会选择自定义卷创建.使用 -o 或 --opt 标志传递驱动程序选项:
+
+$ docker volume create --driver fake \
+    --opt tardis=blue \
+    --opt timey=wimey \
+    foo
+
+这些选项直接传递给卷驱动程序.不同卷驱动程序的选项可能会做不同的事情(或根本不做).
+
+local Windows 上的内置驱动程序不支持任何选项.
+
+local Linux 上的内置驱动程序接受类似于 linux mount 命令的选项 .可以通过多次传递 --opt 标志来提供多个选项.某些 mount 选项(例如 o 选项)可以采用逗号分隔的选项列表.可以在此处找到可用安装选项的完整列表.
+
+例如,下面创建一个 tmpfs 名为 foo 100 兆字节和 uid 1000 的卷.
+
+$ docker volume create --driver local \
+    --opt type=tmpfs \
+    --opt device=tmpfs \
+    --opt o=size=100m,uid=1000 \
+    foo
+
+另一个使用的例子btrfs:
+
+$ docker volume create --driver local \
+    --opt type=btrfs \
+    --opt device=/dev/sda2 \
+    foo
+
+另一个nfs用于挂载/path/to/dirinrw模式的 示例192.168.1.1:
+
+$ docker volume create --driver local \
+    --opt type=nfs \
+    --opt o=addr=192.168.1.1,rw \
+    --opt device=:/path/to/dir \
+    foo
+
+
+# docker volume inspect
+
+显示一个或多个卷的详细信息
+
+docker volume inspect [OPTIONS] VOLUME [VOLUME...]
+
+返回有关卷的信息.默认情况下,此命令将所有结果呈现在 JSON 数组中.可以指定替代格式来为每个结果执行给定的模板.
+
+名称,简写  默认    描述
+--format , -f          使用给定的 Go 模板格式化输出
+
+例子
+$ docker volume create myvolume
+
+myvolume
+
+使用 docker volume inspect 注释检查卷的配置:
+
+$ docker volume inspect myvolume
+
+输出为 JSON 格式,例如:
+
+[
+  {
+    "CreatedAt": "2020-04-19T11:00:21Z",
+    "Driver": "local",
+    "Labels": {},
+    "Mountpoint": "/var/lib/docker/volumes/8140a838303144125b4f54653b47ede0486282c623c3551fbc7f390cdc3e9cf5/_data",
+    "Name": "myvolume",
+    "Options": {},
+    "Scope": "local"
+  }
+]
+
+使用 --format 标志使用 Go 模板格式化输出,例如,打印 Mountpoint 属性:
+
+$ docker volume inspect --format '{{ .Mountpoint }}' myvolume
+
+/var/lib/docker/volumes/myvolume/_data
+
+
+# docker volume ls
+
+list卷
+
+docker volume ls [OPTIONS]
+
+可以使用-f或 --filter 标志进行过滤
+
+选项
+名称,简写  默认  描述
+--filter , -f           提供过滤器值(例如'dangling=true')
+--format              使用 Go 模板漂亮地打印卷
+--quiet , -q           只显示卷名
+
+例子
+创建卷
+$ docker volume create rosemary
+
+rosemary
+
+$ docker volume create tyler
+
+tyler
+
+$ docker volume ls
+
+DRIVER              VOLUME NAME
+local               rosemary
+local               tyler
+
+* 过滤
+过滤标志(-f 或 --filter)格式为 "key=value".如果有多个过滤器,则传递多个标志(例如,--filter "foo=bar" --filter "bif=baz")
+
+目前支持的过滤器有:
+
+* dangling(boolean - true or false, 0 or 1)
+* driver(卷驱动程序的名称)
+* label(label=<key>或label=<key>=<value>)
+* name(卷的名称)
+
+** dangling
+dangling 匹配不受任何容器所引用的所有卷
+
+$ docker run -d  -v tyler:/tmpwork  busybox
+
+f86a7dd02898067079c99ceacd810149060a70528eff3754d0b0f1a93bd0af18
+
+$ docker volume ls -f dangling=true
+
+DRIVER              VOLUME NAME
+local               rosemary
+
+** driver
+该 driver 过滤器匹配基于其驱动程序的 volume.
+
+以下示例匹配使用 local 驱动程序创建的卷:
+
+$ docker volume ls -f driver=local
+
+DRIVER              VOLUME NAME
+local               rosemary
+local               tyler
+
+** local
+label 过滤器匹配基于的存在的单独 label 或 label和 value.
+
+首先,让我们创建一些卷来说明这一点;
+
+$ docker volume create the-doctor --label is-timelord=yes
+
+the-doctor
+
+$ docker volume create daleks --label is-timelord=no
+
+daleks
+
+以下示例过滤器匹配带有 is-timelord 标签的卷,而不管其值如何.
+
+$ docker volume ls --filter label=is-timelord
+
+DRIVER              VOLUME NAME
+local               daleks
+local               the-doctor
+
+如上例所示,返回带有 is-timelord=yes, 和 的 两个卷 is-timelord=no.
+
+对标签key 和 value标签进行过滤,产生预期结果:
+
+$ docker volume ls --filter label=is-timelord=yes
+
+DRIVER              VOLUME NAME
+local               the-doctor
+
+指定多标签过滤器会产生"和"搜索;应满足所有条件;
+
+$ docker volume ls --filter label=is-timelord=yes --filter label=is-timelord=no
+
+DRIVER              VOLUME NAME
+
+** name
+该 name 过滤器上的卷的名称的全部或部分匹配.
+
+以下过滤器匹配名称包含 rose 字符串的所有卷.
+
+$ docker volume ls -f name=rose
+
+DRIVER              VOLUME NAME
+local               rosemary
+
+* 格式化
+格式化选项(--format)使用 Go 模板漂亮地打印卷输出.
+
+下面list了 Go 模板的有效占位符:
+
+占位符           描述
+.Name             卷名
+.Driver            Volume驱动
+.Scope            卷范围(本地、全局)
+.Mountpoint   卷在主机上的挂载点
+.Labels           分配给卷的所有标签
+.Label             此卷的特定标签的值.例如{{.Label "project.version"}}
+
+使用该 --format 选项时,该 volume ls 命令将完全按照模板声明的方式输出数据,或者在使用 table 指令时,还包括列标题.
+
+以下示例使用没有标题的模板,Name 并为所有卷输出 Driver 由冒号(:)分隔的条目:
+
+$ docker volume ls --format "{{.Name}}: {{.Driver}}"
+
+vol1: local
+vol2: local
+vol3: local
+
+
+# docker volume prune
+
+删除所有未使用的本地卷
+
+docker volume prune [OPTIONS]
+
+删除所有未使用的本地卷.未使用的本地卷是那些未被任何容器引用的卷
+
+选项
+名称,简写  默认  描述
+--filter                      提供过滤器值(例如'label=<label>')
+--force , -f                不提示确认
+
+例子
+$ docker volume prune
+
+WARNING! This will remove all local volumes not used by at least one container.
+Are you sure you want to continue? [y/N] y
+Deleted Volumes:
+07c7bdf3e34ab76d921894c2b834f073721fccfbbcba792aa7648e3a7a664c2e
+my-named-vol
+
+Total reclaimed space: 36 B
+
+
+# docker volume rm
+
+删除一个或多个卷
+
+docker volume rm [OPTIONS] VOLUME [VOLUME...]
+
+删除一个或多个卷.不能删除容器正在使用的卷.
+
+选项
+名称,简写  默认  描述
+--force , -f                API 1.25+
+                                强制删除一个或多个卷
+
+例子
+$ docker volume rm hello
+
+hello
+
+
+---
+## docker-compose
+
+$ docker compose COMMAND
+
+# 使用 -f 指定名称和一个或多个文件撰写路径,使用该 -f 标志指定 Compose 配置文件的位置.
+
+指定多个 Compose 文件
+
+可以提供多个 -f 配置文件.当提供多个文件时,Compose 会将它们合并为一个配置.Compose 按照提供文件的顺序构建配置.后续文件覆盖并添加到它们的前面.
+
+例如,考虑这个命令行:
+
+$ docker-compose -f docker-compose.yml -f docker-compose.admin.yml run backup_db
+
+该 docker-compose.yml 文件可能指定了一项 webapp 服务.
+
+services:
+  webapp:
+    image: examples/web
+    ports:
+      - "8000:8000"
+    volumes:
+      - "/data"
+
+如果 docker-compose.admin.yml 还指定了相同的服务,则任何匹配的字段都会覆盖先前的文件.新值,添加到 webapp 服务配置.
+
+services:
+  webapp:
+    build: .
+    environment:
+      - DEBUG=1
+
+当使用多个 Compose 文件时,文件中的所有路径都相对于使用 -f. 可以使用该 --project-directory 选项来覆盖此基本路径.
+
+使用 -f -(破折号)作为文件名从标准输入读取配置.当使用 stdin 时,配置中的所有路径都相对于当前工作目录.
+
+该 -f 标志是可选的.如果不在命令行上提供此标志,Compose 将遍历工作目录及其父目录以查找 compose.yaml 或 docker-compose.yaml 文件.
+
+
+# -p 指定项目名称
+每个配置都有一个项目名称.如果提供 -p 标志,则可以指定项目名称.如果未指定标志,Compose 将使用当前目录名称.项目名称也可以通过 COMPOSE_PROJECT_NAME 环境变量设置.
+
+大多数 compose 子命令可以在没有 compose 文件的情况下运行,只需传递项目名称即可检索相关资源.
+
+$ docker compose -p my_project ps -a
+NAME                 SERVICE    STATUS     PORTS
+my_project_demo_1    demo       running
+
+$ docker compose -p my_project logs
+demo_1  | PING localhost(127.0.0.1): 56 data bytes
+demo_1  | 64 bytes from 127.0.0.1: seq=0 ttl=64 time=0.095 ms
+
+
+# environment variables
+
+COMPOSE_PROJECT_NAME
+设置项目名称.该值在启动时与服务名称一起添加到容器中.例如,如果的项目名称是 myapp 并且它包含两个服务 dband web,那么 Compose 会分别启动名为 myapp_db_1 和 myapp_web_1 的容器 .设置此项是可选的.如果不设置此项,则 COMPOSE_PROJECT_NAME 默认为 basename 项目的目录 .
+
+COMPOSE_FILE
+指定 Compose 文件的路径.如果未提供,Compose 会查找 docker-compose.yml 在当前目录中命名的文件,然后依次查找每个父目录,直到找到具有该名称的文件.
+
+此变量支持由路径分隔符分隔的多个 Compose 文件(在 Linux 和 macOS 上,路径分隔符是:,在 Windows 上是;).例如: COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml.路径分隔符也可以使用 COMPOSE_PATH_SEPARATOR.
+
+COMPOSE_PROFILES
+指定一个或多个要启用的活动配置文件.使用 COMPOSE_PROFILES=frontend 调用 docker-compose up 将启动具有配置文件的服务 frontend 和没有指定配置文件的服务.
+
+可以指定用逗号分隔的配置文件列表: COMPOSE_PROFILES=frontend,debug 将启用配置文件 frontend 和 debug.
+具体参考后面的 profile 描述
+
+COMPOSE_API_VERSION
+Docker API 仅支持来自报告特定版本的客户端的请求.如果使用收到 client and server don't have same version 错误 docker-compose,可以通过设置此环境变量来解决此错误.设置版本值以匹配服务器版本.
+
+设置此变量旨在解决需要临时运行且客户端和服务器版本不匹配的情况.例如,如果可以升级客户端但需要等待升级服务器.
+
+使用此变量集和已知的不匹配运行确实会阻止某些 Docker 功能正常工作.失败的确切功能将取决于 Docker 客户端和服务器版本.出于这个原因,使用此变量集运行仅作为一种解决方法,并不受官方支持.
+
+DOCKER_HOST
+设置 docker 守护进程的 URL .与 Docker 客户端一样,默认为 unix:///var/run/docker.sock.
+
+DOCKER_TLS_VERIFY
+当设置为空字符串以外的任何内容时,启用与 docker 守护程序的 TLS 通信.
+
+配置路径 ca.pem,cert.pem 以及key.pem 用于 TLS 验证文件.默认为 ~/.docker.
+
+COMPOSE_HTTP_TIMEOUT 🔗
+配置在 Compose 认为它失败之前允许对 Docker 守护程序的请求挂起的时间(以秒为单位).默认为 60 秒.
+
+COMPOSE_TLS_VERSION
+配置用于与 docker 守护程序进行 TLS 通信的 TLS 版本.默认为 TLSv1. 支持的值是: TLSv1, TLSv1_1, TLSv1_2.
+
+COMPOSE_CONVERT_WINDOWS_PATHS
+在卷定义中启用从 Windows 样式到 Unix 样式的路径转换.Windows 上的 Docker Machine 用户应始终设置此项.默认为 0. 支持的值: true 或 1 启用 false 或 0 禁用.
+
+COMPOSE_PATH_SEPARATOR
+如果设置,COMPOSE_FILE 则使用此字符作为路径分隔符来分隔环境变量的值.
+
+COMPOSE_FORCE_WINDOWS_HOST
+如果设置,使用量声明短语法 解析假设主机路径是 Windows 路径,即使是撰写基于 UNIX 的系统上运行.支持的值: true 或 1 启用 false 或 0 禁用.
+
+COMPOSE_IGNORE_ORPHANS
+如果设置,Compose 不会尝试检测项目的孤立容器.支持的值: true 或1启用 false 或 0 禁用.
+
+COMPOSE_PARALLEL_LIMIT
+为 Compose 可以并行执行的操作数设置限制.默认值为 64,并且不得设置为低于 2.
+
+COMPOSE_INTERACTIVE_NO_CLI
+如果设置,Compose 不会尝试使用 Docker CLI 进行交互 run 和 exec 操作.在需要 CLI 进行上述操作的 Windows 上,此选项不可用.支持: true 或 1 启用 false 或 0 禁用.
+
+COMPOSE_DOCKER_CLI_BUILD 🔗
+配置是使用 Compose python 客户端构建镜像还是使用本机 docker cli.默认情况下,Compose 使用 docker CLI 执行构建,这允许使用 BuildKit 执行构建.
+
+设置 COMPOSE_DOCKER_CLI_BUILD=0 为禁用本机构建,并使用内置的 python 客户端.
+
+
+选项
+名称,简写  默认    描述
+--ansi  auto                  控制何时打印 ANSI 控制字符("从不"|"总是"|"自动")
+--env-file                  指定备用环境文件.
+--file , -f                    编写配置文件
+--no-ansi                    不要打印 ANSI 控制字符(已弃用)
+--profile                      指定要启用的配置文件
+--project-directory    指定备用工作目录(默认: Compose 文件的路径)
+--project-name , -p    项目名称
+--workdir    已弃用！使用 --project-directory 代替.指定备用工作目录(默认: Compose 文件的路径)
+
+
+# docker compose build [SERVICE...]
+
+选项
+名称,简写  默认        描述
+--build-arg                为服务设置构建时变量.
+--compress  true      使用 gzip 压缩构建上下文.已弃用
+--force-rm  true        始终移除中间容器.已弃用
+--memory , -m          为构建容器设置内存限制.尚不支持 buildkit.
+--no-cache                构建 image 时不要使用缓存
+--no-rm                    成功构建后不要移除中间容器.已弃用
+--parallel  true          并行构建 image.已弃用
+--progress  auto       设置进度输出的类型("auto"、"plain"、"noTty")
+--pull                        始终尝试拉取更新版本的映像.
+--quiet , -q                不要向 STDOUT 打印任何内容
+
+
+# docker-compose config
+选项:
+名称,简写  默认                  描述
+--resolve-image-digests     将 image 标签固定到摘要中.
+--no-interpolate                  不要插入环境变量.
+-q, --quiet                           只验证配置,不打印任何事物.
+--services                           打印服务名称,每行一个.
+--volumes                           打印卷名,每行一个.
+--hash="*"                          打印服务配置哈希,每行一个.
+                                           为指定的服务列表设置"service1,service2"
+                                           或使用通配符显示所有服务.
+
+
+# docker compose down
+
+停止并移除容器、网络
+
+扩展说明
+停止容器并删除由 "up" 创建的容器、网络、卷和 image.
+
+默认情况下,删除的唯一内容是:
+
+* Compose 文件中定义的服务容器
+* 在 Compose 文件的网络部分定义的网络
+* 默认网络(如果使用)
+* 永远不会删除定义为外部的网络和卷.
+
+默认情况下不会删除匿名卷.但是,由于它们没有稳定的名称,因此后续的 up. 对于需要在更新之间保留的数据,使用显式路径作为绑定安装或命名卷.
+
+选项
+名称,简写  默认        描述
+--remove-orphans     删除 Compose 文件中未定义的服务的容器.
+--rmi                          删除服务使用的 image."local" 只删除没有自定义标签的 image ("local"|"all")
+--timeout , -t             以秒为单位指定关闭超时(默认: 10)
+--volumes , -v            删除volumes在 Compose 文件部分中声明的命名卷和附加到容器的匿名卷.
+
+
+# docker compose events
+
+从容器接收实时事件.
+
+ docker compose events [options] [--] [SERVICE...]
+
+为项目中的每个容器流式传输容器事件.
+
+使用该 --json 标志,每行打印一个 json 对象
+
+选项
+名称,简写  默认  描述
+--json                    将事件输出为 json 对象流
+
+
+# docker-compose exec
+
+在正在运行的容器中执行命令.
+
+ docker compose exec [options] [-e KEY=VAL...] [--] SERVICE COMMAND [ARGS...]
+
+
+这相当于docker exec定位 Compose 服务.
+
+使用此子命令,可以在服务中运行任意命令.默认情况下,命令会分配一个 TTY,因此可以使用诸如 docker compose exec web sh 获取交互式提示之类的命令.
+
+选项
+名称,简写  默认    描述
+-- , -T                    禁用伪 TTY 分配.默认 docker compose exec 分配一个 TTY.
+--detach , -d         分离模式:在后台运行命令.
+--env , -e              设置环境变量
+--index  1             如果有多个服务实例,则为容器的索引 [默认值:1].
+--privileged          为进程提供扩展权限.
+--user , -u            以该用户身份运行该命令.
+--workdir , -w      此命令的 workdir 目录的路径.
+
+
+# docker-compose images
+
+list创建的容器使用的 image
+
+ docker compose images [SERVICE...]
+
+选项
+名称,简写  默认  描述
+--quiet , -q            仅显示 ID
+
+
+# docker compose kill
+
+强制停止服务容器
+
+ docker compose kill [options] [SERVICE...]
+
+扩展说明
+通过发送SIGKILL信号强制正在运行的容器停止.可以选择传递信号,例如:
+
+docker-compose kill -s SIGINT
+选项
+名称,简写  默认        描述
+--signal , -s  SIGKILL  发送到容器的信号.
+
+
+# docker-compose logs
+
+查看容器的输出
+
+ docker compose logs [service...]
+
+显示服务的日志输出.
+
+选项
+名称,简写  默认       描述
+--follow , -f              跟踪日志输出.
+--no-color                产生单色输出.
+--no-log-prefix        不要在日志中打印前缀.
+--timestamps , -t    显示时间戳.
+
+
+# docker compose ls
+
+list正在运行的 compose 项目
+
+ docker compose ls
+
+选项
+名称,简写  默认       描述
+--filter                      根据提供的条件过滤输出.
+--format  pretty       格式化输出.值:[pretty| json].
+--quiet , -q               仅显示 ID.
+
+
+# docker compose pause
+
+暂停服务
+
+ docker compose pause [SERVICE...]
+
+暂停正在运行的服务容器.它们可以取消暂停 docker compose unpause.
+
+
+# docker-compose port
+
+打印端口绑定的公共端口.
+
+ docker compose port [options] [--] SERVICE PRIVATE_PORT
+
+选项
+名称,简写  默认      描述
+--index          1        如果服务有多个副本,则容器的索引
+--protocol      tcp      tcp 或 udp
+
+
+# docker-compose ps
+
+list容器
+
+ docker compose ps
+
+list Compose 项目的容器,以及当前状态和公开的端口.
+
+$ docker compose ps
+NAME                SERVICE             STATUS              PORTS
+example_foo_1       foo                 running (healthy)   0.0.0.0:8000->80/tcp
+example_bar_1       bar                 exited (1)
+
+选项
+名称,简写  默认   描述
+--all , -a                显示所有停止的容器(包括由 run 命令创建的容器)
+--format  pretty   格式化输出.值:[pretty| json].
+--quiet , -q           仅显示 ID
+--services            展示服务
+
+
+# docker-compose pull
+
+拉取服务镜像
+
+用法
+ docker compose pull [SERVICE...]
+
+拉取与compose.yaml文件中定义的服务关联的映像,但不基于这些映像启动容器.
+
+有关此命令的示例用法,请参阅下面的示例部分.
+
+选项
+名称,简写  默认            描述
+--ignore-pull-failures    拉取它所能做的并忽略拉取失败的 image
+--include-deps              还拉取声明为依赖项的服务
+--no-parallel  true         已弃用禁用并行拉动.
+--parallel  true              已弃用并行拉取多个 image.
+--quiet , -q                    拉取而不打印进度信息
+
+例子
+假设有 compose.yaml 来自 Quickstart: Compose and Rails sample 的这个文件.
+
+services:
+  db:
+    image: postgres
+  web:
+    build: .
+    command: bundle exec rails s -p 3000 -b '0.0.0.0'
+    volumes:
+    - .:/myapp
+    ports:
+    - "3000:3000"
+    depends_on:
+    - db
+
+如果 docker compose pull ServiceName 在与 ccompose.yaml 定义服务的文件相同的目录中运行,Docker 会拉取关联的镜像.例如,要调用在我们的示例中配置为 db 服务的 postgres  image,将运行 docker compose pull db.
+
+
+# docker-compose push
+
+推送服务镜像
+
+ docker compose push [SERVICE...]
+
+将服务的 image 推送到其各自的 register/存储库.
+
+作出以下假设:
+
+正在推送在本地构建的映像
+可以访问构建密钥
+例子
+
+services:
+    service1:
+        build: .
+        image: localhost:5000/yourimage  ## goes to local registry
+
+    service2:
+        build: .
+        image: your-dockerid/yourimage  ## goes to your repository on Docker Hub
+
+选项
+名称,简写  默认              描述
+--ignore-push-failures    推送它可以推送的内容并忽略推送失败的 image
+
+
+# docker-compose restart
+
+ docker compose restart
+
+选项
+名称,简写        默认    描述
+--timeout , -t    10      以秒为单位指定关闭超时
+
+
+# docker-compose rm
+
+删除停止的服务容器
+
+扩展说明
+
+默认情况下,不会删除附加到容器的匿名卷.可以使用 -v. 要list所有卷,请使用 docker volume ls.
+
+不在卷中的任何数据都将丢失.
+
+运行不带选项的命令也会删除由 docker compose run 以下方式创建的一次性容器:
+
+$ docker compose rm
+Going to remove djangoquickstart_web_run_1
+Are you sure? [yN] y
+Removing djangoquickstart_web_run_1 ... done
+
+选项
+名称,简写  默认  描述
+--all , -a                已弃用 - 无效
+--force , -f            不要要求确认删除
+--stop , -s            如果需要,在移除之前停止容器
+--volumes , -v      删除附加到容器的任何匿名卷
+
+
+# docker-compose run
+
+对服务运行一次性命令.
+
+用法
+ docker compose run [options] [-v VOLUME...] [-p PORT...] [-e KEY=VAL...] [-l KEY=VALUE...] SERVICE [COMMAND] [ARGS...]
+
+扩展说明
+对服务运行一次性命令.
+
+以下命令启动 web 服务并 bash 作为其命令运行. docker compose run web bash
+
+与 run 一起使用的命令在具有由服务定义的配置的新容器中启动,包括卷、链接和其他详细信息.但是,有两个重要的区别:
+
+首先,传递的命令 run 覆盖了服务配置中定义的命令.例如,如果 web 服务配置以 bash 启动,则使用docker compose run web python app.py 启动时候  python app.py 将覆盖它.
+
+第二个区别是该 docker compose run 命令不会创建服务配置中指定的任何端口.这可以防止端口与已经打开的端口发生冲突.如果您确实希望创建服务的端口并将其映射到主机,请指定 --service-ports
+
+docker compose run --service-ports web python manage.py shell
+或者,可以使用 --publish 或 -p 选项指定手动端口映射,就像使用 docker run 时一样:
+
+docker compose run --publish 8080:80 -p 2022:22 -p 127.0.0.1:2021:21 web python manage.py shell
+
+如果启动配置了链接的服务,run 命令首先检查链接的服务是否正在运行,如果服务停止则启动该服务.一旦所有链接的服务都在运行,运行就会执行您传递给它的命令.例如,您可以运行:
+
+docker compose run db psql -h db -U docker
+
+这将为链接的 db 容器打开一个交互式 PostgreSQL shell .
+
+如果您不希望 run 命令启动链接的容器,请使用以下 --no-deps 标志:
+
+docker compose run --no-deps web python manage.py shell
+
+如果要在覆盖容器的重启策略的同时运行后删除容器,请使用以下 --rm 标志:
+
+docker compose run --rm web python manage.py db upgrade
+
+这会运行一个数据库升级脚本,并在完成运行后删除容器,即使在服务配置中指定了重启策略.
+
+选项
+名称,简写  默认  描述
+--detach , -d        在后台运行容器并打印容器 ID
+--entrypoint        覆盖图像的入口点
+--env , -e              设置环境变量
+--labels , -l            添加或覆盖标签
+--name                  为容器指定名称
+--no-TTY , -T        禁用伪noTty分配.默认情况下 docker compose run 分配一个 TTY
+--no-deps            不要启动链接服务.
+--publish , -p        将容器的端口发布到主机.
+--rm                      退出时自动移除容器
+--service-ports    在服务端口启用并映射到主机的情况下运行命令.
+--use-aliases        在容器连接到的网络中使用服务的网络 useAliases.
+--user , -u            以指定的用户名或 uid 运行
+--volumes , -v      绑定挂载卷.
+--workdir , -w      容器内的工作目录
+
+
+# docker compose start
+
+启动服务
+
+ docker compose start [SERVICE...]
+
+
+# docker-compose stop
+
+停止服务
+
+ docker compose stop [SERVICE...]
+
+停止运行容器而不删除它们.它们可以用 重新启动 docker compose start.
+
+选项
+名称,简写        默认    描述
+--timeout , -t    10      以秒为单位指定关闭超时
+
+
+# docker-compose top
+
+显示正在运行的进程
+
+ docker compose top
+
+显示正在运行的进程.
+
+例子
+$ docker compose top
+
+
+# docker-compose unpause
+
+取消暂停服务
+
+ docker compose unpause [SERVICE...]
+
+
+# docker-compose up
+
+创建和启动容器
+
+ docker compose up [SERVICE...]
+
+为服务构建、(重新)创建、启动和附加到容器.
+
+除非它们已经在运行,否则此命令还会启动任何链接的服务.
+
+该 docker compose up 命令聚合每个容器的输出(类似 docker compose logs --follow).当命令退出时,所有容器都会停止.运行 docker compose up --detach 在后台启动容器并让它们运行.
+
+如果服务存在现有容器,并且在创建容器后更改了服务的配置或 image,则 docker compose up 通过停止和重新创建容器(保留已安装的卷)来获取更改.为了防止 Compose 获取更改,可以使用 --no-recreate 标志.
+
+如果要强制 Compose 停止并重新创建所有容器,请使用该 --force-recreate 标志.
+
+如果进程遇到错误,则此命令的退出代码为1.如果使用 SIGINT(ctrl + C) 或中断进程 SIGTERM,则容器停止,退出代码为 0.
+
+选项
+名称,简写  默认                    描述
+--abort-on-container-exit      如果任何容器已停止,则停止所有容器.与 -d 不兼容
+--always-recreate-deps         重新创建依赖容器.与 --no-recreate 不兼容.
+--attach-dependencies          附加到依赖容器.
+--build                                   在启动容器之前构建镜像.
+--detach , -d                          分离模式:在后台运行容器
+--environment , -e                环境变量
+--exit-code-from                   返回所选服务容器的退出代码.暗示 --abort-on-container-exit
+--force-recreate                    即使容器的配置和映像没有改变,也要重新创建容器.
+--no-build                              不要构建图像,即使它丢失了.
+--no-color                              产生单色输出.
+--no-deps                              不要启动链接服务.
+--no-log-prefix                      不要在日志中打印前缀.
+--no-recreate                        如果容器已经存在,不要重新创建它们.与 --force-recreate 不兼容.
+--no-start                              创建服务后不要启动它们.
+--quiet-pull                            拉取而不打印进度信息.
+--remove-orphans                 删除 Compose 文件中未定义的服务的容器.
+--renew-anon-volumes , -V   重新创建匿名卷,而不是从以前的容器中检索数据.
+--scale                                   将 SERVICE 扩展到 NUM 个实例.scale如果存在,则覆盖Compose 文件中的设置.
+--timeout , -t    10                连接时或容器已在运行时,使用此超时(以秒为单位)关闭容器.
+
+
+# 使用 profile 启用可选服务
+例如使用 docker compose --profile frontend --profile debug up 配置文件 frontend 和 debug 将被启用
+
+在 docker-compose.yml 文件使用 profiles 属性指启动服务需要的 profile
+
+version: "3.9"
+services:
+  frontend:
+    image: frontend
+    profiles: ["frontend"]
+
+  phpmyadmin:
+    image: phpmyadmin
+    depends_on:
+      - db
+    profiles:
+      - debug
+
+  backend:
+    image: backend
+
+  db:
+    image: mysql
+
+
+激活profile:
+
+# 下面指令将启动 backend 和 db
+$ docker-compose up
+
+# 下面指令将启动 phpmyadmin,backend 和 db
+docker-compose --profile frontend up
+
+# 还可以在环境变量中指定 profile
+COMPOSE_PROFILES=frontend docker-compose up
+
+
+隐式激活 profile:
+
+version: "3.9"
+services:
+  backend:
+    image: backend
+
+  db:
+    image: mysql
+
+  db-migrations:
+    image: backend
+    command: myapp migrate
+    depends_on:
+      - db
+    profiles:
+      - tools
+
+
+# 将只启动 backend 和 db
+$ docker-compose up -d
+
+# 将启动 db-migrations 和db.这里直接指定启动 db-migrations,那么就相当于隐式的激活 tools
+$ docker-compose run db-migrations
+
+注意:
+1. 激活 profile 不会自动启动服务的依赖,除非依赖的服务也配置同样的 profile 或者不配置 profile
+2. 在 yaml 文件中的带有 profile 的这个部分的服务默认不会启动(如果要启动必须指定 --profile),docker-compose up -d 命令只会启动没有 profile 的部分
+
+
+
+---
+## dockerd
+
+daemon
+
+Usage: dockerd COMMAND
+
+容器的自给自足运行时.
+
+选项:
+--add-runtime runtime                               注册一个额外的 OCI 兼容 runtime(默认 [])
+--allow-nondistributable-artifacts list        允许将不可分发的工件推送到 registry
+--api-cors-header string                             在引擎 API 中设置 CORS 标头
+--authorization-plugin list                          要加载的授权插件
+--bip string                                                 指定网桥 IP
+-b, --bridge string                                       将容器附加到网桥
+--cgroup-parent string                               为所有容器设置父 cgroup
+--config-file string                                     守护进程配置文件(默认"/etc/docker/daemon.json")
+--containerd string                                     containerd grpc 地址
+--containerd-namespace string                  要使用的容器命名空间(默认为"moby")
+--containerd-plugins-namespace string     用于插件的容器命名空间(默认为"plugins.moby")
+--cpu-rt-period int                                      以微秒为单位限制 CPU real-time period (间隔)为所有容器的父 cgroup
+--cpu-rt-runtime int                                   以微秒为单位限制 CPU real-time runtime (运行时间)时间为所有容器的父 cgroup
+--cri-containerd                                          用 cri 启动容器
+--data-root string                                       持久化 Docker 状态的根目录(默认为"/var/lib/docker")
+-D, --debug                                                 启用调试模式
+--default-address-pool pool-options          节点特定本地网络的默认地址池
+--default-cgroupns-mode string                容器 cgroup 命名空间的默认模式("host"|"private")(默认"host")
+--default-gateway ip                                  容器默认网关 IPv4 地址
+--default-gateway-v6 ip                             容器默认网关 IPv6 地址
+--default-ipc-mode string                           容器的  ipc 默认模式("shareable" | "private") (默认 "private")
+--default-runtime string                             容器的默认 OCI 运行时(默认"runc")
+--default-shm-size bytes                            容器的默认 shm 大小(默认 64MiB)
+--default-ulimit ulimit                                 容器的默认 ulimits (默认 [])
+--dns list                                                     要使用的 DNS 服务器
+--dns-opt list                                               要使用的 DNS 选项
+--dns-search list                                          要使用的 DNS 搜索域
+--exec-opt list                                             运行时执行选项
+--exec-root string                                       执行状态文件的根目录(默认为"/var/run/docker")
+--experimental                                            启用实验功能
+--fixed-cidr string                                        固定 IP 的 IPv4 子网
+--fixed-cidr-v6 string                                   固定 IP 的 IPv6 子网
+-G, --group string                                        unix 套接字的组(默认为"docker")
+--help                                                          打印用法
+-H, --host list                                              要连接的守护进程套接字
+--host-gateway-ip ip                                   --add-host 中的特殊 "host-gateway" 字符串解析的 IP 地址.默认为默认网桥的 IP 地址
+--icc                                                            启用容器间通信(默认为 true)
+--init                                                           在容器中运行一个 init 来转发信号和收割进程
+--init-path string                                        docker-init 二进制文件的路径
+--insecure-registry list                               启用不安全的 registry 通信
+--ip ip                                                         绑定容器端口时的默认IP(默认0.0.0.0)
+--ip-forward                                               启用 net.ipv4.ip_forward (默认为真)
+--ip-masq                                                   启用 IP 伪装(默认为 true)
+--iptables                                                   启用添加 iptables 规则(默认为 true)
+--ip6tables                                                 启用添加 ip6tables 规则(默认为 false)
+--ipv6                                                         启用 IPv6 网络
+--label list                                                   为守护进程设置 key=value 标签
+--live-restore                                             当容器仍在运行时启用 docker 的实时恢复
+--log-driver string                                      容器日志的默认驱动程序(默认为"json-file")
+-l, --log-level string                                    设置日志级别 ("debug"|"info"|"warn"|"error"|"fatal") (默认 "info")
+--log-opt map                                             容器的默认日志驱动程序选项(默认 map[])
+--max-concurrent-downloads int                设置每次拉取的最大并发下载量(默认 3)
+--max-concurrent-uploads int                     设置每次推送的最大并发上传数(默认为 5)
+--max-download-attempts int                     设置每次拉取的最大下载次数(默认 5)
+--metrics-addr string                                   设置默认地址和端口以在其上提供指标 API
+--mtu int                                                      设置容器网络 MTU
+--network-control-plane-mtu int                 网络控制平面 MTU(默认 1500)
+--no-new-privileges                                     默认为新容器设置 no-new-privileges
+--node-generic-resource list                        通告用户定义的资源
+--oom-score-adjust int                                 为守护进程设置 oom_score_adj (默认 -500)
+-p, --pidfile string                                         用于守护进程 PID 文件的路径(默认为"/var/run/docker.pid")
+--raw-logs                                                     没有 ANSI 着色的完整时间戳
+--registry-mirror list                                      首选 Docker  registry 镜像
+--rootless                                                      启用无根模式;通常与 RootlessKit 一起使用
+--seccomp-profile string                                seccomp 配置文件的路径
+--selinux-enabled                                           启用 selinux 支持
+--shutdown-timeout int                                 设置默认关闭超时(默认 15)
+-s, --storage-driver string                               要使用的存储驱动程序
+--storage-opt                                                  列表存储驱动程序选项
+--swarm-default-advertise-addr string            设置群通告地址的默认地址或接口
+--tls                                                                 使用 TLS;由 --tlsverify 暗示
+--tlscacert string                                             仅由该 CA 签名的信任证书(默认为"~/.docker/ca.pem")
+--tlscert string                                                 TLS 证书文件的路径(默认为"~/.docker/cert.pem")
+--tlskey string                                                  TLS 密钥文件的路径(默认为"~/.docker/key.pem")
+--tlsverify                                                        使用 TLS 并验证远程
+--userland-proxy                                              使用 userland 代理进行环回流量(默认为 true)
+--userland-proxy-path string                            用户空间代理二进制文件的路径
+--userns-remap string                                      用户命名空间的用户/组设置
+  -v, --version                                                    打印版本信息并退出
+
+
+Dockerfile 参考
+
+
+
+
+
+
+
+
+
+
+
+
+## docker 进程启动的配置文件
+
+# 自定义 Docker 守护进程选项
+有多种方法可以为 Docker 守护程序配置守护程序标志和环境变量.推荐的方式是使用与平台无关的 daemon.json 文件,该文件/etc/docker/默认位于 Linux 中.请参阅 守护程序配置文件.
+
+可以使用 daemon.json. 以下示例配置了两个选项.无法使用 daemon.json 机制配置的一件事是 HTTP 代理.
+
+运行时目录和存储驱动程序
+可能希望通过将其移动到单独的分区来控制用于 Docker image,容器和卷的磁盘空间.
+
+为此,请在 daemon.json 文件中设置以下标志:
+
+{
+    "data-root": "/mnt/docker-data",
+    "storage-driver": "overlay2"
+}
+
+
+# HTTP/HTTPS 代理
+
+Docker daemon 使用 HTTP_PROXY,HTTPS_PROXY 以 及 NO_PROXY 在其启动环境环境变量来配置 HTTP 或 HTTPS 代理的行为.不能使用该 daemon.json 文件配置这些环境变量.
+
+此示例覆盖默认 docker.service 文件.
+
+如果使用 HTTP 或 HTTPS 代理服务器,例如在公司设置中,则需要在 Docker systemd 服务文件中添加此配置.
+
+非 root 模式的注意事项
+
+在非 root 模式下运行 Docker 时,systemd 配置文件的位置是不同的.在非 root 模式下运行时,Docker 作为用户模式的 systemd 服务启动,并使用存储在 ~/.config/systemd/user/docker.service.d/. 此外,systemctl 必须在没有 sudo 和有 --user 标志的情况下执行.如果在非 root 模式下运行 Docker,请选择下面的"非 root 模式"选项卡.
+
+具有 root 权限
+1. 为 docker 服务创建一个 systemd 插入目录:
+
+ sudo mkdir -p /etc/systemd/system/docker.service.d
+
+2. 创建一个名为/etc/systemd/system/docker.service.d/http-proxy.conf 添加 HTTP_PROXY 环境变量的文件:
+
+[Service]
+Environment="HTTP_PROXY=http://proxy.example.com:80"
+
+如果使用 HTTPS 代理服务器,请设置 HTTPS_PROXY 环境变量:
+
+[Service]
+Environment="HTTPS_PROXY=https://proxy.example.com:443"
+
+可以设置多个环境变量;设置非 HTTPS 和 HTTPS 代理;
+
+[Service]
+Environment="HTTP_PROXY=http://proxy.example.com:80"
+Environment="HTTPS_PROXY=https://proxy.example.com:443"
+
+3. 如果有内部 Docker  registry 需要联系而无需代理,可以通过 NO_PROXY 环境变量指定它们.
+
+该 NO_PROXY 变量指定一个字符串,其中包含应从代理中排除的主机的逗号分隔值.这些是可以指定以排除主机的选项:
+
+* IP 地址前缀(1.2.3.4)
+* 域名,或特殊的 DNS 标签(*)
+* 域名与该名称和所有子域相匹配.以"."开头的域名 仅匹配子域.例如,给定域 foo.example.com 和 example.com:
+
+  example.com 匹配 example.com 和 foo.example.com,和 .example.com 只匹配 foo.example.com
+* 单个星号(*)表示不应进行代理
+* IP 地址前缀(1.2.3.4:80)和域名(foo.example.com:80)接受文字端口号
+
+配置示例:
+
+[Service]
+Environment="HTTP_PROXY=http://proxy.example.com:80"
+Environment="HTTPS_PROXY=https://proxy.example.com:443"
+Environment="NO_PROXY=localhost,127.0.0.1,docker-registry.example.com,.corp"
+
+4. 刷新更改并重新启动 Docker
+
+$ sudo systemctl daemon-reload
+$ sudo systemctl restart docker
+
+5. 验证配置是否已加载并与所做的更改匹配,例如:
+
+$ sudo systemctl show --property=Environment docker
+
+非 root 模式
+1. 为 docker 服务创建一个 systemd 插入目录:
+
+$ mkdir -p ~/.config/systemd/user/docker.service.d
+
+2. 创建一个名为 ~/.config/systemd/user/docker.service.d/http-proxy.conf 添加 HTTP_PROXY 环境变量的文件:
+
+[Service]
+Environment="HTTP_PROXY=http://proxy.example.com:80"
+
+如果使用 HTTPS 代理服务器,请设置 HTTPS_PROXY 环境变量:
+
+[Service]
+Environment="HTTPS_PROXY=https://proxy.example.com:443"
+
+可以设置多个环境变量;设置非 HTTPS 和 HTTPS 代理;
+
+[Service]
+Environment="HTTP_PROXY=http://proxy.example.com:80"
+Environment="HTTPS_PROXY=https://proxy.example.com:443"
+
+3. 如果有需要在没有代理的情况下联系的内部 Docker  registry ,可以通过 NO_PROXY 环境变量指定它们.
+
+该 NO_PROXY 变量指定一个字符串,其中包含应从代理中排除的主机的逗号分隔值.这些是可以指定以排除主机的选项:
+
+* IP 地址前缀(1.2.3.4)
+* 域名,或特殊的 DNS 标签(*)
+* 域名与该名称和所有子域相匹配.以"."开头的域名 仅匹配子域.例如,给定域 foo.example.com 和 example.com:
+  example.com 匹配 example.com 和 foo.example.com,和 .example.com 只匹配 foo.example.com
+* 单个星号(*)表示不应进行代理
+* IP 地址前缀(1.2.3.4:80)和域名(foo.example.com:80)接受文字端口号
+
+配置示例:
+
+[Service]
+Environment="HTTP_PROXY=http://proxy.example.com:80"
+Environment="HTTPS_PROXY=https://proxy.example.com:443"
+Environment="NO_PROXY=localhost,127.0.0.1,docker-registry.example.com,.corp"
+
+4. 刷新更改并重新启动 Docker
+
+$ systemctl --user daemon-reload
+$ systemctl --user restart docker
+
+5. 验证配置是否已加载并与所做的更改匹配,例如:
+
+$ systemctl --user show --property=Environment docker,
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,198 @@
+1.安装,配置
+
+在github上的kubernetes-dashboard为v1.10版本,根据提示是只能支持到k8sv1.10版本,因此需要修改.yaml中的某些选项
+
+根据
+https://programmer.group/install-dashboard-v1.10-heapster-for-kubernetes-1.12.1.html
+中的描述,主要是因为,新的k8s使用了原始的RBAC的授权模式,因此在yaml文件中有Dashboard Role & Role Binding部分,修改此部分为集群模式的授权
+
+原文描述为:
+************************
+
+原始RBAC授权基于命名空间授权(使用Role和RoleBinding),而不是基于群集的授权(使用Cluster Role和Cluster RoleBinding).群集授权管理员登录后,它可以管理整个群集的每个命名空间下的资源.但是,在实际的生产使用中,它仍应区分用户和命名空间授权.
+
+授权资源的分配应改为：
+
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: kubernetes-dashboard
+subjects:
+  - kind: ServiceAccount
+    name: kubernetes-dashboard
+    namespace: kube-system
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io
+
+************************
+
+删除原来的Dashboard Role & Role Binding部分,修改上述部分,但是docker镜像仍然需要使用对应的v1.10版本.
+
+
+2.登录
+登录的时候有2种模式,一种令牌,一种是token,如下是使用token的模式
+
+$ kubectl get Secret --all-namespaces|grep dashboard
+kube-system       kubernetes-dashboard-certs                       Opaque                                0      3m20s
+kube-system       kubernetes-dashboard-key-holder                  Opaque                                2      3m17s
+kube-system       kubernetes-dashboard-token-sqfr9                 kubernetes.io/service-account-token   3      3m20s
+
+# 使用最后一个token的账户
+
+$ kubectl describe secret/kubernetes-dashboard-token-sqfr9 -n kube-system
+ame:         kubernetes-dashboard-token-sqfr9
+Namespace:    kube-system
+Labels:       <none>
+Annotations:  kubernetes.io/service-account.name: kubernetes-dashboard
+              kubernetes.io/service-account.uid: ef350fd2-6a2a-11e9-ab33-0800279cd59e
+
+Type:  kubernetes.io/service-account-token
+
+Data
+====
+ca.crt:     1025 bytes
+namespace:  11 bytes
+token:      eyJhbGciOiJSUzI1NiIsImtpZCI6IiJ9.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9uYW1lc3BhY2UiOiJrdWJlLXN5c3RlbSIsImt1YmVybmV0ZXMuaW8vc2VydmljZWFjY291bnQvc2VjcmV0Lm5hbWUiOiJrdWJlcm5ldGVzLWRhc2hib2FyZC10b2tlbi1zcWZyOSIsImt1YmVybmV0ZXMuaW8vc2VydmljZWFjY291bnQvc2VydmljZS1hY2NvdW50Lm5hbWUiOiJrdWJlcm5ldGVzLWRhc2hib2FyZCIsImt1YmVybmV0ZXMuaW8vc2VydmljZWFjY291bnQvc2VydmljZS1hY2NvdW50LnVpZCI6ImVmMzUwZmQyLTZhMmEtMTFlOS1hYjMzLTA4MDAyNzljZDU5ZSIsInN1YiI6InN5c3RlbTpzZXJ2aWNlYWNjb3VudDprdWJlLXN5c3RlbTprdWJlcm5ldGVzLWRhc2hib2FyZCJ9.BmyGcHu6Q0DOu2p4wuE-kPcBdFMMqQGLxYBXNCt0AeGanETM-Pc1x6CP573MWeN3weATMkQ0nuIwmrzU23RjiqgigeBffbB1n5C2iXRbbb-DEuleuWi7vwVK9loMuAMXohJac-xCZLJfcnVbHnLdcNxO96nG_3dMovVCwcss0BHcHbhDk5y2dg9Q6AqCoDXwVpEoiJMp3_v1SwUOsi11KCsVf9SdcZlDdePnDCnN8_JRSjokZtD8YNQcnKQq5kwiIEQlPfzLijPqtJOi95XfRTjUybVPCEDOMwDktBgXI_tcYgtkoLxeNsAEyOsDW0RB45-5rU6z36SXEp3Yj3PNRA
+
+然后登录https://x.x.x.x:port
+使用token登录,用上述的token
+
+3.完整的kubernetes-dashboard.yaml文件内容如下
+*********************************************************************
+# Copyright 2017 The Kubernetes Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ------------------- Dashboard Secret ------------------- #
+
+apiVersion: v1
+kind: Secret
+metadata:
+  labels:
+    k8s-app: kubernetes-dashboard
+  name: kubernetes-dashboard-certs
+  namespace: kube-system
+type: Opaque
+
+---
+# ------------------- Dashboard Service Account ------------------- #
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    k8s-app: kubernetes-dashboard
+  name: kubernetes-dashboard
+  namespace: kube-system
+
+---
+# ---------- Dashboard ClusterRole & ClusterRoleBinding --------- #
+
+ kind: ClusterRoleBinding
+ apiVersion: rbac.authorization.k8s.io/v1
+ metadata:
+   name: kubernetes-dashboard
+ subjects:
+   - kind: ServiceAccount
+     name: kubernetes-dashboard
+     namespace: kube-system
+ roleRef:
+   kind: ClusterRole
+   name: cluster-admin
+   apiGroup: rbac.authorization.k8s.io
+
+---
+# ------------------- Dashboard Deployment ------------------- #
+
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  labels:
+    k8s-app: kubernetes-dashboard
+  name: kubernetes-dashboard
+  namespace: kube-system
+spec:
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      k8s-app: kubernetes-dashboard
+  template:
+    metadata:
+      labels:
+        k8s-app: kubernetes-dashboard
+    spec:
+      containers:
+      - name: kubernetes-dashboard
+        image: k8s.gcr.io/kubernetes-dashboard-amd64:v1.10.1
+        ports:
+        - containerPort: 8443
+          protocol: TCP
+        args:
+          - --auto-generate-certificates
+          # Uncomment the following line to manually specify Kubernetes API server Host
+          # If not specified, Dashboard will attempt to auto discover the API server and connect
+          # to it. Uncomment only if the default does not work.
+          # - --apiserver-host=http://my-address:port
+        volumeMounts:
+        - name: kubernetes-dashboard-certs
+          mountPath: /certs
+          # Create on-disk volume to store exec logs
+        - mountPath: /tmp
+          name: tmp-volume
+        livenessProbe:
+          httpGet:
+            scheme: HTTPS
+            path: /
+            port: 8443
+          initialDelaySeconds: 30
+          timeoutSeconds: 30
+      volumes:
+      - name: kubernetes-dashboard-certs
+        secret:
+          secretName: kubernetes-dashboard-certs
+      - name: tmp-volume
+        emptyDir: {}
+      serviceAccountName: kubernetes-dashboard
+      # Comment the following tolerations if Dashboard must not be deployed on master
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        effect: NoSchedule
+
+---
+# ------------------- Dashboard Service ------------------- #
+
+kind: Service
+apiVersion: v1
+metadata:
+  labels:
+    k8s-app: kubernetes-dashboard
+  name: kubernetes-dashboard
+  namespace: kube-system
+spec:
+  type: NodePort
+  ports:
+    - port: 443
+      targetPort: 8443
+      nodePort: 30443
+  selector:
+    k8s-app: kubernetes-dashboard
+
+*********************************************************************
+
+
+https://172.20.10.5:6443/api/v1/proxy/namespaces/kube-system/services/kubernetes-dashboard
+
+

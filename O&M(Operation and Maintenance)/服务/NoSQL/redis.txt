@@ -1,0 +1,179 @@
+1.redis安装
+下载源码包：
+	# wget http://redis.googlecode.com/
+解压缩：
+	# tar xvfz redis-2.4.10.tar.gz 
+进入目录：
+	# cd redis-2.4.10
+编译：
+	# make
+
+2.启动服务
+
+修改redis目录下的redis.conf文件
+
+修改如下内容：
+
+daemonize yes
+
+logfile /home/blue/logs/redis/redis.log
+
+启动服务
+cd /home/blue/apps/redis/src && ./redis-server /home/blue/apps/redis/redis.conf &
+
+3.安装php扩展
+
+https://github.com/owlient/phpredis下载
+
+解压
+
+$cd phpredis-master
+$/home/blue/apps/php/bin/phpize
+$./configure --with-php-config=/home/blue/apps/php/bin/php-config
+$make
+$make install
+
+在php.ini文件中添加类似
+extension=/../../../redis.so的内容
+重启apache或者nginx
+
+
+4.测试
+php代码测试
+
+<?php
+$redis = new Redis();
+$redis->connect(‘127.0.0.1′,6379);
+$redis->set(‘test’,'hello world!’);
+echo $redis->get(‘test’);
+?>
+
+输出hello world!
+
+
+5.mysql数据到redis的同步
+mysql+redis
+连接：http://avnpc.com/pages/mysql-replication-to-redis-by-gearman
+
+借用已经比较成熟的MySQL UDF，将MySQL数据首先放入Gearman中，然后通过一个自己编写的PHP Gearman Worker，将数据同步到Redis。
+
+使用mysql作为后端，redis作为cache使用时候，需要mysql到redis的数据同步
+使用gearman+php+mysql UDF的方式，实现异步的mysql->redis的数据复制
+
+5.1.gearman安装
+geraman分为服务器端和客户端
+连接：http://gearman.org/getting-started/
+
+服务器端下载
+https://launchpad.net/gearmand
+服务器端有3个版本，C，JAVA，PERL
+这里使用c版本的
+开始时候使用1.1.11版本，发现一个有找不到libuuid的bug，因此退一个版本
+
+安装
+./configure --prefix=/usr
+make
+make install
+安装到系统目录中
+
+客户端下载
+http://pecl.php.net/package/gearman
+这里使用的是php客户端版本
+和其他安装的php模块一样
+phpize 
+./configure
+make
+make install
+编辑php.ini文件
+
+配置路径如下
+./configure --with-php-config=/home/blue/apps/php/bin/php-config --prefix=/home/blue/apps/gearman
+
+
+lib_mysqludf_json下载
+
+https://mysql-udf-http.googlecode.com/files/lib_mysqludf_json-x86_64.tar.gz
+
+
+使用mysql udf这里使用lib_mysqludf_json和gearman-mysql-udf的组合来实现将mysql数据传输到gearman中
+
+
+mysql的udf配置
+http://blogread.cn/it/article/4307
+
+
+我们可以使用下面的命令来查看加载的这些算定的功能
+mysql>  SELECT * FROM mysql.func;
+
+
+
+http://www.percona.com/files/presentations/ppc2009/PPC2009_Gearman.pdf
+把数据库的数据通过udf到gearman
+
+
+
+6.php中sql语句转译到redis的语句
+alchemydatabase
+https://code.google.com/p/alchemydatabase/
+这个项目可以保证在redis中可以执行sql语句
+
+
+命令
+
+CONFIG GET databases
+
+
+
+需求：
+mysql到redis数据同步
+
+mysql触发器
+redis钩子
+redis持久话
+
+
+http://timyang.net/tag/redis/
+http://www.zhihu.com/question/19733969
+http://www.programmer.com.cn/14577/
+http://developer.51cto.com/art/201310/412427_all.htm
+http://www.xdata.me/?p=301
+http://blog.gopivotal.com/case-studies-2/using-redis-at-pinterest-for-billions-of-relationships
+
+
+ 
+
+
+Libraries have been installed in:
+   /home/blue/apps/mysql/lib/plugin
+
+If you ever happen to want to link against installed libraries
+in a given directory, LIBDIR, you must either use libtool, and
+specify the full pathname of the library, or use the `-LLIBDIR'
+flag during linking and do at least one of the following:
+   - add LIBDIR to the `LD_LIBRARY_PATH' environment variable
+     during execution
+   - add LIBDIR to the `LD_RUN_PATH' environment variable
+     during linking
+   - use the `-Wl,-rpath -Wl,LIBDIR' linker flag
+   - have your system administrator add LIBDIR to `/etc/ld.so.conf'
+
+See any operating system documentation about shared libraries for
+more information, such as the ld(1) and ld.so(8) manual pages.
+----------------------------------------------------------------------
+make[1]: Nothing to be done for `install-data-am'.
+make[1]: Leaving directory `/home/blue/src/gearman-mysql-udf-0.6'
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

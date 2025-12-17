@@ -1,0 +1,1125 @@
+此文档汇总了经过至少4个月的测试，排错，搭建，最终完成上线，内容包括四个部分
+1.docker容器
+2.kubernetes,flannel,etcd
+3.glusterFS 
+4.ELK栈
+
+将分四个部分详细的汇总
+
+1.docker容器
+这里不说明docker容器的实现技术等等的架构信息，而说明整个配置，使用各个部分中碰到的问题，包括：
+1.1 docker容器配置，启动
+1.2 私有库配置，启动
+1.3 镜像的管理
+##################################################################################
+
+1.1 docker容器
+容器运行环境
+centos 6.x  内核版本 3.10.102-1.el6.elrepo.x86_64
+redhat 6.x　　内核版本 3.10.102-1.el6.elrepo.x86_64
+centos 7.2  内核版本 3.10.0-327.28.3.el7.x86_64
+
+docker的使用推荐使用3.8以上的内核，这里使用都是3.10以上的内核，另外，建议使用centos 7.0以上版本，或者coreos版本，不要使用redhat版本，在运行docker容器的时候，会有很多莫名其妙的错误，并且，因为和centos版本在细节方面不一样，将导致很难以维护，比较典型的就是关于设置内核参数方式不同，在容器运行时候需要特定的内核参数值，redhat修改方式和普通的方式相当不同。
+
+1.1.1 升级内核
+升级内核在centos 6.x及redhat 6.x上完成，centos 7.2无需升级
+手动升级内核是个很惊险的过程，特别是在远程操作时候，无法得知内核升级以后是否能启动系统，这里使用rpm包的方式升级
+
+#rpm --import https://www.elrepo.org/RPM-GPG-KEY-elrepo.org
+#rpm -Uvh http://www.elrepo.org/elrepo-release-6-6.el6.elrepo.noarch.rpm
+#yum --enablerepo=elrepo-kernel install kernel-lt
+
+完成以后查看/boot/grub/grub.conf文件中的启动内核选项，重启
+
+1.1.2 安装docker
+当使用centos6.x默认的yum方式安装docker，docker容器的版本为1.07的版本，此时，会有相当多的bug及特性无法使用
+选择用二进制版本:
+github上的项目：
+https://github.com/docker/docker/releases
+官方：
+https://www.docker.com/
+
+当前使用的是1.12.0，曾经使用过1.10，1.12-rc版本
+使用1.12的版本的原因是因为当使用kubernetes这个资源管理软件时候，必须使用1.12的版本才能支持到kubernetes1.3的版本，这里碰到很多问题，在使用kubernetes的时候本质其实是调用docker的api函数完成，但是因为版本的原因，可能导致docker api函数在不同版本中有很大差异。
+而使用kubernetes1.3的版本是因为看中了其中的petset等等新特性，可以支持带有状态的容器，可以使用共享存储等等，比如：mysql容器等等
+
+使用二进制版本，所有的解压文件都可以直接运行，将docker-1.12.0.tgz解压以后所有的二进制文件复制到/usr/bin/目录下
+然后建立目录及文件如下：
+
+使用普通用户执行：
+
+mkdir -p $HOME_PATH/apps/docker/var/run/
+mkdir -p $HOME_PATH/apps/docker/var/lib/
+mkdir -p $HOME_PATH/apps/docker/logs
+touch $HOME_PATH/apps/docker/logs/docker.log
+
+安装docker需要的内核参数
+net.ipv4.ip_forward = 1          
+
+1.1.3 启动脚本，使用root用户执行
+#######################################################
+#这里是centos6.x/redhat6.x启动方式
+
+HOME_PATH=/home/blue
+
+/usr/bin/docker daemon \
+--exec-root="$HOME_PATH/apps/docker/var/run/docker" \
+-g "$HOME_PATH/apps/docker/var/lib/docker" \
+-p "$HOME_PATH/apps/docker/var/run/docker.pid" \
+--storage-opt dm.basesize=30G \
+-H "unix:///$HOME_PATH/apps/docker/var/run/socket" \
+--insecure-registry="192.168.81.97:5000" \
+--bip 172.17.56.1/24 >> $HOME_PATH/apps/docker/logs/docker.log 2>&1 &
+
+
+#这里是centos7.2启动方式，注意--storage-opt选项，因为在centos7.x以后默认文件系统格式改为了xfs
+
+HOME_PATH=/home/blue
+
+/usr/bin/dockerd \
+--exec-root="$HOME_PATH/apps/docker/var/run/docker" \
+-g "$HOME_PATH/apps/docker/var/lib/docker" \
+-p "$HOME_PATH/apps/docker/var/run/docker.pid" \
+--storage-opt dm.fs=xfs \
+--storage-opt dm.basesize=30G \
+-H "unix://$HOME_PATH/apps/docker/var/run/socket" \
+--insecure-registry="192.168.81.97:5000" \
+--bip 172.17.10.1/24 >> $HOME_PATH/apps/docker/logs/docker.log 2>&1 &
+
+
+#######################################################
+说明：
+--storage-opt选项，指启动的docker容器最大容量不超过30G
+--insecure-registry选项，指私有库的地址
+--bip 172.17.56.1/24选项，指启动以后docker0这个网桥的地址，具体为何如此设置，后续的kubernetes讲解。
+此选项在flannel0.9.0版本中解决，使用ip a命令时可以看见docker0网桥上有2个地址
+
+执行命令：
+#ln -s $HOME_PATH/apps/docker/var/run/socket /var/run/docker.sock
+#ln -s $HOME_PATH/apps/docker/var/run/docker.pid /var/run/
+#cd $HOME_PATH/apps/docker/var/run  && chown -R blue:blue *
+
+#如下是kubernetes1.4.x的版本需要用，kubulet需要指定pid
+#mkdir -p /run/docker/libcontainerd 
+#ln -s $HOME_PATH/apps/docker/var/run/docker/libcontainerd/docker-containerd.pid /run/docker/libcontainerd/
+
+1.2 私有库
+私有库实际是通过docker的容器来管理，过程很简单，对于管理来说镜像也是透明的
+
+1.2.1 安装配置
+$docker search registry 
+$docker pull registry:2.1.1
+$docker run -d -p 5000:5000 --name registry registry:2.1.1
+
+然后就可以通过http://x.x.x.x:5000存入私有库中
+打开浏览器输入http://x.x.x.x:5000/v2查看
+
+修改镜像名称及tag
+
+docker tag <image id> <new REPOSITORY>:<new TAG>
+$docker tag 047218491f8c registry:v2.6
+
+1.2.2 使用私有库
+私有库的使用分为推送镜像进去(push)，拉取镜像出来(pull)
+
+推送镜像，需要先给镜像打上标签，或者说是镜像命名
+打上标签通过
+
+$docker tag <镜像ID> x.x.x.x:5000/name:latest
+
+命令的意思是给xxxx镜像打上标签，在镜像库中的名称为name，tag为latest，如下是一个例子：
+$docker tag 97f04efc065b 192.168.81.97:5000/centos6.7_init:latest
+$docker push 192.168.81.97:5000/centos6.7_init:latest
+
+REPOSITORY                          TAG                 IMAGE ID            CREATED             SIZE
+192.168.81.97:5000/centos6.7_init   latest              97f04efc065b        27 hours ago        1.816 GB
+centos6.7_init                      latest              97f04efc065b        27 hours ago        1.816 GB
+
+这里的192.168.81.97:5000/后面的名字在打标签的时候可以随意命名，latest也随意命令
+
+拉取镜像
+docker pull 192.168.81.97:5000/centos6.7_init:latest
+
+上述的推送及拉取镜像，如果上述没有latest这部分，则默认是latest。
+
+查看镜像相关
+curl -k -v -X GET 192.168.81.97:5000/v2/_catalog		//查看镜像
+{"repositories":["centos","kubernetes-dashboard-amd64","mycentos6.8","project/abc_portal"]}
+
+curl -k -v -X GET 192.168.81.97:5000/v2/mycentos6.8/tags/list		//查看mycentos6.8这个镜像的tags信息
+{"name":"mycentos6.8","tags":["latest","v1","v3"]}
+
+curl -k -v -X GET  http://192.168.81.97:5000/v2/centos/manifests/latest 	//查看名字为centos，tags为latest这个镜像的信息，如下
+
+
+1.3 镜像的管理
+镜像通过2种方式建立，使用dockerfile文件建立容器，以及推送到私有库中，这是个比较重要的内容，直接影响到kubernetes管理容器的启动，销毁等等一系列操作
+另外一种是使用一个基础镜像，启动以后，然后连接到启动的容器，执行需要的操作，最后把容器打包成镜像。
+
+1.3.1 DOCKERFILE
+DOCKERFILE文件是一种建立镜像的方式
+#########################################################################
+# setup images to use elasticsearch project with Alpine Linux
+# add USER blue and setup USER root/blue password
+# install sshd,crontab packages 
+FROM alpine:v0.1
+MAINTAINER jack <abc@abc.com>
+
+RUN apk update 
+RUN apk add openjdk8-jre-base
+
+COPY elasticsearch-5.0.0.tar.gz $HOME_PATH/apps/
+RUN cd $HOME_PATH/apps/ && \
+tar zxvf elasticsearch-5.0.0.tar.gz && \
+mkdir -p $HOME_PATH/apps/elasticsearch-5.0.0/data && \
+mkdir -p $HOME_PATH/apps/elasticsearch-5.0.0/logs 
+COPY elasticsearch.yml $HOME_PATH/apps/elasticsearch-5.0.0/config/
+RUN chown -R blue:blue $HOME_PATH/apps/* && rm -rf $HOME_PATH/apps/elasticsearch-5.0.0.tar.gz
+
+ENTRYPOINT /usr/sbin/sshd -D
+
+#########################################################################
+
+注意：文件必须命名为Dockerfile，生成镜像时使用命令：
+$docker build -t name:tag DIR/
+
+Dockerfile文件放在DIR目录中，name:tag，举例为:192.168.81.97:5000/centos:latest，latest为tag，前边为name，这种模式用于生成推向私有库的时候比较多，具体的Dockerfile文件如何写，不具体描述
+
+提示：这里的ENTRYPOINT这个选项相当重要，将直接导致使用kubernetes启动镜像为容器时候，容器是否能启动。
+这个选项就是容器启动时候需要的命令或者程序等等，必须保证是一个前台进程，比如nginx，就必须在nginx配置文件中加入deamon off;的选项，如此类似。这里也是很多使用kubernetes无法启动镜像的很重要原因。
+
+在后期，由于随容器启动的服务越来越多，因此，使用了在ENTRYPOINT中启动脚本的方式来管理。举例：
+
+例子1：脚本名称start.sh
+/usr/sbin/nginx  && \
+/usr/sbin/sshd -D
+
+例子2：脚本名称start.sh
+chown -R blue:blue  $HOME_PATH/share/static
+/usr/sbin/cron
+/usr/bin/crontab -u blue $HOME_PATH/src/scheduledTasks
+/usr/sbin/sshd -D
+
+然后在Dockerfile文件中使用如下:
+
+ENTRYPOINT sh start.sh
+
+
+start.sh脚本中的内容，需要不断测试，是否在容器启动时候可以一起启动start.sh中的内容并且保证容器能够正常启动，另外，类似tamcat这种需要在容器中启动的服务千万不要放在这里，否则当tomct重启以后，退出容器以后容器就会stop，这里放的内容都是放在前台运行，因为docker容器要保证一直运行必须有个前台进程。
+
+
+1.3.2 使用docker命令的模式生成镜像
+使用docker命令的方式，主要用于测试，制作基础镜像，先运行镜像，然后通过
+$docker exec -it containerID /bin/bash      #containerID表示容器ID
+
+或者
+$docker exec -it containerID /bin/sh	    #containerID表示容器ID
+
+的方式链接到容器中，完成应用安装，配置等等，最后使用
+
+$docker commit containerID name:tag         #containerID表示容器ID，name及tag表示镜像名称及tag
+
+1.3.3 镜像的保存
+镜像的保存和导入，可以使用2种方式，分别是2对命令
+export/import
+$docker export <CONTAINER ID> > /home/export.tar   #这里是把容器直接保存成一个tar文件
+$cat /home/export.tar | docker import - export:latest
+
+save/load
+$docker save <IMAGE ID> > /home/save.tar
+$docker load < /home/save.tar
+
+上述2种方式，本质区别来之，使用export/import时候，不会保存上述启动容器的启动程序，命令，同时导出后再导入(exported-imported)的镜像会丢失所有的历史，而保存后再加载（saved-loaded）的镜像没有丢失历史和层(layer)。
+如果用save/load导入的不能有tag等等，同时原有镜像中的启动命令等等会保存。
+
+
+总结：镜像的管理很重要，所有的pull容器的行为都从镜像中拖拽，因此要很好的规划
+
+2.kubernetes,flannel,etcd汇总
+整个kubernetes+flannel+etcd+docker这整个框架的组合是目前来说比较完美的解决方案
+
+kubernetes用于容器的编排，资源分配，控制销毁，生成等等，flannel用于解决实体机器上启动的容器与其他实体机器上启动的容器之间的网络通讯，etcd则用于kubernetes和flannel软件内部信息交互等等，docker是基础件。
+
+软件版本：所有都使用的是二进制版本
+kubernetes-1.3.0  			下载链接:https://github.com/kubernetes/kubernetes/releases
+flannel-0.5.5-linux-amd64		下载链接：https://github.com/coreos/flannel/releases
+etcd-v3.0.1-linux-amd64			下载链接：https://github.com/coreos/etcd/releases/
+docker-1.12.0.tgz			下载链接：https://github.com/docker/docker/releases
+
+
+原理：
+docker是一个容器，目前1.12版本启动以后有2个进程。另外，由于所有的docker建立容器的时候，优先使用本地镜像，因此，需要建立私有仓库，否则去线上官方仓库拽
+flannel用于建立一个虚拟网络层，鉴于每台实体机器上的docker启动以后，都会建立一个docker0的网桥，此时会使用iptables建立相应的防火墙规则，所有此台机器上启动的docker容器都会以此网桥为网关与外界通讯，由于每台实体机器上网桥的地址都不同，因此，不同实体机器上的容器无法互相通讯，使用此工具，在所有实体机器上建立一个虚拟网络层，保证所有容器互相能通讯。
+etcd是一个key/value的数据库，用于存储相关信息，其中之一就是存储flannel这个网络层使用的网络地址。同时，还由于存储容器的id等等信息。
+kubernetes用于控制docker容器的建立，销毁等等相关的操作，并且控制相应的防火墙策略用于容器访问，对外提供服务等等，kubernetes分为2个部分，master及minon端，master端使用kube-apiserver,kube-controller-manager,kube-scheduler，minon端使用kubelet,kube-proxy，各功能不在描述。
+
+环境：
+192.168.81.3		kubernetes master		etcd
+192.168.81.4		kubernetes minon				flannel	  docker
+192.168.81.5		kubernetes minon		etcd		flannel	  docker	
+192.168.81.6		kubernetes minon		etcd		flannel	  docker
+192.168.81.95		kubernetes minon				flannel	  docker
+192.168.81.96		kubernetes minon				flannel	  docker
+192.168.81.97		kubernetes minon				flannel	  docker
+192.168.81.98		kubernetes minon				flannel	  docker
+192.168.81.99		kubernetes minon				flannel	  docker
+
+整个流程：从master发起请求，在minon端建立docker容器，同时建立访问的防火墙策略。
+
+具体分为如下几个部分分别描述：
+2.1 安装配置etcd，flannel
+2.2 配置kubernetes
+2.3 kubernetes Dashboard及kubernetes/pause
+2.4.使用kubernetes，rc,deployment,service文件
+
+
+2.1 安装配置etcd，flannel
+2.1.1 etcd
+etcd是整个kubernetes平台基础组件，用于存储多个部件之间的交换信息，结构使用key/value的模式，可以使用http这种API的模式使用。
+coreos出品
+
+github上的项目
+etcd-v3.0.1-linux-amd64		下载链接：https://github.com/coreos/etcd/releases/
+
+项目是使用go语言编写，二进制，解压就可以直接使用
+
+目录结构
+
+mkdir -p $HOME_PATH/apps/etcd/{bin,data,wal,logs}
+etcd/bin/{etcd,etcdctl}
+
+启动脚本，使用root用户执行
+#######################################################
+$HOME_PATH/apps/etcd/bin/etcd \
+--name etcd00 \
+--data-dir '$HOME_PATH/apps/etcd/data' \
+--wal-dir '$HOME_PATH/apps/etcd/wal' \
+--snapshot-count 10000 \
+--heartbeat-interval 100 \
+--election-timeout 1000 \
+--listen-peer-urls 'http://192.168.81.3:2380' \
+--listen-client-urls 'http://0.0.0.0:2379,http://0.0.0.0:4001' \
+--max-snapshots 5 \
+--max-wals 5 \
+--initial-advertise-peer-urls 'http://192.168.81.3:2380' \
+--initial-cluster 'etcd00=http://192.168.81.3:2380,etcd02=http://192.168.81.5:2380,etcd03=http://192.168.81.6:2380' \ 
+--initial-cluster-token 'etcd-cluster' \
+--advertise-client-urls 'http://192.168.81.3:2379,http://192.168.81.3:4001' \
+--initial-cluster-state 'existing'  >> $HOME_PATH/apps/etcd/log/etcd.log 2>&1 &
+
+#######################################################
+
+说明：
+--listen-peer-urls 		参数必须是本地地址
+--listen-client-urls 		客户端需要使用此etcd时候连接的端口和地址
+--initial-cluster  		这个参数很重要，所有etcd集群中的节点及对应的名称和端口
+--initial-cluster-token	集群名称
+--initial-cluster-state	这个参数是在第一次启动集群的时候不需要此参数，如果有后来的节点加入添加此参数，如果是新集群使用new
+
+详细的安装见etcd安装配置
+
+2.1.2 flannel
+flannel解决了在不同物理机器上运行的docker容器互相通讯的问题，神器，把网络传输的tcp包用udp重新封装了一层，在我们这个网络限制相当严格的网络中，也可以自由通讯。
+目前的网络环境，一个网段中，无法与其他的网段通讯，即使本网段中的机器上配置了其他网段，如果需要通讯，必须使用防火墙映射或者静态路由的方式。
+比如：目前所有的服务器在192.168.81.X段中，在任两台机器配置192.168.79.X段，此2台机器无法通过192.168.79.X的地址互相通讯，必须使用静态路由或者映射方式。
+
+flannel因为使用udp通讯，完全跨越了上述瓶颈。
+
+github上的项目
+flannel-0.5.5-linux-amd64	下载链接：https://github.com/coreos/flannel/releases
+
+项目是使用go语言编写，二进制，解压就可以直接使用
+
+mkdir -p $HOME_PATH/apps/flannel/bin
+
+flannel/bin/{flanneld  mk-docker-opts.sh}
+
+在启动之前，需要在etcd中配置好整个docker容器使用的地址段
+在任意一个etcd端执行
+etcdctl set /coreos.com/network/config '{ "Network": "172.17.0.0/16" }'
+如此就设置了网络信息
+
+使用root用户启动脚本
+#######################################################
+
+$HOME_PATH/apps/flannel/bin/flanneld \
+-etcd-endpoints="http://192.168.81.3:4001,http://192.168.81.5:4001,http://192.168.81.6:4001" &
+
+#######################################################
+可以看出这里用到了etcd的选项。
+
+此时，flannel启动以后会生成一个新的网桥flannel0，并且去etcd中查询可用的网段，随机得到一个可用网段，此时有172.17.56.0的地址
+
+
+因为flannel只是启动了一个网络层，保证在接入网络的端点可以通讯，而每台有docker进程的服务器都有一个docker0网桥，必须使用flannel来管理此网桥，同时赋给网桥一个新地址
+
+使用root用户执行如下的命令：
+#######################################################
+
+$HOME_PATH/apps/flannel/bin/mk-docker-opts.sh -i
+source /run/flannel/subnet.env
+ifconfig docker0 ${FLANNEL_SUBNET} 
+
+#######################################################
+然后重新启动docker进程。
+
+注意：有的时候，docker进程重启以后覆盖给docker0这个网桥的新地址也没有了，此时就手动指定docker启动时候用的网桥地址，即在docker启动时候的--bip 172.17.56.1/24选项，这个问题在flannel0.9.0版本上已经解决，当使用上述的脚本内容以后使用ip a是能看见docker0网桥上有2个地址．
+
+2.2 配置kubernetes
+kubernetes出品自google，分为2个部分，master及minon部分。
+
+github上的项目
+kubernetes-1.3.0  		下载链接:https://github.com/kubernetes/kubernetes/releases
+
+同样解压即可用
+上述的二进制文件在kubernetes/server/kubernetes-server-linux-amd64.tar.gz中，
+解压kubernetes-server-linux-amd64.tar.gz以后kubernetes/server/bin目录中有上述的文件
+
+master	
+	kube-apiserver				核心部分，所有的minon端与master之间的交互都经过这里。
+	kube-controller-manager
+	kube-scheduler
+	kube-dns					此部分未必需要和上述功能在一起
+minon	
+	kubelet						解决容器的控制
+	kube-proxy					解决网络访问和iptable相关的部分
+
+2.2.1 master目录结构
+
+mkdir -p $HOME_PATH/apps/kubernetes/server/logs/
+mkdir -p $HOME_PATH/apps/kubernetes/server/var/run/kubernetes
+mkdir -p $HOME_PATH/apps/kubernetes/server/bin
+
+
+$HOME_PATH/apps/kubernetes/server/bin/{kube-apiserver  kube-controller-manager  kube-dns  kube-scheduler}
+
+
+master启动脚本
+
+kube-apiserver启动脚本，使用root用户执行
+#######################################################
+
+$HOME_PATH/apps/kubernetes/server/bin/kube-apiserver \
+--allow-privileged=true \
+--insecure-bind-address=0.0.0.0 \
+--insecure-port=8080 \
+--v=0 \
+--service-cluster-ip-range=10.0.0.0/16 \
+--etcd-servers="http://192.168.81.3:4001,http://192.168.81.5:4001,http://192.168.81.6:4001" \
+--cert-dir="$HOME_PATH/apps/kubernetes/server/var/run/kubernetes"  >> $HOME_PATH/apps/kubernetes/server/logs/kube-apiserver.log  2>&1 &
+
+#######################################################
+说明：
+--allow-privileged			建立docker容器的时候需要使用privileged模式时用
+--insecure-port 			所有外界与api server通讯时用的端口
+--service-cluster-ip-range 		这里是kubernetes中的service配置时候，用的ip地址，是不同service之间互相通讯用的集群地址。
+--etcd-servers				etcd集群的地址
+--service-node-port-range	这个参数定义是当某个service启动以后，需要对外提供服务是用的端口，对应与service中的type: NodePort及nodePort: xxx内容。默认是30000~32766
+< 因此必须自己管理此端口。
+
+
+kube-controller-manager启动脚本，使用root用户执行
+#######################################################
+
+$HOME_PATH/apps/kubernetes/server/bin/kube-controller-manager \
+--v=0 \
+--log-dir="$HOME_PATH/apps/kubernetes/server/logs" \
+--master=127.0.0.1:8080 >> $HOME_PATH/apps/kubernetes/server/logs/kube-controller-manager.log  2>&1 &
+
+#######################################################
+说明：
+--master	指向api server
+
+
+kube-scheduler启动脚本,使用root用户执行
+#######################################################
+$HOME_PATH/apps/kubernetes/server/bin/kube-scheduler \
+--v=0 \
+--master=127.0.0.1:8080 >> $HOME_PATH/apps/kubernetes/server/logs/kube-scheduler.log  2>&1 &
+
+#######################################################
+说明：
+--master	指向api server
+
+
+kube-dns是1.3以后出现一个很神级的功能，通过kubernetes启动的容器，只要启动了service这个配置内容，可以通过域名方式访问，就是说多个servies之间通过域名可以互相访问。
+早期这个功能需要外接插件skydns或者其他的软件来完成dns内容。
+
+kube-dns启动脚本,使用root用户执行
+#######################################################
+$HOME_PATH/apps/kubernetes/server/bin/kube-dns \
+--dns-port=53 \
+--domain="cluster.my" \ 
+--kube-master-url="http://192.168.81.3:8080"  >> $HOME_PATH/apps/kubernetes/server/logs/kube-dns.log 2>&1 &
+
+#######################################################
+说明：
+--domain	此参数是所有service在通讯时候使用的域名，举例:jifen-redisslave01.default.svc.cluster.my 
+													   services中定义   namespace     上述定义  
+--kube-master-url	指向api server地址
+
+
+2.2.2 minon目录结构
+
+
+
+mkdir -p $HOME_PATH/apps/kubernetes/client/kubelet/{bin,etc,logs,plugins,pods,seccomp,var}
+mkdir -p $HOME_PATH/apps/kubernetes/client/kubelet/var/run/kubernetes
+touch $HOME_PATH/apps/kubernetes/client/kubelet/etc/kubeconfig
+touch $HOME_PATH/apps/kubernetes/client/kubelet/etc/machine-id
+
+
+$HOME_PATH/apps/kubernetes/client/kubelet/bin/kubelet 
+
+
+
+minon启动脚本
+
+kubelet
+
+client/
+└── kubelet
+    ├── bin
+    │   └── kubelet
+    ├── etc
+    │   └── cadvisor
+    ├── logs
+    │   └── kubelet.log
+    ├── plugins
+    ├── pods
+    ├── seccomp
+    └── var
+        └── run
+            └── kubernetes
+                ├── kubelet.crt
+                └── kubelet.key
+
+
+kubelet启动脚本,使用root用户执行
+#######################################################
+$HOME_PATH/apps/kubernetes/client/kubelet/bin/kubelet \
+--address=0.0.0.0 \
+--allow-privileged=true \
+--api-servers="http://192.168.81.3:8080" \
+--port=10250 \
+--cert-dir="$HOME_PATH/apps/kubernetes/client/kubelet/var/run/kubernetes" \
+--cluster-dns="192.168.81.3" \
+--cluster-domain="cluster.my" \
+--config="$HOME_PATH/apps/kubernetes/client/kubelet/etc" \
+--container-hints="$HOME_PATH/apps/kubernetes/client/kubelet/etc/cadvisor/container_hints.json" \
+--container-runtime="docker" \
+--docker="unix:///$HOME_PATH/apps/docker/var/run/socket" \
+--docker-endpoint="unix:///$HOME_PATH/apps/docker/var/run/socket" \
+--docker-root="$HOME_PATH/apps/docker/var/lib/docker" \
+--hostname-override="192.168.81.4" \
+--healthz-bind-address=0.0.0.0 \
+--healthz-port=10248 \
+--kubeconfig="$HOME_PATH/apps/kubernetes/client/kubelet/etc/kubeconfig" \
+--machine-id-file="$HOME_PATH/apps/kubernetes/client/kubelet/etc/machine-id" \
+--network-plugin-dir="$HOME_PATH/apps/apps/kubernetes/client/kubelet/plugins"  \
+--pod-infra-container-image="kubernetes/pause" \
+--root-dir="$HOME_PATH/apps/kubernetes/client/kubelet" \
+--seccomp-profile-root="$HOME_PATH/apps/kubernetes/client/kubelet/seccomp" \
+--volume-plugin-dir="$HOME_PATH/apps/kubernetes/client/kubelet/plugins/volume/exec"  \
+--v=0 --log-dir="$HOME_PATH/apps/kubernetes/client/kubelet/logs" --log-cadvisor-usage=true >> $HOME_PATH/apps/kubernetes/client/kubelet/logs/kubelet.log  2>&1 &
+#######################################################
+说明：
+--allow-privileged	允许容器以privileged方式运行
+--cluster-dns		配合master的dns使用
+--cluster-domain	配合master的dns使用
+--hostname-override	本机的hostname或者ip地址或者其他的，会覆盖默认的
+--pod-infra-container-image	这里非常重要，每个使用kubernetes启动的镜像，都会有一个一起使用的pause镜像,比如：
+
+**********************************************************************************************************************************************************
+ec93a48dfc44427c9328da8c5f04937f08a15957dd2a49667b877c8cce0cff4f   192.168.81.97:5000/kubernetes-dashboard-amd64:v1.4.0-beta2   "/dashboard --port=9090 --apiserver-host=http://192.168.81.3:8080"        9 weeks ago         Up 9 weeks                              k8s_kubernetes-dashboard.5c9aadf1_kubernetes-dashboard-yssw4_kube-system_6f1d6130-7ef5-11e6-ae69-0026b93267e9_8683f7e3
+835d120c95e90814b917dd97b17bea20801f2730d4c51778495139235fd9e808   kubernetes/pause                                             "/pause"                                                                  9 weeks ago         Up 9 weeks                              k8s_POD.51ffb7d_kubernetes-dashboard-yssw4_kube-system_6f1d6130-7ef5-11e6-ae69-0026b93267e9_8c3b1d46
+
+如上kubernetes-dashboard，有一个配合使用的kubernetes/pause容器。
+**********************************************************************************************************************************************************
+这里的pause镜像默认从官方仓库中下载，因此，建议优先下载到本地为镜像。
+
+
+kube-proxy
+
+mkdir -p $HOME_PATH/apps/kubernetes/client/kube-proxy/{bin,etc,logs}
+touch $HOME_PATH/apps/kubernetes/client/kube-proxy/etc/kubeconfig
+
+$HOME_PATH/apps/kubernetes/client/kube-proxy/bin/kube-proxy
+
+kube-proxy启动脚本,使用root用户执行
+#######################################################
+$HOME_PATH/apps/kubernetes/client/kube-proxy/bin/kube-proxy \
+--bind-address=0.0.0.0 \
+--healthz-bind-address=0.0.0.0 \
+--master="http://192.168.81.3:8080"  \
+--healthz-port=10249 \
+--hostname-override="192.168.81.4" \
+--kubeconfig="$HOME_PATH/apps/kubernetes/client/kube-proxy/etc/kubeconfig" \
+--v=0 \
+--log-dir="$HOME_PATH/apps/kubernetes/client/kube-proxy/logs" >> $HOME_PATH/apps/kubernetes/client/kube-proxy/logs/kube-proxy.log  2>&1 &
+#######################################################
+说明：
+参数参考kubelet部分
+
+总结：maste端可以在任一机器上运行，但是minon端必须在每个运行docker进程的机器上运行。
+
+2.3 kubernetes Dashboard及kubernetes/pause
+kubernetes Dashboard是kubernetes中一个管理平台，通过web ui的方式访问，实际就是一个容器镜像，下载镜像，然后使用rc或者deployment启动，建立相应的service，通过url可以访问了，如此完全脱离开了登录服务器执行命令的模式。此功能只有kubernetes1.2以后版本才有，更为要命的是这个镜像在google的云平台上，下载不了，因此找了一个替代品，链接：
+
+下载连接:index.alauda.cn/googlecontainer/kubernetes-dashboard-amd64:v1.1.0-beta3
+源地址:gcr.io/google_containers/kubernetes-dashboard-amd64:v1.1.0，在google云平台，无法下载
+
+
+当前版本已经升级到1.4，将镜像推送到私有库中。
+建立rc，service
+
+目前kubernetes-dashboard已经有1.5.1的版本，已经是一个很成熟的项目，可以在docker官方库上下载需要的版本，安装方式不要使用如下的方式，直接到
+https://github.com/kubernetes/dashboard/releases
+下载对应相应的yaml文件，然后添加nodePort: 30000这部分，然后使用kubelet命令生成，不要自己写rc,deployment,svc文件
+
+kubernetes-dashboard-rc.yaml
+##############################################################################
+apiVersion: v1
+kind: ReplicationController     
+metadata:
+  labels:
+    app: kubernetes-dashboard
+    version: v1.4.0-beta2
+  name: kubernetes-dashboard
+  namespace: kube-system
+spec:
+  replicas: 1
+  selector:
+    app: kubernetes-dashboard
+  template:
+    metadata:
+      labels:
+        app: kubernetes-dashboard
+    spec:
+      containers:
+      - name: kubernetes-dashboard
+        image: 192.168.81.97:5000/kubernetes-dashboard-amd64:v1.4.0-beta2 
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 9090
+          protocol: TCP
+        args:
+        - --apiserver-host=http://192.168.81.3:8080          #这里很重要,kubernetes master端地址
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 9090
+          initialDelaySeconds: 30
+          timeoutSeconds: 30
+
+##############################################################################
+
+kubectl create -f kubernetes-dashboard-rc.yaml
+
+kubernetes-dashboard-service.yaml
+##############################################################################
+kind: Service
+apiVersion: v1
+metadata:
+  labels:
+    app: kubernetes-dashboard
+  name: kubernetes-dashboard
+  namespace: kube-system
+spec:
+  type: NodePort
+  ports:
+  - port: 8080
+    targetPort: 9090
+    nodePort: 30000
+  selector:
+    app: kubernetes-dashboard
+
+##############################################################################
+
+kubectl create -f kubernetes-dashboard-service.yaml
+
+然后可以通过某个ip地址的30000端口访问平台
+
+kubernetes/pause这个是每个通过k8s建立容器需要的一个容器，当使用k8s的1.3.10的版本时，此镜像的名称已经改为了
+gcr.io/google_containers/pause-amd64:3.0
+
+2.4 使用kubernetes运行容器
+
+操作在master上启动，使用kubectl命令，举例说明：
+1.根据kubernetes的描述，需要先建立ReplicationController，使用YAML格式的文件，主要作用是建立pods及相应的副本。
+
+############################################################################################
+以建立kubenetes的kubernetes-dashboard平台为例
+****************** kubernetes-dashboard-rc.yaml **************************
+apiVersion: v1
+kind: ReplicationController       # 这里区别是什么类型，rc，service，deploy等等
+metadata:
+  labels:
+    app: kubernetes-dashboard
+    version: v1.1.0-beta3
+  name: kubernetes-dashboard
+  namespace: kube-system
+spec:
+  replicas: 1
+  selector:
+    app: kubernetes-dashboard
+  template:
+    metadata:
+      labels:
+        app: kubernetes-dashboard
+    spec:
+      containers:
+      - name: kubernetes-dashboard
+        image: 192.168.81.97:5000/kubernetes-dashboard-amd64:v1.1.0-beta3	#镜像下载的地址，原地址是google云地址无法访问，这里使用私有云地址
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 9090		#容器里服务启动的端口
+          protocol: TCP
+        args:
+        - --apiserver-host=http://192.168.81.3:8080	#这里是特有的内容，不是所有rc都需要，
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 9090
+          initialDelaySeconds: 30
+          timeoutSeconds: 30
+
+****************** kubernetes-dashboard-rc.yaml **************************
+
+
+例子二：
+****************** abc-portal-rc.yaml ***********************************
+
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: abc-portal
+  labels:
+    name: abc-portal
+spec:
+  replicas: 3
+  selector:
+    name: abc-portal
+  template:
+    metadata:
+      labels:
+        name: abc-portal
+    spec:
+      containers:
+      - name: abc-portal
+        image: 192.168.81.97:5000/project/abc_portal:latest
+        ports:
+        - containerPort: 8080
+
+****************** abc-portal-rc.yaml ***********************************
+
+############################################################################################
+上述的配置在kubernetes1.3版本以前使用rc模式
+
+1.3以后使用一个叫做deployment的模式
+
+****************** kibana-deployment ***********************************
+
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  namespace: own-project
+  name: kibana
+  labels:
+    name: kibana
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        name: kibana
+    spec:
+      containers:
+      - name: kibana
+        image: 192.168.81.97:5000/kibana:latest      #镜像使用私有库
+        ports:
+        - containerPort: 5601
+
+****************** kibana-deployment ***********************************
+
+
+2.建立service,主要的作用是把所有的pod做为一个整体对外提供服务，概念上像负载均衡，提供唯一的ip，及端口，这个ip地址是通过apiserver启动时候的参数--service-cluster-ip-range=10.0.0.0/16指定的，这里指定的是10.0.0.0/16这个段的地址，其他的service与此service通讯的都通过此地址。
+
+############################################################################################
+此文件对应kubernetes-dashboard的rc文件
+****************** kubernetes-dashboard-service.yaml *********************
+kind: Service
+apiVersion: v1
+metadata:
+  labels:
+    app: kubernetes-dashboard
+  name: kubernetes-dashboard
+  namespace: kube-system
+spec:
+  type: NodePort
+  ports:
+  - port: 8080				# 整个services对外服务端口
+    targetPort: 9090		# 容器中服务器启动端口，也是容器对外的端口
+    nodePort: 30000			# 这里很重要，如果此services对外提供服务器，必须使用此内容，并且有type: NodePort，这个端口会在每个pod所在机器上开启一个30000端口，
+  selector:					# 通过实体机器的ip:30000端口就能访问到此service，如果有多个pod，则通过任意一个实体机器的ip:30000都能访问，如果是负载均衡，需要加入
+    app: kubernetes-dashboard	# 所有实体机器的ip:30000端口
+  
+****************** kubernetes-dashboard-service.yaml *********************
+
+例子二：
+****************** abc_portal_service.yaml ******************************
+piVersion: v1
+kind: Service
+metadata:
+  name: abc-portal
+  labels:
+    name: abc-portal
+spec:
+  ports:
+  - port: 8080
+    targetPort: 8080
+  selector:
+    name: abc-portal
+
+****************** abc_portal_service.yaml ******************************
+############################################################################################
+
+对应上述的Deployment，参数含义见上
+****************** kibana-service ***********************************
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: own-project
+  name: kibana
+  labels:
+    name: kibana
+spec:
+  ports:
+  - port: 5601
+    targetPort: 5601
+    nodePort: 30006
+  selector:
+    name: kibana
+  type: NodePort
+****************** kibana-service ***********************************
+
+
+根据上述的步骤，完成了建立pod，启动service，对外提供服务的过程，根据上述的kubernetes-dashboard的过程，此时，可以通过http://x.x.x.x:30000的端口访问平台，此平台用于kubernetes的管理，在kubernetes 1.2以后版本提供。
+
+然后从平台上任意地方可以上传yaml文件的地方上传即可。
+
+另外：可以同一个pods组的不同端口映射到不同的serivice，比如:acitveMQ的61616端口用于应用连接，8161端口应用于远程管理，就可以建立2个service映射不同的端口，但是都使用同一个pods组
+
+总结：要使用kubernetes-dashboard平台，需要先使用命令行，建立相应的容器，因此登录kubernetes master这台机器，使用命令kubectl命令，导入上述的kubernetes-dashboard-rc.yaml，然后在导入kubernetes-dashboard-service.yaml，然后可以通过kubernetes-dashboard平台做后续操作，比如upload deployment及service等等文件。完成部署容器。
+
+
+3.glusterFS
+glusterFS是一个分布式存储，也可以叫网络存储，和HDFS这种庞然大物不同，glusterFS比较小巧，配置相对容易，方便扩展，在容器和实体服务器上的都可以运行。
+采用卷的模式，将多个实体目录加入到卷中，整个卷做为一个总体对外服务，具有自己的传输协议，多个加入的目录有三种模式配置，多个目录都做为镜像使用，类似raid 1,多个目录分片，类似raid 0,上述混合模式。
+
+目前glusterFS属于redhat，因此官方可以找到文档和安装包。
+由于glusterFS使用了目前比较流行的网络存储设备，必须支持xfs文件格式，就centos版本来说必须是7.0以后版本，7.0以后版本默认使用xfs格式。
+
+官方文档
+https://wiki.centos.org/SpecialInterestGroup/Storage/gluster-Quickstart
+
+安装
+yum -y install centos-release-gluster
+yum --enablerepo=centos-gluster*-test -y install glusterfs-server
+
+这里有个步骤，在每台节点机器的hosts文件中添加所有节点的机器名称和ip地址对应，详细如下：
+
+从后来的实际来看，此步骤不是必须。
+
+172.17.10.3	d51a1bbe06d4
+172.17.10.4	bc9fbe126825
+172.17.43.2	f14026ba5d7a
+172.17.43.3	b136e0d22869
+172.17.43.4 f18e37502fda
+mritd/kubernetes-dashboard-amd64
+
+需要在每个节点上启动 
+#/usr/sbin/glusterd
+
+添加节点
+#gluster peer probe xxx   #此工作可以在任一节点执行，xxx是除本机以外的其他机器的ip或者机器名
+
+查看状态
+#gluster peer status 
+
+重要：这里xxx不论使用ip地址还是hostname(当前使用的ip)，都会导致如下诡异的现象，显示发送了连接请求，当前只有一个加入了，或者某几个加入，或者全没加入
+
+Number of Peers: 4
+
+Hostname: 172.17.10.4
+Uuid: adecea58-0c70-4421-b4e2-bb0a0028f20f
+State: Peer in Cluster (Connected)
+
+Hostname: 172.17.43.2
+Uuid: e8e7d478-e461-4541-9cd8-63a74118644f
+State: Accepted peer request (Connected)
+
+Hostname: 172.17.43.3
+Uuid: 42c31fba-fe9e-45aa-a5c2-4d67f59360df
+State: Accepted peer request (Connected)
+
+Hostname: 172.17.43.4
+Uuid: d3433175-d79d-4f8a-ba22-a1f193e170ce
+State: Accepted peer request (Connected)
+
+出现上述现象在节点不在一个网段几率更大
+
+出现上述的情况是因为目前网络环境，在不同网段之间的机器中，会看到其他网段节点发送过来的是类似172.16.10.0这样的地址。
+解决方式是在所有的机器的/var/lib/glusterd/peers/目录中查看所有的节点对应文件，如下：
+
+uuid=42c31fba-fe9e-45aa-a5c2-4d67f59360df
+state=3
+hostname1=172.17.43.3
+
+主要是hostname1这个字段，有时候会有hostname2，但是必须保证正确
+操作步骤是停掉所有节点glusterFS进程，然后修改第一个节点的文件，保证文件中的上述字段正确，然后启动此节点，然后依次修改后续节点，有时候在其他节点上未必有所有的节点文件，没有什么关系，只需要修改有的文件即可以。
+
+需要说明的是，当集群全部完整启动以后，在此目录中应该有除自己以外的所有节点对应的配置文件。并且每个节点执行gluster peer status都会看到除自己以外的所有的所有节点。
+
+
+添加目录到集群中
+#gluster volume create gv0 replica 5 172.17.10.3:/share/mysql_data 172.17.10.4:/share/mysql_data 172.17.43.2:/share/mysql_data 172.17.43.3:/share/mysql_data 172.17.43.4:/share/mysql_data  force
+这里建议用ip地址，因为在容器中
+
+启动卷
+gluster volume start gv0
+
+
+客户端挂载
+上述的服务器端全部是安装在宿主服务器为centos7.2，同时docker容器操作系统版本也为centos7.0的容器中，内核版本为3.10.0-327.28.3.el7.x86_64
+
+客户端使用了宿主服务器为centos6.x版本，但是docker容器操作系统版本为centos7.0的容器中，内核版本为3.10.102-1.el6.elrepo.x86_64
+同时客户端使用了宿主服务器为centos7.0版本，docker容器操作系统版本为centos7.0的容器中，内核版本为3.10.102-1.el6.elrepo.x86_64
+
+挂载卷到本地目录中
+#mount -t glusterfs 172.17.43.3:/gv0 /mnt
+
+上述2种方式的挂载都没有问题
+
+具体挂载使用那个ip，没有关系，节点中任一一个ip地址都可以。
+
+
+4.ELK栈
+ELK栈是一个收集日志，汇总，搜索，分析平台。
+ELK是三个软件的简称
+elasticsearch			搜索分析日志
+logstash			收集日志	
+kibana				web ui
+
+整个流程是logstash用于收集日志，比如本地的日志文件，或者从服务器发过来的日志内容，交给elasticsearch，这玩意用于分析日志，索引日志等等，kibana则是一个web ui，用于把结果展示出来。
+
+分为三个部分详细说明：
+4.1 elasticsearch
+4.2 logstash
+4.3 kibana
+
+上述所有软件都可以从官方下载：
+https://www.elastic.co/
+
+4.1 elasticsearch
+
+版本：elasticsearch-5.0.0
+此项目解压以后是java应用，需要java支持，必须jdk8以上版本
+
+配置文件在解压以后config/目录中elasticsearch.yml
+
+如下是比较重要的几个选项
+
+因为所有的日志都发往elasticsearch，为了防止阻塞，配置成集群模式，目前使用的集群是由3个节点构成。每个节点修改自己的node.name即可
+
+#########################################################################
+cluster.name: my-application            #集群名称   
+node.name: node-1                       #节点名称，每个节点不同
+path.data: $HOME_PATH/apps/elasticsearch-5.0.0/data
+path.logs: $HOME_PATH/apps/elasticsearch-5.0.0/logs
+network.host: 0.0.0.0
+http.port: 9200
+--------------------------------- Discovery ----------------------------------
+#
+# Pass an initial list of hosts to perform discovery when new node is started:
+# The default list of hosts is ["127.0.0.1", "[::1]"]
+#
+discovery.zen.ping.unicast.hosts: ["172.17.10.12", "172.17.56.3", "172.17.43.3"]              #这里是集群中所有节点的列表
+#
+# Prevent the "split brain" by configuring the majority of nodes (total number of nodes / 2 + 1):
+#
+discovery.zen.minimum_master_nodes: 1                     #主节点个数，描述中说明的很清楚了，使用nodes/2+1个
+#
+# For more information, see the documentation at:
+# <http://www.elastic.co/guide/en/elasticsearch/reference/current/modules-discovery.html>
+#
+# ---------------------------------- Gateway -----------------------------------
+#
+# Block initial recovery after a full cluster restart until N nodes are started:
+#
+gateway.recover_after_nodes: 3            #在集群重启的时候至少保证有3个节点启动才开始同步数据
+#
+# For more information, see the documentation at:
+# <http://www.elastic.co/guide/en/elasticsearch/reference/current/modules-gateway.html>
+#
+# ---------------------------------- Various -----------------------------------
+#
+# Disable starting multiple nodes on a single system:
+#
+node.max_local_storage_nodes: 3       #节点个数        
+
+#########################################################################
+
+在启动之前必须修改内核参数如下：
+vm.max_map_count = 262144
+
+4.2 logstash 
+4.2.1 logstash是一个相当强大的收集日志的工具，可以支持插件的方式。
+目前使用的方式有2种
+1. 在每个需要收集日志的机器上安装logstash，然后配置相关需要收集日志的目录及文件等等信息。然后发送日志到elasticsearch
+2. 让logstash以服务进程的模式启动，使用第三方插件（filebeat）在每台需要收集日志的机器上收集日志发送到logstash，logstash发送日志到elasticsearch
+
+考虑到在每台需要收集日志机器上安装logstash，管理已经工作量都不适合。
+
+版本：logstash-5.0.0
+此项目解压以后是java应用，需要java支持，必须jdk8以上版本
+
+第一种方式
+建立单独的配置文件
+
+example.conf
+#########################################################################
+input {
+  file {
+    path => "$HOME_PATH/logs/apache/*.log"            #需要收集的日志    
+    start_position => beginning
+    ignore_older => 0
+  }
+}
+
+filter {
+  grok {
+    match => { "message" => "%{COMBINEDAPACHELOG}" }
+  }
+  geoip {
+    source => "clientip"
+  }
+}
+
+output {
+  elasticsearch {
+    hosts => [ "172.17.10.9:9200" ]  #elasticsearch地址，这里的地址如果是多个，则写成[ "172.17.10.12:9200", "172.17.56.3:9200", "172.17.43.3:9200" ]
+  }
+}
+
+
+#########################################################################
+更详细的选项，查询官方文档。
+
+启动:logstash -f example.conf
+
+
+第二种方式
+example.conf
+#########################################################################
+input {
+  beats {
+    port => "5043"         #这里是当做服务时的监听端口
+  }
+}
+
+output {
+  elasticsearch {
+    hosts => [ "172.17.10.12:9200", "172.17.56.3:9200", "172.17.43.3:9200" ]     #elasticsearch集群
+  }
+  file {
+    path => "$HOME_PATH/logs/logstash/filebeat.log"                #从filebeat发送过来的日志会同步写入到此文件中
+  }
+}
+
+#########################################################################
+需要注意的是，此文件可以定义多个，只要使用不同端口，不同文件即可以做为多个服务同时存在。
+
+启动:logstash -f example.conf
+
+4.2.3 第三方插件filebeat
+官方和上述都一样
+https://www.elastic.co/
+
+版本：elasticsearch-5.0.0
+filebeat-5.0.0-x86_64.rpm
+
+安装以后在/etc/filebeat/下，新建配置文件，这里的例子收集/var/log/messages文件内容
+
+syslog.yml
+#########################################################################
+filebeat:
+  prospectors:
+    - input_type: log
+      paths:
+        - /var/log/messages        #这里需要收集日志
+      fields:
+        type: syslog
+  registry_file: /var/lib/filebeat/registry 
+
+output:
+  logstash:
+    hosts: ["172.17.56.4:5043"]     #logstash服务器地址及端口
+
+shipper:
+
+logging:
+
+  files:
+
+#########################################################################
+实际上logstash及filebeat的配置相当的多，具体需求去官方查看文档。
+
+启动：filebeat -e -c syslog.yml -d "publish"
+
+综上所述，logstash和elasticsearch可以把日志收集然后汇聚在一起，但是无法分类或者其他类似的操作。
+
+4.3 kibana
+kibana只是个web ui
+
+版本：logstash-5.0.0
+解压是可执行文件
+
+根据官方文档，kibana不支持elasticsearch集群。
+
+配置文件解压以后在config/下，需要修改的配置文件kibana.yml
+
+修改如下的选项
+
+# The URL of the Elasticsearch instance to use for all your queries.
+elasticsearch.url: "http://172.17.10.12:9200"
+
+启动:bin/kibana 
+
+这里有个需要注意的地方
+
+上述的elasticsearch.url地址可以根据如下的方式确定
+
+$curl 172.17.10.12:9200/_cat/nodes?v
+ip           heap.percent ram.percent cpu load_1m load_5m load_15m node.role master name
+172.17.43.3            29          79   1    0.68    0.67     0.55 mdi       -      node-3
+172.17.10.12           35          76   0    0.52    0.47     0.64 mdi       *      node-1
+172.17.56.3            31          64   0    0.01    0.06     0.05 mdi       -      node-2
+
+这是目前线上情况，可以看到有一个master，上述填写此master
+
+
+5.自动化上线
+自动化上线，采用的jenkins -> rsyncd server <- docker容器 模式
+
+所有触发从jenkins开始，svn，编译，然后使用jenkins cmd插件，推送jenkins编译好的war包到rsyncd服务器上，容器启动以后执行5分钟计划任务，检测相应的rsyncd server的war是否有更新，如果有的话，更新到本地，部署。如此完成自动上线过程。
+
+整个过程中连接用的都是脚本，因此，脚本很重要，必须保证没有问题。
+另外在整个过程需要保证在jenkins中建立的项目名称，在kubernetes平台中用的deployment文件中的name的名称一致。
+因为在容器中运行的脚本需要通过启动以后容器的机器名称在rsyncd server服务器上找到相应的目录，同时，因为我们这里还做了一个比较特别是设置就是传输出来日志，把每个容器中的tomcat日志rsync到rsyncd server服务器上，以保证即使容器down掉，日志丢失不会超过10分钟
+
+
+
+
+
+

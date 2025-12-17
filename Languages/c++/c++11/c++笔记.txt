@@ -1,0 +1,290 @@
+变量的定义用于为变量分配存储空间，还可以为变量指定初始值。在一个程序中，变量有且仅有一个定义。
+
+声明用于向程序表明变量的类型和名字。定义也是声明：当定义变量时我们声明了它的类型和名字。还可以通过使用extern关键字声明变量名而不定义它。不定义变量的声明包括对象名、对象类型和对象类型前的关键字extern:
+
+  extern int i;   //声明，不定义变量i
+  int i;		    //声明和定义i
+
+extern 声明不是定义，也不分配存储空间。事实上，它只是说明变量定义在程序的其他地方。程序中变量可以声明多次，但只能定义一次。
+
+只有当声明也是定义时，声明才可以有初始化式，因为只有定义才分配存储空间。初始化式必须要有存储空间来进行初始化。如果声明有初始化，那么它可被当作是定义，即使声明标记为extern:
+
+  extern double pi = 3.1416; //定义
+  
+虽然使用了extern,但是这条语句还是定义了pi,分配并初始化了存储空间。只有当extern声明位于函数外部时，才可以含有初始化式。
+因为已初始化的extern声明被当作是定义，所以该变量任何随后的定义都是错误的：
+
+  extern double pi = 3.1416;	//定义
+  extern double pi;				//声明没有定义
+  extern double pi = 3.1416;	//不能重复定义
+  
+任何在多个文件中使用的变量都需要有与定义分离的声明。在这种情况下，一个文件含有变量的定义，使用该变量的其他文件则包含该变量的声明（而不是定义）
+
+
+
+因为常量在定义后就不能被修改，所以定义时必须初始化：
+
+  const std::string hi = "hello!";		//初始化
+  const int i, j = 0;		//i没有初始化，因为const
+  
+与其他变量不同，除非特别说明，在全局作用域声明的const变量是定义该对象的文件的局部变量。此变量只存在于那个文件中，不能被其他文件访问。
+通过指定const变量为extern,就可以在整个程序中访问const对象:
+
+  //file_1.cc
+  //定义和初始化一个const，可以被其他文件accessible
+  extern const int bufSize = fcn();
+  
+  //file_2.cc
+  extern const int bufSize;		//来之file_1中的bufSize
+  
+  //在file_1中定义bufSize
+  for ( int index = 0; index != bufSize; ++index )
+	// ..
+
+本程序中,file_1.cc通过函数fcn()的返回值来定义和初始化bufSize。而bufSize定义为extern，也就意味着bufSize可以在其他文件中使用。file_2.cc中bufSize的声明同样是extern;这种情况下，extern标志着bufSize是一个声明，所以没有初始化。
+
+
+
+引用是一种复合类型，通过在变量名前添加"&"符号来定义。
+
+引用必须用与该引用同类型的对象初始化：
+
+  int ival ＝ 1024；
+  int ＆refVal = ival;        //正确的方式
+  int &refVal2;				  //引用需要被初始化
+  int &refVal3 = 10;          //初始化必须是一个对象
+  
+引用只是它绑定对象的另一个名字，作用在引用上的所有操作事实上都是作用在该引用绑定的对象上：
+  
+  refVal += 2;
+
+将refval指向的对象ival加2。类似地，
+  
+  int ii = refval
+  
+把和ival相关联的值赋给ii.
+
+比较重要的概念是引用只是对象的另一个名字。事实上，可以通过ival的原名访问ival,也可以通过它的别名refval访问。赋值只是另外一个操作，因此可以编写
+
+  reval = 5;
+的效果是把ival的值修改为5。这一规则的结果是必须在定义引用时进行初始化。初始化是指明引用指向哪个对象的唯一方法。
+
+const引用是指向const对象的引用：
+
+  const int ival = 1024;
+  const int &refval = ival;
+  
+const引用可以初始化为不同类型的对象或者初始化为右值，如字面值常量：
+
+  int i = 42;
+  const int &r = 42;
+  const int &r2 = r + 1;
+
+同样的引用对于非const引用却是不合法的
+
+非const引用只能绑定到与该引用同类型的对象
+const引用则可以绑定到不同但相关的类型的对象或绑定到右值
+
+
+
+typedef可以用来定义类型的同义词
+
+  typedef double wages;           //wages是double的同义词
+  typedef int exam_score;         //exam_score是int的同义词
+  typedef wages salary;           //间接同义词double
+  
+  
+ 
+
+枚举的定义包括关键字enum,其后是一个可选的枚举类型名，和一个用花括号括起来、用逗号分开的枚举成员列表。
+
+enum open_mode {input, output, append};
+
+默认的，第一个枚举成员赋值为0，后边的每个枚举成员赋值比前边的大1。
+
+可以为一个或多个枚举成员提供初始值，用来初始化枚举成员的值必须是一个常量表达式
+
+  //shape为1，sphere为2，cylinder为3，polygon为4
+  enum Forms {shape = 1, sphere, cylinder, polygon};
+
+在这里shape显式的赋值为1，其他的都为隐式的初始化。
+
+枚举成员值可以不是唯一的
+
+  //point2d是2，point2w是3，point3d是3，point3w是4
+  enum Points { point2d = 2, point2w,
+				point3d = 3, point3w };
+				
+point2d显式的初始化为2，下一个point2w默认初始化，比前一个值大1，为3，以此类推
+
+每个enum都定义了一个新的类型，可以定义和初始化points类型的对象，也可以以不同的方式使用这些对象。枚举类型的对象的初始化和赋值，只能通过其枚举成员或同一枚举类型的其他对象来进行
+
+Points pt3d = point3d  //新的points类型对象pt3d的初始化和赋值
+Points pt2w = 3;       //不能直接赋值或者初始化
+pt2w = polygon;        //polygon不是一个Points类型对象
+pt2w = pt3d;		   //pt3d已经是一个Points类型对象，这里是合法的
+
+
+
+
+类的定义
+class Sales_item {
+
+public:
+	//操作
+private:
+	std::string isbn;
+	unsigned units_sold;
+	double revenue;
+};
+
+
+
+
+使用一种更安全简洁的命名空间成员方式，using声明
+
+  ＃include <iostream>
+  
+  using std::cin;
+  using std::cout;
+  using std::endl;
+  
+  int main()
+  {
+  
+	count << "Enter two numbers:" << endl;
+	int v1, v2;
+	cin << "The sum of " << v1
+		<< " and " << v2
+		<< " is " << v1 + v2 << endl;
+		
+	return 0;
+  }
+  
+  
+# 以下内容来之c＋＋实践之路
+
+p28 第4题
+
+Class HorBar
+{
+ public:
+  HorBar(int n)
+  {
+	std::cout << "+";
+	for (int i = 0; i < n; ++i)
+	  std::cout << "-";
+	std::cout << "+" << endl;
+  }
+};
+
+Class VerBar
+{
+  public:
+  VerBar(int n)
+  {
+	for (int i = 0; i < n; ++i)
+	  std::cout << "|" <<endl;
+  }
+};
+
+Class Frame
+{
+  public:
+	Frame(int hor, int ver):_upper(hor), vb(ver), _lower(hor) {}
+  private:
+    HorBar _upper;            # 这里的定义次序将影响嵌入的调用次序
+    VerBar _vb;               # 如果定义成如下
+    HorBar _lower;            # private:
+                              # HorBar _upper, _lower;
+};                            # VerBar vb;
+                              # 则最后的结果将会是奇怪的样子
+这里会打印出来                  
++------+
+|
+|
++------+
+|
+|
++------+
+|
+|
++------+
+
+
+p29 第6题
+＃ 这里说明的是合成的派生类默认构造函数和默认的构造函数
+＃ 合成的默认构造函数需要在构造函数中调用基类的构造函数初始化基类部分，同时初始化自己的部分
+＃ 默认构造函数则初始化自己的部分，隐式的初始化基类部分
+＃ class Item_base
+# {
+# public:
+#	Item_base(const string &book = "", double sales_price = 0.0): isbn(book), price(sales_price) {} 
+#   string book() const { return isbn; }
+#   virtual double net_price(size_t n) const { return n * price; }
+#   virtual ~Item_base() {}
+# private:
+# string isbn;
+# protected:
+# double price;
+# };
+＃
+# class Bulk_item: public item_base 
+# {
+# public:
+#  Bulk_item(const string& book = "", double sales_price = 0.0, size_t qty = 0, double disc_rate = 0.0): Item_base(book, sales_price), min_qty(qty), discount(disc_rate) {} //这里定义构造函数的时候，初始化了Item_base的部分，在参数列表中指出了基类需要的参数
+# 如果是默认构造函数这里将是 Bulk_item(): min_qty(0),discount(0) {}
+#
+# double net_price(size_t cnt) const { if (cnt >= min_qty) return cnt * (1 - discount) * price; else return cnt * price; }
+# private:
+# size_t min_qty;
+# double discount;
+# };
+
+
+class CelestialBoby
+{
+public:
+	CelestialBoby(double mass): _mass(mass)
+	{
+		cout << "Creating celestial boby of mass " << _mass << "\n";
+	}
+
+	~CelestialBoby()
+	{
+		cout << "Destroying celestial boby of mass" << _mass << "\n";
+	}
+
+private:
+	double _mass;
+};
+
+class Planet: public CelestialBoby
+{
+public:
+	Planet(double mass, double brightness): CelestialBoby(mass), _brightness(brightness)
+	{
+		cout << "creating a star of brightness " << _brightness << "\n";
+	}
+	~Planet()
+	{
+		cout << "Destorying a star of brightness " << _brightness << "\n";
+	}
+
+private:
+	const double _brightness;
+};
+
+
+assert宏的原型定义在<assert.h>中，其作用是如果它的条件返回错误，则终止程序执行，原型定义：
+#include <assert.h>
+void assert( int expression );
+
+assert的作用是现计算表达式 expression ，如果其值为假（即为0），那么它先向stderr打印一条出错信息，
+然后通过调用 abort 来终止程序运行。
+
+使用assert的缺点是，频繁的调用会极大的影响程序的性能，增加额外的开销。
+在调试结束后，可以通过在包含#include <assert.h>的语句之前插入 #define NDEBUG 来禁用assert调用，示例代码如下：
+#include <iostream>
+#define NDEBUG
+#include <cassert>

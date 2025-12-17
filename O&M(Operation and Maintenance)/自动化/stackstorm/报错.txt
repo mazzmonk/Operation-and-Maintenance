@@ -1,0 +1,8 @@
+访问UI WEB时候无法进入,而且有报错
+Unable to retrieve execution "5ad5977f4002a100f8dead57".See details in developer tools console
+
+连接到mongodb上,删除action_execution_d_b这个集合中的这条数据
+>show dbs
+>use st2
+>show collections
+>db.action_execution_d_b.remove({"_id" : ObjectId("5ad5977f4002a100f8dead57")})

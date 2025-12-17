@@ -1,0 +1,1436 @@
+索引:
+----------------------------------------------------------------------------------------------------------------
+第十部分(10/16)
+# 访问集群中的应用程序
+
+## 配置聚合层
+配置聚合层可以允许 Kubernetes apiserver 使用其它 API 扩展,这些 API 不是核心 Kubernetes API 的一部分.
+
+说明: 
+要使聚合层在你的环境中正常工作以支持代理服务器和扩展 apiserver 之间的相互 TLS 身份验证,需要满足一些设置要求.Kubernetes 和 kube-apiserver 具有多个 CA,因此请确保代理是由聚合层 CA 签名的,而不是由 Kubernetes 通用 CA 签名的.
+
+注意: 
+对不同的客户端类型重复使用相同的 CA 会对集群的功能产生负面影响.有关更多信息,请参见 CA 重用和冲突.
+
+* 身份认证流程
+与自定义资源定义(CRD)不同,除标准的 Kubernetes apiserver 外,Aggregation API 还涉及另一个服务器: 扩展 apiserver.Kubernetes apiserver 将需要与你的扩展 apiserver 通信,并且你的扩展 apiserver 也需要与 Kubernetes apiserver 通信.为了确保此通信的安全,Kubernetes apiserver 使用 x509 证书向扩展 apiserver 认证.
+
+本章节介绍身份认证和鉴权流程的工作方式以及如何配置它们.
+
+大致流程如下: 
+1. Kubernetes apiserver: 对发出请求的用户身份认证,并对请求的 API 路径执行鉴权.
+2. Kubernetes apiserver: 将请求转发到扩展 apiserver
+3. 扩展 apiserver: 认证来自 Kubernetes apiserver 的请求
+4. 扩展 apiserver: 对来自原始用户的请求鉴权
+5. 扩展 apiserver: 执行
+
+本节的其余部分详细描述了这些步骤.
+
+该流程可以在下图中看到.详细图片查看如下:
+https://kubernetes.io/zh-cn/docs/tasks/extend-kubernetes/configure-aggregation-layer/
+
+** Kubernetes Apiserver 认证和授权
+由扩展 apiserver 服务的对 API 路径的请求以与所有 API 请求相同的方式开始:  与 Kubernetes apiserver 的通信.该路径已通过扩展 apiserver 在 Kubernetes apiserver 中注册.
+
+用户与 Kubernetes apiserver 通信,请求访问路径.Kubernetes apiserver 使用它的标准认证和授权配置来对用户认证,以及对特定路径的鉴权.
+
+有关对 Kubernetes 集群认证的概述,请参见对集群认证(https://kubernetes.io/zh-cn/docs/reference/access-authn-authz/authentication/).有关对 Kubernetes 集群资源的访问鉴权的概述,请参见鉴权概述(https://kubernetes.io/zh-cn/docs/reference/access-authn-authz/authorization/).
+
+到目前为止,所有内容都是标准的 Kubernetes API 请求,认证与鉴权.
+
+Kubernetes apiserver 现在准备将请求发送到扩展 apiserver.
+
+** Kubernetes Apiserver 代理请求
+Kubernetes apiserver 现在将请求发送或代理到注册以处理该请求的扩展 apiserver.为此,它需要了解几件事: 
+1. Kubernetes apiserver 应该如何向扩展 apiserver 认证,以通知扩展 apiserver 通过网络发出的请求来自有效的 Kubernetes apiserver？
+2. Kubernetes apiserver 应该如何通知扩展 apiserver 原始请求已通过认证的用户名和组？
+
+为提供这两条信息,你必须使用若干标志来配置 Kubernetes apiserver.
+
+** Kubernetes Apiserver 客户端认证
+Kubernetes. apiserver 通过 TLS 连接到扩展 apiserver,并使用客户端证书认证.你必须在启动时使用提供的标志向 Kubernetes apiserver 提供以下内容: 
+. 通过 --proxy-client-key-file 指定私钥文件
+. 通过 --proxy-client-cert-file 签名的客户端证书文件
+. 通过 --requestheader-client-ca-file 签署客户端证书文件的 CA 证书
+. 通过 --requestheader-allowed-names 在签署的客户端证书中有效的公用名(CN)
+
+Kubernetes apiserver 将使用由 --proxy-client-*-file 指示的文件来向扩展 apiserver认证.为了使合规的扩展 apiserver 能够将该请求视为有效,必须满足以下条件: 
+1. 连接必须使用由 CA 签署的客户端证书,该证书的证书位于 --requestheader-client-ca-file 中.
+2. 连接必须使用客户端证书,该客户端证书的 CN 是 --requestheader-allowed-names 中列出的证书之一.
+
+说明: 
+你可以将此选项设置为空白,即为--requestheader-allowed-names="".这将向扩展 apiserver 指示任何 CN 都是可接受的.
+
+使用这些选项启动时,Kubernetes apiserver 将: 
+1. 使用它们向扩展 apiserver 认证.
+2. 在 kube-system 命名空间中创建一个名为 extension-apiserver-authentication 的 ConfigMap,它将在其中放置 CA 证书和允许的 CN.反过来,扩展 apiserver 可以检索这些内容以验证请求.
+
+请注意,Kubernetes apiserver 使用相同的客户端证书对所有扩展 apiserver 认证.它不会为每个扩展 apiserver 创建一个客户端证书,而是创建一个证书作为 Kubernetes apiserver 认证.所有扩展 apiserver 请求都重复使用相同的请求.
+
+*** 原始请求用户名和组
+当 Kubernetes apiserver 将请求代理到扩展 apiserver 时,它将向扩展 apiserver 通知原始请求已成功通过其验证的用户名和组.它在其代理请求的 HTTP 头部中提供这些.你必须将要使用的标头名称告知 Kubernetes apiserver.
+. 通过 --requestheader-username-headers 标明用来保存用户名的头部
+. 通过 --requestheader-group-headers 标明用来保存 group 的头部
+. 通过 --requestheader-extra-headers-prefix 标明用来保存拓展信息前缀的头部
+
+这些头部名称也放置在 extension-apiserver-authentication ConfigMap 中,因此扩展 apiserver 可以检索和使用它们.
+
+** 扩展 Apiserver 认证请求
+扩展 apiserver 在收到来自 Kubernetes apiserver 的代理请求后,必须验证该请求确实确实来自有效的身份验证代理,该认证代理由 Kubernetes apiserver 履行.扩展 apiserver 通过以下方式对其认证: 
+1. 如上所述,从 kube-system 中的 ConfigMap 中检索以下内容: 
+  . 客户端 CA 证书
+  . 允许名称(CN)列表
+  . 用户名,组和其他信息的头部
+2. 使用以下证书检查 TLS 连接是否已通过认证: 
+  . 由其证书与检索到的 CA 证书匹配的 CA 签名.
+  . 在允许的 CN 列表中有一个 CN,除非列表为空,在这种情况下允许所有 CN.
+  . 从适当的头部中提取用户名和组.
+
+如果以上均通过,则该请求是来自合法认证代理(在本例中为 Kubernetes apiserver) 的有效代理请求.
+
+请注意,扩展 apiserver 实现负责提供上述内容.默认情况下,许多扩展 apiserver 实现利用 k8s.io/apiserver/ 软件包来做到这一点.也有一些实现可能支持使用命令行选项来覆盖这些配置.
+
+为了具有检索 configmap 的权限,扩展 apiserver 需要适当的角色.在 kube-system 名字空间中有一个默认角色 extension-apiserver-authentication-reader 可用于设置.
+
+** 扩展 Apiserver 对请求鉴权
+扩展 apiserver 现在可以验证从标头检索的user/group是否有权执行给定请求.通过向 Kubernetes apiserver 发送标准 SubjectAccessReview 请求来实现.
+
+为了使扩展 apiserver 本身被鉴权可以向 Kubernetes apiserver 提交 SubjectAccessReview 请求,它需要正确的权限.Kubernetes 包含一个具有相应权限的名为 system:auth-delegator 的默认 ClusterRole,可以将其授予扩展 apiserver 的服务帐户.
+
+** 扩展 Apiserver 执行
+如果 SubjectAccessReview 通过,则扩展 apiserver 执行请求.
+
+* 启用 Kubernetes Apiserver 标志
+通过以下 kube-apiserver 标志启用聚合层.你的服务提供商可能已经为你完成了这些工作: 
+    --requestheader-client-ca-file=<path to aggregator CA cert>
+    --requestheader-allowed-names=front-proxy-client
+    --requestheader-extra-headers-prefix=X-Remote-Extra-
+    --requestheader-group-headers=X-Remote-Group
+    --requestheader-username-headers=X-Remote-User
+    --proxy-client-cert-file=<path to aggregator proxy cert>
+    --proxy-client-key-file=<path to aggregator proxy key>
+
+# 如下是使用 kubeadm 安装配置的 kubernetes v 1.30.0 版本提供的 kube-apiserver 启动时的参数(对应于上述的内容)
+----------------------------------------------------------------------------
+- --requestheader-client-ca-file=/etc/kubernetes/pki/front-proxy-ca.crt
+- --requestheader-allowed-names=front-proxy-client
+
+- --requestheader-extra-headers-prefix=X-Remote-Extra-
+- --requestheader-group-headers=X-Remote-Group
+- --requestheader-username-headers=X-Remote-User
+
+- --proxy-client-cert-file=/etc/kubernetes/pki/front-proxy-client.crt
+- --proxy-client-key-file=/etc/kubernetes/pki/front-proxy-client.key
+-----------------------------------------------------------------------------
+
+** CA 重用和冲突 - 重要,详细描述了 2 种 CA 证书的不同,及使用的环境及绝对不可使用相同的理由
+Kubernetes apiserver 有两个客户端 CA 选项: 
+. --client-ca-file
+. --requestheader-client-ca-file
+
+如下是使用 kubeadm 安装配置的 kubernetes v 1.30.0 版本提供的 kube-apiserver 启动时的 CA
+-----------------------------------------------------------------------
+- --client-ca-file=/etc/kubernetes/pki/ca.crt
+- --requestheader-client-ca-file=/etc/kubernetes/pki/front-proxy-ca.crt
+-----------------------------------------------------------------------
+
+这些功能中的每个功能都是独立的;如果使用不正确,可能彼此冲突.
+. --client-ca-file: 当请求到达 Kubernetes apiserver 时,如果启用了此选项,则 Kubernetes apiserver 会检查请求的证书.如果它是由 --client-ca-file 引用的文件中的 CA 证书之一签名的,并且用户是公用名 CN= 的值,而组是组织 O= 的取值,则该请求被视为合法请求.请参阅关于 TLS 身份验证的文档(https://kubernetes.io/zh-cn/docs/reference/access-authn-authz/authentication/#x509-client-certificates).
+. --requestheader-client-ca-file: 当请求到达 Kubernetes apiserver 时,如果启用此选项,则 Kubernetes apiserver 会检查请求的证书.如果它是由文件引用中的 --requestheader-client-ca-file 所签署的 CA 证书之一签名的,则该请求将被视为潜在的合法请求.然后,Kubernetes apiserver 检查通用名称 CN= 是否是 --requestheader-allowed-names 提供的列表中的名称之一.如果名称允许,则请求被批准;如果不是,则请求被拒绝.
+
+如果同时提供了 --client-ca-file 和 --requestheader-client-ca-file,则首先检查 --requestheader-client-ca-file CA,然后再检查 --client-ca-file.通常,这些选项中的每一个都使用不同的 CA(根 CA 或中间 CA).常规客户端请求与 --client-ca-file 相匹配,而聚合请求要与 --requestheader-client-ca-file 相匹配.但是,如果两者都使用同一个 CA,则通常会通过 --client-ca-file 传递的客户端请求将失败,因为 CA 将与 --requestheader-client-ca-file 中的 CA 匹配,但是通用名称 CN= 将不匹配 --requestheader-allowed-names 中可接受的通用名称之一.这可能导致你的 kubelet 和其他控制平面组件以及最终用户无法向 Kubernetes apiserver 认证.
+
+因此,请对用于控制平面组件和最终用户鉴权的 --client-ca-file 选项和用于聚合 apiserver 鉴权的 --requestheader-client-ca-file 选项使用不同的 CA 证书.
+
+警告: 
+除非你了解风险和保护 CA 用法的机制,否则不要重用在不同上下文中使用的 CA.
+
+如果你未在运行 API 服务器的主机上运行 kube-proxy,则必须确保使用以下 kube-apiserver 标志启用系统: 
+--enable-aggregator-routing=true
+
+** 注册 APIService 对象
+你可以动态配置将哪些客户端请求代理到扩展 apiserver.以下是注册示例: 
+
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+metadata:
+  name: <注释对象名称>
+spec:
+  group: <扩展 Apiserver 的 API 组名>
+  version: <扩展 Apiserver 的 API 版本>
+  groupPriorityMinimum: <APIService 对应组的优先级, 参考 API 文档>
+  versionPriority: <版本在组中的优先排序, 参考 API 文档>
+  service:
+    namespace: <拓展 Apiserver 服务的名字空间>
+    name: <拓展 Apiserver 服务的名称>
+  caBundle: <PEM 编码的 CA 证书,用于对 Webhook 服务器的证书签名>
+APIService 对象的名称必须是合法的路径片段名称.
+
+** 调用扩展 apiserver
+一旦 Kubernetes apiserver 确定应将请求发送到扩展 apiserver,它需要知道如何调用它.
+
+service 部分是对扩展 apiserver 的服务的引用.服务的名字空间和名字是必需的.端口是可选的,默认为 443.
+
+下面是一个扩展 apiserver 的配置示例,它被配置为在端口 1234 上调用.并针对 ServerName my-service-name.my-service-namespace.svc 使用自定义的 CA 包来验证 TLS 连接使用自定义 CA 捆绑包的 my-service-name.my-service-namespace.svc.
+
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+...
+spec:
+  ...
+  service:
+    namespace: my-service-namespace
+    name: my-service-name
+    port: 1234
+  caBundle: "Ci0tLS0tQk...<base64-encoded PEM bundle>...tLS0K"
+...
+
+安装一个扩展的 API server 见后续章节.
+
+## 使用自定义资源
+### 使用 CustomResourceDefinition 扩展 Kubernetes API - 重要,描述了如何定义自己的 api 资源,类似的比如 Pod 这个资源,是如何定义 apiVersion,kind 等等,即一个定义 api 资源的模板,当此资源定义完毕以后,就可以使用 yaml 文件应用此资源,类似的使用 yaml 文件定义一个 pod,并且详细的描述了 api 资源定制的规则限制及合法性检测等等
+本章节展示如何使用 CustomResourceDefinition 将定制资源(Custom Resource) 安装到 Kubernetes API 上
+
+* 创建 CustomResourceDefinition
+当你创建新的 CustomResourceDefinition(CRD)时,Kubernetes API 服务器会为你所指定的每个版本生成一个新的 RESTful 资源路径.基于 CRD 对象所创建的自定义资源可以是名字空间作用域的,也可以是集群作用域的,取决于 CRD 对象 spec.scope 字段的设置.
+
+与其它的内置对象一样,删除名字空间也将删除该名字空间中的所有自定义对象.CustomResourceDefinitions 本身是无名字空间的,可在所有名字空间中访问.
+
+例如,如果你将下面的 CustomResourceDefinition 保存到 resourcedefinition.yaml 文件: 
+
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  # 名字必需与下面的 spec 字段匹配,并且格式为 '<名称的复数形式>.<组名>'
+  name: crontabs.stable.example.com
+spec:
+  # 组名称,用于 REST API: /apis/<组>/<版本>
+  group: stable.example.com
+  # 列举此 CustomResourceDefinition 所支持的版本
+  versions:
+    - name: v1
+      # 每个版本都可以通过 served 标志来独立启用或禁止
+      served: true
+      # 其中一个且只有一个版本必需被标记为存储版本
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                cronSpec:
+                  type: string
+                image:
+                  type: string
+                replicas:
+                  type: integer
+  # 可以是 Namespaced 或 Cluster
+  scope: Namespaced
+  names:
+    # 名称的复数形式,用于 URL: /apis/<组>/<版本>/<名称的复数形式>
+    plural: crontabs
+    # 名称的单数形式,作为命令行使用时和显示时的别名
+    singular: crontab
+    # kind 通常是单数形式的驼峰命名(CamelCased)形式.你的资源清单会使用这一形式.
+    kind: CronTab
+    # shortNames 允许你在命令行使用较短的字符串来匹配资源
+    shortNames:
+    - ct
+
+之后创建它: 
+$ kubectl apply -f resourcedefinition.yaml
+
+这样一个新的受名字空间约束的 RESTful API 端点会被创建在: 
+/apis/stable.example.com/v1/namespaces/*/crontabs/...
+
+此端点 URL 自此可以用来创建和管理定制对象.对象的 kind 将是来自你上面创建时 所用的 spec 中指定的 CronTab.
+
+创建端点的操作可能需要几秒钟.你可以监测你的 CustomResourceDefinition 的 Established 状况变为 true,或者监测 API 服务器的发现信息等待你的资源出现在 那里.
+
+说明: 当使用 kubectl api-resources 时候,可以看见刚创建的 api 资源,特使用了 pod 这个资源作为比较,比如在 Pod 文件中有 apiVersion,kind,metadata 等等资源
+NAME                                SHORTNAMES   APIVERSION                          NAMESPACED   KIND
+pods                                po           v1                                  true         Pod
+crontabs                            ct           stable.example.com/v1               true         CronTab
+
+并且可以通过 
+$ kubectl get CustomResourceDefinition crontabs.stable.example.com 
+$ kubectl describe CustomResourceDefinition crontabs.stable.example.com
+
+命令得到详细的信息:
+
+Name:         crontabs.stable.example.com
+Namespace:    
+Labels:       <none>
+Annotations:  <none>
+API Version:  apiextensions.k8s.io/v1
+Kind:         CustomResourceDefinition
+Metadata:
+  Creation Timestamp:  2024-12-11T08:13:20Z
+  Generation:          1
+  Resource Version:    19522
+  UID:                 d8888591-cded-451f-8f0a-632643852412
+Spec:
+  Conversion:
+    Strategy:  None
+  Group:       stable.example.com
+  Names:
+    Kind:       CronTab
+    List Kind:  CronTabList
+    Plural:     crontabs
+    Short Names:
+      ct
+    Singular:  crontab
+  Scope:       Namespaced
+  Versions:
+    Name:  v1
+    Schema:
+      openAPIV3Schema:
+        Properties:
+          Spec:
+            Properties:
+              Cron Spec:
+                Type:  string
+              Image:
+                Type:  string
+              Replicas:
+                Type:  integer
+            Type:      object
+        Type:          object
+    Served:            true
+    Storage:           true
+Status:
+  Accepted Names:
+    Kind:       CronTab
+    List Kind:  CronTabList
+    Plural:     crontabs
+    Short Names:
+      ct
+    Singular:  crontab
+  Conditions:
+    Last Transition Time:  2024-12-11T08:13:20Z
+    Message:               no conflicts found
+    Reason:                NoConflicts
+    Status:                True
+    Type:                  NamesAccepted
+    Last Transition Time:  2024-12-11T08:13:20Z
+    Message:               the initial names have been accepted
+    Reason:                InitialNamesAccepted
+    Status:                True
+    Type:                  Established
+  Stored Versions:
+    v1
+Events:  <none>
+
+同时做为比较,这里有个使用 Pod 资源的 yaml 文件
+-------------------------------
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx
+  labels:
+    env: test
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+    imagePullPolicy: Never
+  nodeSelector:
+    kubernetes.io/hostname: k8s03
+------------------------------------
+
+* 创建定制对象
+在创建了 CustomResourceDefinition 对象之后,你可以创建定制对象(Custom Objects).定制对象可以包含定制字段.这些字段可以包含任意的 JSON 数据.在下面的例子中,在类别为 CronTab 的定制对象中,设置了cronSpec 和 image 定制字段.类别 CronTab 来自你在上面所创建的 CRD 的规约.
+
+如果你将下面的 YAML 保存到 my-crontab.yaml: 
+
+apiVersion: "stable.example.com/v1"
+kind: CronTab
+metadata:
+  name: my-new-cron-object
+spec:
+  cronSpec: "* * * * */5"
+  image: my-awesome-cron-image
+
+并执行创建命令: 
+$ kubectl apply -f my-crontab.yaml
+
+你就可以使用 kubectl 来管理你的 CronTab 对象了.例如: 
+$ kubectl get crontab
+
+应该会输出如下列表: 
+NAME                 AGE
+my-new-cron-object   6s
+
+使用 kubectl 时,资源名称是大小写不敏感的,而且你既可以使用 CRD 中所定义的单数 形式或复数形式,也可以使用其短名称: 
+$ kubectl get ct -o yaml  # 就是可以使用定义文件中的 names: 下的 plural,singular,shorNames 这个几个名字,比如使用
+                          # kubectl get pod/pods/Pod/POD 都可以
+
+你可以看到输出中包含了你创建定制对象时在 YAML 文件中指定的定制字段 cronSpec 和 image: 
+apiVersion: v1
+items:
+- apiVersion: stable.example.com/v1
+  kind: CronTab
+  metadata:
+    annotations:
+      kubectl.kubernetes.io/last-applied-configuration: |
+        {"apiVersion":"stable.example.com/v1","kind":"CronTab","metadata":{"annotations":{},"name":"my-new-cron-object","namespace":"default"},"spec":{"cronSpec":"* * * * */5","image":"my-awesome-cron-image"}}        
+    creationTimestamp: "2021-06-20T07:35:27Z"
+    generation: 1
+    name: my-new-cron-object
+    namespace: default
+    resourceVersion: "1326"
+    uid: 9aab1d66-628e-41bb-a422-57b8b3b1f5a9
+  spec:
+    cronSpec: '* * * * */5'
+    image: my-awesome-cron-image
+kind: List
+metadata:
+  resourceVersion: ""
+  selfLink: ""
+
+* 删除 CustomResourceDefinition
+当你删除某 CustomResourceDefinition 时,服务器会卸载其 RESTful API 端点,并删除服务器上存储的所有定制对象.
+$ kubectl delete -f resourcedefinition.yaml
+$ kubectl get crontabs
+Error from server (NotFound): Unable to list {"stable.example.com" "v1" "crontabs"}: the server could not
+find the requested resource (get crontabs.stable.example.com)
+如果你在以后创建相同的 CustomResourceDefinition 时,该 CRD 会是一个空的结构.
+
+* 设置结构化的模式 - 应用 api 资源,类似于定义 pod 的文件
+CustomResource 对象在定制字段中保存结构化的数据,这些字段和内置的字段 apiVersion、kind 和 metadata 等一起存储,不过内置的字段都会被 API 服务器隐式完成合法性检查.有了 OpenAPI v3.0 检查 能力之后,你可以设置一个模式(Schema),在创建和更新定制对象时,这一模式会被用来 对对象内容进行合法性检查.参阅下文了解这类模式的细节和局限性.
+
+在 apiextensions.k8s.io/v1 版本中,CustomResourceDefinition 的这一结构化模式 定义是必需的.在 CustomResourceDefinition 的 beta 版本中,结构化模式定义是可选的.
+
+结构化模式本身是一个 OpenAPI v3.0 验证模式,其中: 
+1. 为对象根(root)设置一个非空的 type 值(藉由 OpenAPI 中的 type),对每个 object 节点的每个字段(藉由 OpenAPI 中的 properties 或 additionalProperties)以及 array 节点的每个条目(藉由 OpenAPI 中的 items)也要设置非空的 type 值,除非: 
+  . 节点包含属性 x-kubernetes-int-or-string: true
+  . 节点包含属性 x-kubernetes-preserve-unknown-fields: true
+2. 对于 object 的每个字段或 array 中的每个条目,如果其定义中包含 allOf、anyOf、oneOf 或 not,则模式也要指定这些逻辑组合之外的字段或条目(试比较例 1 和例 2).
+3. 在 allOf、anyOf、oneOf 或 not 上下文内不设置 description、type、default、 additionalProperties 或者 nullable.此规则的例外是 x-kubernetes-int-or-string 的两种模式(见下文).
+4. 如果 metadata 被设置,则只允许对 metadata.name 和 metadata.generateName 设置约束.
+
+非结构化的例 1:
+allOf:
+- properties:
+    foo:
+      ...
+
+违反了第 2 条规则.下面的是正确的: 
+
+properties:
+  foo:
+    ...
+allOf:
+- properties:
+    foo:
+      ...
+
+非结构化的例 2: 
+allOf:
+- items:
+    properties:
+      foo:
+        ...
+
+违反了第 2 条规则.下面的是正确的: 
+
+items:
+  properties:
+    foo:
+      ...
+allOf:
+- items:
+    properties:
+      foo:
+        ...
+
+非结构化的例 3: 
+properties:
+  foo:
+    pattern: "abc"
+  metadata:
+    type: object
+    properties:
+      name:
+        type: string
+        pattern: "^a"
+      finalizers:
+        type: array
+        items:
+          type: string
+          pattern: "my-finalizer"
+anyOf:
+- properties:
+    bar:
+      type: integer
+      minimum: 42
+  required: ["bar"]
+  description: "foo bar object"
+
+不是一个结构化的模式,因为其中存在以下违例: 
+  . 根节点缺失 type 设置(规则 1)
+  . foo 的 type 缺失(规则 1)
+  . anyOf 中的 bar 未在外部指定(规则 2)
+  . bar 的 type 位于 anyOf 中(规则 3)
+  . anyOf 中设置了 description (规则 3)
+  . metadata.finalizers 不可以被限制 (规则 4)
+
+作为对比,下面的 YAML 所对应的模式则是结构化的: 
+
+type: object
+description: "foo bar object"
+properties:
+  foo:
+    type: string
+    pattern: "abc"
+  bar:
+    type: integer
+  metadata:
+    type: object
+    properties:
+      name:
+        type: string
+        pattern: "^a"
+anyOf:
+- properties:
+    bar:
+      minimum: 42
+  required: ["bar"]
+
+如果违反了结构化模式规则,CustomResourceDefinition 的 NonStructural 状况中会包含报告信息.
+
+** 字段剪裁
+CustomResourceDefinition 在集群的持久性存储 etcd 中保存经过合法性检查的资源数据.就像原生的 Kubernetes 资源,例如 ConfigMap,如果你指定了 API 服务器所无法识别的字段,则该未知字段会在保存资源之前被 剪裁(Pruned) 掉(删除).
+
+从 apiextensions.k8s.io/v1beta1 转换到 apiextensions.k8s.io/v1 的 CRD 可能没有结构化的模式定义,因此其 spec.preserveUnknownFields 可能为 true.
+
+对于使用 apiextensions.k8s.io/v1beta1 且将 spec.preserveUnknownFields 设置为 true 创建的旧 CustomResourceDefinition 对象,有以下表现: 
+. 裁剪未启用.
+. 可以存储任意数据.
+
+为了与 apiextensions.k8s.io/v1 兼容,将你的定制资源定义更新为: 
+1. 使用结构化的 OpenAPI 模式.
+2. spec.preserveUnknownFields 设置为 false.
+
+如果你将下面的 YAML 保存到 my-crontab.yaml 文件: 
+apiVersion: "stable.example.com/v1"
+kind: CronTab
+metadata:
+  name: my-new-cron-object
+spec:
+  cronSpec: "* * * * */5"
+  image: my-awesome-cron-image
+  someRandomField: 42
+
+并创建之: 
+$ kubectl create --validate=false -f my-crontab.yaml -o yaml
+
+输出类似于: 
+apiVersion: stable.example.com/v1
+kind: CronTab
+metadata:
+  creationTimestamp: 2017-05-31T12:56:35Z
+  generation: 1
+  name: my-new-cron-object
+  namespace: default
+  resourceVersion: "285"
+  uid: 9423255b-4600-11e7-af6a-28d2447dc82b
+spec:
+  cronSpec: '* * * * */5'
+  image: my-awesome-cron-image
+
+注意其中的字段 someRandomField 已经被剪裁掉.
+
+本例中通过 --validate=false 命令行选项 关闭了客户端的合法性检查以展示 API 服务器的行为,因为 OpenAPI 合法性检查模式也会发布到 客户端,kubectl 也会检查未知的字段并在对象被发送到 API 服务器之前就拒绝它们.
+
+** 控制剪裁
+默认情况下,定制资源的所有版本中的所有未规定的字段都会被剪裁掉.通过在结构化的 OpenAPI v3 检查模式定义 中为特定字段的子树添加 x-kubernetes-preserve-unknown-fields: true 属性,可以选择不对其执行剪裁操作.
+
+例如: 
+type: object
+properties:
+  json:
+    x-kubernetes-preserve-unknown-fields: true
+
+字段 json 可以保存任何 JSON 值,其中内容不会被剪裁掉.
+
+你也可以部分地指定允许的 JSON 数据格式；例如: 
+type: object
+properties:
+  json:
+    x-kubernetes-preserve-unknown-fields: true
+    type: object
+    description: this is arbitrary JSON
+
+通过这样设置,JSON 中只能设置 object 类型的值.
+
+对于所指定的每个属性(或 additionalProperties),剪裁会再次被启用.
+type: object
+properties:
+  json:
+    x-kubernetes-preserve-unknown-fields: true
+    type: object
+    properties:
+      spec:
+        type: object
+        properties:
+          foo:
+            type: string
+          bar:
+            type: string
+
+对于上述定义,如果提供的数值如下: 
+json:
+  spec:
+    foo: abc
+    bar: def
+    something: x
+  status:
+    something: x
+
+则该值会被剪裁为: 
+json:
+  spec:
+    foo: abc
+    bar: def
+  status:
+    something: x
+
+这意味着所指定的 spec 对象中的 something 字段被剪裁掉,而其外部的内容都被保留.
+
+** IntOrString
+模式定义中标记了 x-kubernetes-int-or-string: true 的节点不受前述规则 1 约束,因此下面的定义是结构化的模式: 
+
+type: object
+properties:
+  foo:
+    x-kubernetes-int-or-string: true
+
+此外,所有这类节点也不再受规则 3 约束,也就是说,下面两种模式是被允许的 (注意,仅限于这两种模式,不支持添加新字段的任何其他变种): 
+
+x-kubernetes-int-or-string: true
+anyOf:
+  - type: integer
+  - type: string
+...
+
+和
+
+x-kubernetes-int-or-string: true
+allOf:
+  - anyOf:
+      - type: integer
+      - type: string
+  - ... # zero or more
+...
+
+在以上两种规约中,整数值和字符串值都会被认为是合法的.
+
+在合法性检查模式定义的发布时,x-kubernetes-int-or-string: true 会被展开为上述两种模式之一.
+
+** RawExtension
+RawExtensions(就像在 k8s.io/apimachinery 项目中 runtime.RawExtension 所定义的那样) 可以保存完整的 Kubernetes 对象,也就是,其中会包含 apiVersion 和 kind 字段.
+
+通过 x-kubernetes-embedded-resource: true 来设定这些嵌套对象的规约 (无论是完全无限制还是部分指定都可以)是可能的.例如: 
+
+type: object
+properties:
+  foo:
+    x-kubernetes-embedded-resource: true
+    x-kubernetes-preserve-unknown-fields: true
+
+这里,字段 foo 包含一个完整的对象,例如: 
+
+foo:
+  apiVersion: v1
+  kind: Pod
+  spec:
+    ...
+
+由于字段上设置了 x-kubernetes-preserve-unknown-fields: true,其中的内容不会 被剪裁.不过,在这个语境中,x-kubernetes-preserve-unknown-fields: true 的 使用是可选的.
+
+设置了 x-kubernetes-embedded-resource: true 之后,apiVersion、kind 和 metadata 都是隐式设定并隐式完成合法性验证.
+
+* 提供 CRD 的多个版本 
+关于如何为你的 CustomResourceDefinition 提供多个版本的支持,以及如何将你的对象从一个版本迁移到另一个版本,详细信息可参阅 CustomResourceDefinition 的版本管理.见后续章节
+
+* 高级主题
+** Finalizers
+Finalizer 能够让控制器实现异步的删除前(Pre-delete)回调.与内置对象类似,定制对象也支持 Finalizer.
+
+你可以像下面一样为定制对象添加 Finalizer: 
+
+apiVersion: "stable.example.com/v1"
+kind: CronTab
+metadata:
+  finalizers:
+  - stable.example.com/finalizer
+
+自定义 Finalizer 的标识符包含一个域名、一个正向斜线和 finalizer 的名称.任何控制器都可以在任何对象的 finalizer 列表中添加新的 finalizer.
+
+对带有 Finalizer 的对象的第一个删除请求会为其 metadata.deletionTimestamp 设置一个值,但不会真的删除对象.一旦此值被设置,finalizers 列表中的表项只能被移除.在列表中仍然包含 finalizer 时,无法强制删除对应的对象.
+
+当 metadata.deletionTimestamp 字段被设置时,监视该对象的各个控制器会执行它们所能处理的 finalizer,并在完成处理之后将其从列表中移除.每个控制器负责将其 finalizer 从列表中删除.
+
+metadata.deletionGracePeriodSeconds 的取值控制对更新的轮询周期.
+
+一旦 finalizers 列表为空时,就意味着所有 finalizer 都被执行过,Kubernetes 会最终删除该资源,
+
+** 合法性检查
+定制资源是通过 OpenAPI v3.0 模式定义,来执行合法性检查的,当启用验证规则特性时,通过 x-kubernetes-validations 验证,你可以通过使用准入控制 Webhook 来添加额外的合法性检查逻辑.
+
+此外,对模式定义存在以下限制: 
+. 以下字段不可设置: 
+  . definitions
+  . dependencies
+  . deprecated
+  . discriminator
+  . id
+  . patternProperties
+  . readOnly
+  . writeOnly
+  . xml
+  . $ref
+. 字段 uniqueItems 不可设置为 true
+. 字段 additionalProperties 不可设置为 false
+. 字段 additionalProperties 与 properties 互斥,不可同时使用
+
+当验证规则特性被启用并且 CustomResourceDefinition 模式是一个结构化的模式定义时,x-kubernetes-validations 扩展可以使用通用表达式语言 (CEL)表达式来验证定制资源.
+
+关于对某些 CustomResourceDefinition 特性所必需的限制,可参见结构化的模式定义小节.
+
+模式定义是在 CustomResourceDefinition 中设置的.在下面的例子中,CustomResourceDefinition 对定制对象执行以下合法性检查: 
+. spec.cronSpec 必须是一个字符串,必须是正则表达式所描述的形式；
+. spec.replicas 必须是一个整数,且其最小值为 1、最大值为 10.
+
+将此 CustomResourceDefinition 保存到 resourcedefinition.yaml 文件中: 
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: crontabs.stable.example.com
+spec:
+  group: stable.example.com
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        # openAPIV3Schema 是验证自定义对象的模式.
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                cronSpec:
+                  type: string
+                  pattern: '^(\d+|\*)(/\d+)?(\s+(\d+|\*)(/\d+)?){4}$'
+                image:
+                  type: string
+                replicas:
+                  type: integer
+                  minimum: 1
+                  maximum: 10
+  scope: Namespaced
+  names:
+    plural: crontabs
+    singular: crontab
+    kind: CronTab
+    shortNames:
+    - ct
+
+并创建 CustomResourceDefinition: 
+$ kubectl apply -f resourcedefinition.yaml
+
+对于一个创建 CronTab 类别对象的定制对象的请求而言,如果其字段中包含非法值,则 该请求会被拒绝.在下面的例子中,定制对象中包含带非法值的字段: 
+. spec.cronSpec 与正则表达式不匹配
+. spec.replicas 数值大于 10.
+
+如果你将下面的 YAML 保存到 my-crontab.yaml: 
+
+apiVersion: "stable.example.com/v1"
+kind: CronTab
+metadata:
+  name: my-new-cron-object
+spec:
+  cronSpec: "* * * *"
+  image: my-awesome-cron-image
+  replicas: 15
+
+并尝试创建定制对象: 
+$ kubectl apply -f my-crontab.yaml
+
+你会看到下面的错误信息: 
+The CronTab "my-new-cron-object" is invalid: []: Invalid value: map[string]interface {}{"apiVersion":"stable.example.com/v1", "kind":"CronTab", "metadata":map[string]interface {}{"name":"my-new-cron-object", "namespace":"default", "deletionTimestamp":interface {}(nil), "deletionGracePeriodSeconds":(*int64)(nil), "creationTimestamp":"2017-09-05T05:20:07Z", "uid":"e14d79e7-91f9-11e7-a598-f0761cb232d1", "clusterName":""}, "spec":map[string]interface {}{"cronSpec":"* * * *", "image":"my-awesome-cron-image", "replicas":15}}:
+validation failure list:
+spec.cronSpec in body should match '^(\d+|\*)(/\d+)?(\s+(\d+|\*)(/\d+)?){4}$'
+spec.replicas in body should be less than or equal to 10
+
+如果所有字段都包含合法值,则对象创建的请求会被接受.
+
+将下面的 YAML 保存到 my-crontab.yaml 文件: 
+apiVersion: "stable.example.com/v1"
+kind: CronTab
+metadata:
+  name: my-new-cron-object
+spec:
+  cronSpec: "* * * * */5"
+  image: my-awesome-cron-image
+  replicas: 5
+
+并创建定制对象: 
+$ kubectl apply -f my-crontab.yaml
+crontab "my-new-cron-object" created
+
+你会看到下面的错误信息: 
+The CronTab "my-new-cron-object" is invalid: 
+* spec.replicas: Invalid value: 15: spec.replicas in body should be less than or equal to 10
+* spec.cronSpec: Invalid value: "* * * *": spec.cronSpec in body should match '^(\d+|\*)(/\d+)?(\s+(\d+|\*)(/\d+)?){4}$'
+
+如果所有字段都包含合法值,则对象创建的请求会被接受.
+
+将下面的 YAML 保存到 my-crontab.yaml 文件: 
+apiVersion: "stable.example.com/v1"
+kind: CronTab
+metadata:
+  name: my-new-cron-object
+spec:
+  cronSpec: "* * * * */5"
+  image: my-awesome-cron-image
+  replicas: 5
+
+并创建定制对象: 
+$ kubectl apply -f my-crontab.yaml
+crontab "my-new-cron-object" created
+
+** 验证逐步升级
+特性状态:  Kubernetes v1.30 [beta] (enabled by default: true)
+如果你使用的 Kubernetes 版本早于 v1.30,则需要显式启用 CRDValidationRatcheting 特性门控,才能使用这种行为,并将其应用到集群中的所有 CustomResourceDefinition.
+
+只要你启用了此特性门控,Kubernetes 就会对 CustomResourceDefinition 实施验证逐步升级.即使更新后的资源无效,API 服务器也愿意接受对资源的更新,只要资源中未通过验证的每个部分都没有被更新操作改变.换句话说,资源中任何无效的部分如果仍然无效,那它必须之前就是错误的.你不能使用此机制来更新一个有效资源,使其变为无效.
+
+此特性使得 CRD 的作者能够在某些条件下有信心地向 OpenAPIV3 模式定义中添加新的验证.用户可以安全地更新到新的模式定义,而不必提升对象的版本或破坏工作流.
+
+尽管大多数放在 CRD 的 OpenAPIV3 模式定义中的验证都支持逐步升级,仍存在一些例外.Kubernetes 1.32 下实现的验证逐步升级不支持下面所列举的 OpenAPIV3 模式检查,如果检查时发现违例,会和以往一样抛出错误: 
+. 量词
+  . allOf
+  . oneOf
+  . anyOf
+  . not
+  . 以及这些字段的下级字段中的所有合法性检查
+
+. x-kubernetes-validations
+在 Kubernetes 1.28 中,CRD 验证规则被逐步升级所忽略.从 Kubernetes 1.29 中 Alpha 2 开始,x-kubernetes-validations 仅在不引用 oldSelf 时才会进行调整.
+
+转换规则(Transition Rules)永远不会被逐步升级机制处理: 只有那些不使用 oldSelf 的规则引发的错误会在其值未更改时自动按逐步升级机制处理.
+
+要为 CEL 表达式编写自定义棘轮逻辑,请查看 optionalOldSelf.
+
+. x-kubernetes-list-type
+更改子模式的列表类型引发的错误不会被逐步升级机制处理.例如,在具有重复项的列表上添加 set 一定会出错.
+
+. x-kubernetes-map-keys
+由于更改列表模式定义的映射键而引起的错误将不会被逐步升级机制处理.
+
+. required
+由于更改必需字段列表而引起的错误将不会被逐步升级处理.
+
+. properties
+添加、移除、修改属性的名称不会被逐步升级处理,但如果属性名称保持不变,如果更改各属性的模式定义和子模式定义中的合法性检查规则,可能会被逐步升级机制处理.
+
+. additionalProperties
+移除先前指定的 additionalProperties 合法性检查时,不会被逐步升级机制处理.
+
+. metadata
+来自 Kubernetes 对对象 metadata 的内置验证的错误不会被逐步调整(例如对象名称或标签值中的字符).如果你为自定义资源的元数据指定自己的附加规则,则附加验证将逐步加强.
+
+** 合法性检查规则
+特性状态:  Kubernetes v1.29 [stable]
+验证规则使用通用表达式语言(CEL)来验证定制资源的值.验证规则使用 x-kubernetes-validations 扩展包含在 CustomResourceDefinition 模式定义中.
+
+规则的作用域是模式定义中 x-kubernetes-validations 扩展所在的位置.CEL 表达式中的 self 变量被绑定到限定作用域的取值.
+
+所有验证规则都是针对当前对象的: 不支持跨对象或有状态的验证规则.
+
+例如:
+  ...
+  openAPIV3Schema:
+    type: object
+    properties:
+      spec:
+        type: object
+        x-kubernetes-validations:
+          - rule: "self.minReplicas <= self.replicas"
+            message: "replicas should be greater than or equal to minReplicas."
+          - rule: "self.replicas <= self.maxReplicas"
+            message: "replicas should be smaller than or equal to maxReplicas."
+        properties:
+          ...
+          minReplicas:
+            type: integer
+          replicas:
+            type: integer
+          maxReplicas:
+            type: integer
+        required:
+          - minReplicas
+          - replicas
+          - maxReplicas
+
+将拒绝创建如下这个定制资源的请求:
+apiVersion: "stable.example.com/v1"
+kind: CronTab
+metadata:
+  name: my-new-cron-object
+spec:
+  minReplicas: 0
+  replicas: 20
+  maxReplicas: 10
+
+返回响应为: 
+The CronTab "my-new-cron-object" is invalid:
+* spec: Invalid value: map[string]interface {}{"maxReplicas":10, "minReplicas":0, "replicas":20}: replicas should be smaller than or equal to maxReplicas.
+
+x-kubernetes-validations 可以有多条规则.
+x-kubernetes-validations 下的 rule 代表将由 CEL 评估的表达式.
+message 代表验证失败时显示的信息.如果消息没有设置,上述响应将是: 
+The CronTab "my-new-cron-object" is invalid:
+* spec: Invalid value: map[string]interface {}{"maxReplicas":10, "minReplicas":0, "replicas":20}: failed rule: self.replicas <= self.maxReplicas
+
+当 CRD 被创建/更新时,验证规则被编译.如果验证规则的编译失败,CRD 的创建/更新请求将失败.编译过程也包括类型检查.
+
+编译失败: 
+. no_matching_overload: 此函数没有参数类型的重载.
+例如,像 self == true 这样的规则对一个整数类型的字段将得到错误: 
+Invalid value: apiextensions.ValidationRule{Rule:"self == true", Message:""}: compilation failed: ERROR: \<input>:1:6: found no matching overload for '_==_' applied to '(int, bool)'
+
+. no_such_field: 不包含所需的字段.
+例如,针对一个不存在的字段,像 self.nonExistingField > 0 这样的规则将返回错误: 
+Invalid value: apiextensions.ValidationRule{Rule:"self.nonExistingField > 0", Message:""}: compilation failed: ERROR: \<input>:1:5: undefined field 'nonExistingField'
+
+. invalid argument: 对宏的无效参数.
+例如,像 has(self) 这样的规则将返回错误: 
+Invalid value: apiextensions.ValidationRule{Rule:"has(self)", Message:""}: compilation failed: ERROR: <input>:1:4: invalid argument to has() macro
+
+验证规则例子: 
+---------------------------------------------------------------------------------------------------
+规则	                                                                                                                      目的
+---------------------------------------------------------------------------------------------------
+self.minReplicas <= self.replicas &&	        验证定义副本数的三个字段大小顺序是否正确
+self.replicas <= self.maxReplicas             
+---------------------------------------------------------------------------------------------------
+'Available' in self.stateCounts	              验证映射中是否存在键名为 Available的条目
+---------------------------------------------------------------------------------------------------
+(size(self.list1) == 0) !=	                  检查两个列表之一是非空的,但不是二者都非空
+(size(self.list2) == 0)
+---------------------------------------------------------------------------------------------------
+!('MY_KEY' in self.map1) ||	                  如果某个特定的键在映射中,验证映射中对应键的取值
+self['MY_KEY'].matches('^[a-zA-Z]*$')
+---------------------------------------------------------------------------------------------------
+self.envars.filter(e, e.name = 	              验证一个 listMap 中主键 'name' 为 'MY_ENV' 的表项的取值
+'MY_ENV').all(e, e.value.matches(
+'^[a-zA-Z]*$')
+---------------------------------------------------------------------------------------------------
+has(self.expired) && self.created +	          验证 'Expired' 日期是否晚于 'Create' 日期加上 'ttl' 时长
+ self.ttl < self.expired
+---------------------------------------------------------------------------------------------------
+self.health.startsWith('ok')	                验证 'health' 字符串字段有前缀 'ok'
+---------------------------------------------------------------------------------------------------
+self.widgets.exists(w, w.key == 'x' &&	      验证键为 'x' 的 listMap 项的 'foo' 属性是否小于 10
+w.foo < 10)
+---------------------------------------------------------------------------------------------------
+type(self) == string ? self == '100%' :	      在 int 型和 string 型两种情况下验证 int-or-string 字段
+self == 1000
+---------------------------------------------------------------------------------------------------
+self.metadata.name.startsWith(self.prefix)	  验证对象的名称是否以另一个字段值为前缀
+---------------------------------------------------------------------------------------------------
+self.set1.all(e, !(e in self.set2))	          验证两个 listSet 是否不相交
+---------------------------------------------------------------------------------------------------
+size(self.names) == size(self.details) && 	  验证 'details' 映射中的 'names' 来自于 listSet
+self.names.all(n, n in self.details)
+---------------------------------------------------------------------------------------------------
+size(self.clusters.filter(c, c.name ==	      验证 'primary' 属性在 'clusters' listMap 中出现一次且只有一次
+self.primary)) == 1
+---------------------------------------------------------------------------------------------------
+
+参考: CEL 中支持的求值
+. 如果规则的作用域是某资源的根,则它可以对 CRD 的 OpenAPIv3 模式表达式中声明的任何字段进行字段选择,以及 apiVersion、kind、metadata.name 和 metadata.generateName.这包括在同一表达式中对 spec 和 status 的字段进行选择: 
+  ...
+  openAPIV3Schema:
+    type: object
+    x-kubernetes-validations:
+      - rule: "self.status.availableReplicas >= self.spec.minReplicas"
+    properties:
+        spec:
+          type: object
+          properties:
+            minReplicas:
+              type: integer
+            ...
+        status:
+          type: object
+          properties:
+            availableReplicas:
+              type: integer
+
+. 如果规则的作用域是具有属性的对象,那么可以通过 self.field 对该对象的可访问属性进行字段选择,而字段存在与否可以通过 has(self.field) 来检查.在 CEL 表达式中,Null 值的字段被视为不存在的字段.
+  ...
+  openAPIV3Schema:
+    type: object
+    properties:
+      spec:
+        type: object
+        x-kubernetes-validations:
+          - rule: "has(self.foo)"
+        properties:
+          ...
+          foo:
+            type: integer
+
+. 如果规则的作用域是一个带有 additionalProperties 的对象(即map),那么 map 的值 可以通过 self[mapKey] 访问,map 的包含性可以通过 mapKey in self 检查,map 中的所有条目可以通过 CEL 宏和函数如 self.all(...) 访问.
+  ...
+  openAPIV3Schema:
+    type: object
+    properties:
+      spec:
+        type: object
+        x-kubernetes-validations:
+          - rule: "self['xyz'].foo > 0"
+        additionalProperties:
+          ...
+          type: object
+          properties:
+            foo:
+              type: integer
+
+. 如果规则的作用域是 array,则 array 的元素可以通过 self[i] 访问,也可以通过宏和函数访问.
+  ...
+  openAPIV3Schema:
+    type: object
+    properties:
+      ...
+      foo:
+        type: array
+        x-kubernetes-validations:
+          - rule: "size(self) == 1"
+        items:
+          type: string
+
+. 如果规则的作用域为标量,则 self 将绑定到标量值.
+  ...
+  openAPIV3Schema:
+    type: object
+    properties:
+      spec:
+        type: object
+        properties:
+          ...
+          foo:
+            type: integer
+            x-kubernetes-validations:
+            - rule: "self > 0"
+
+例子: 
+-------------------------------------------------------------------------------
+规则作用域字段类型	                    规则示例
+-------------------------------------------------------------------------------
+根对象	                                               self.status.actual <= self.spec.maxDesired
+-------------------------------------------------------------------------------
+对象映射	                                         self.components['Widget'].priority < 10
+-------------------------------------------------------------------------------
+整数列表	                                         self.values.all(value, value >= 0 && value < 100)
+-------------------------------------------------------------------------------
+字符串	                                               self.startsWith('kube')
+-------------------------------------------------------------------------------
+
+apiVersion、kind、metadata.name 和 metadata.generateName 始终可以从对象的根目录和任何带有 x-kubernetes-embedded-resource 注解的对象访问.其他元数据属性都不可访问.
+
+通过 x-kubernetes-preserve-unknown-fields 保存在定制资源中的未知数据在 CEL 表达中无法访问.这包括: 
+. 使用 x-kubernetes-preserve-unknown-fields 的对象模式保留的未知字段值.
+. 属性模式为"未知类型(Unknown Type)"的对象属性.一个"未知类型"被递归定义为: 
+  . 一个没有类型的模式,x-kubernetes-preserve-unknown-fields 设置为 true.
+  . 一个数组,其中项目模式为"未知类型"
+  . 一个 additionalProperties 模式为"未知类型"的对象
+
+只有 [a-zA-Z_.-/][a-zA-Z0-9_.-/]* 形式的属性名是可访问的.当在表达式中访问时,可访问的属性名称会根据以下规则进行转义: 
+-------------------------------------
+转义序列	                                  属性名称等效为
+__underscores__	    __
+__dot__	            .
+__dash__	          -
+__slash__	          /
+__{keyword}__	      CEL 保留关键字
+-------------------------------------
+注意: CEL 保留关键字需要与要转义的确切属性名匹配(例如,单词 sprint 中的 int 不会转义).
+
+转义的例子: 
+--------------------------------------------------
+属性名	                    转义属性名规则
+namespace	   self.__namespace__ > 0
+x-prop	     self.x__dash__prop > 0
+redact__d	   self.redact__underscores__d > 0
+string	     self.startsWith('kube')
+--------------------------------------------------
+
+set 或 map 的 x-Kubernetes-list-type 的数组的等值比较会忽略元素顺序,即 [1,2] == [2,1].使用 x-kubernetes-list-type 对数组进行串联时,使用 List 类型的语义: 
+. set: X + Y 执行一个并集操作,其中 X 中所有元素的数组位置被保留,Y 中不相交的元素被追加,保留其部分顺序.
+. map: X + Y执行合并,其中 X 中所有键的数组位置被保留,但当 X 和 Y 的键集相交时,其值被 Y 中的值覆盖.Y 中键值不相交的元素被附加,保留其部分顺序.
+
+以下是 OpenAPIV3 和 CEL 类型之间的声明类型映射: 
+-------------------------------------------------------------------------------------------
+OpenAPIv3                                类型	CEL 类型
+-------------------------------------------------------------------------------------------
+带有 Properties 的对象	                                                           对象 / "消息类型"
+-------------------------------------------------------------------------------------------
+带有 AdditionalProperties 的对象	                               map
+-------------------------------------------------------------------------------------------
+带有 x-kubernetes-embedded-type 的对象	              对象 / "消息类型",'apiVersion'、'kind'、'metadata.name' 和 'metadata.gene
+                                         rateName' 都隐式包含在模式中
+-------------------------------------------------------------------------------------------
+带有 x-kubernetes-preserve-unknown	       对象 / "消息类型",未知字段无法从 CEL 表达式中访问
+-fields 的对象
+-------------------------------------------------------------------------------------------
+x-kubernetes-int-or-string	             可能是整数或字符串的动态对象,可以用 type(value) 来检查类型
+-------------------------------------------------------------------------------------------
+数组	                                                                                                         list
+-------------------------------------------------------------------------------------------
+带有 x-kubernetes-list-type=map 的数组	              列表,基于集合等值和唯一键名保证的 map 组成
+-------------------------------------------------------------------------------------------
+带有 x-kubernetes-list-type=set 的数组	              列表,基于集合等值和唯一键名保证的 set 组成
+-------------------------------------------------------------------------------------------
+布尔值	                                                                                                   boolean
+-------------------------------------------------------------------------------------------
+数字 (各种格式)	                           double
+-------------------------------------------------------------------------------------------
+整数 (各种格式)	                           int (64)
+-------------------------------------------------------------------------------------------
+'null'	                                 null_type
+-------------------------------------------------------------------------------------------
+字符串	                                                                                                   string
+-------------------------------------------------------------------------------------------
+带有 format=byte (base64 编码)字符串	                    bytes
+-------------------------------------------------------------------------------------------
+带有 format=date 字符串	                                                      timestamp (google.protobuf.Timestamp)
+-------------------------------------------------------------------------------------------
+带有 format=datetime 字符串	                                           timestamp (google.protobuf.Timestamp)
+-------------------------------------------------------------------------------------------
+带有 format=duration 字符串	                                           duration (google.protobuf.Duration)
+-------------------------------------------------------------------------------------------
+参考: CEL 类型、 OpenAPI 类型、 Kubernetes 结构化模式.
+
+** messageExpression 字段
+message 字段定义因验证规则失败时提示的字符串,与它类似,messageExpression 允许你使用 CEL 表达式构造消息字符串.这使你可以在验证失败消息中插入更详细的信息.messageExpression 必须计算为字符串,并且可以使用在 rule 字段中可用的变量.例如: 
+x-kubernetes-validations:
+- rule: "self.x <= self.maxLimit"
+  messageExpression: '"x exceeded max limit of " + string(self.maxLimit)'
+
+请记住,CEL 字符串连接(+ 运算符)不会自动转换为字符串.如果你有一个非字符串标量,请使用 string(<value>) 函数将标量转换为字符串,如上例所示.
+messageExpression 必须计算为一个字符串,并且在编写 CRD 时进行检查.请注意,可以在同一个规则上设置 message 和 messageExpression,如果两者都存在,则将使用 messageExpression.但是,如果 messageExpression 计算出错,则将使用 message 中定义的字符串,而 messageExpression 的错误将被打印到日志.如果在 messageExpression 中定义的 CEL 表达式产生一个空字符串或包含换行符的字符串,也会发生这种回退.
+
+如果满足上述条件之一且未设置 message 字段,则将使用默认的检查失败消息.
+
+messageExpression 是一个 CEL 表达式,因此验证函数的资源使用中所列出的限制也适用于它.如果在 messageExpression 执行期间由于资源限制而导致计算停止,则不会继续处理其他合法性检查规则.
+
+messageExpression 设置是可选的.
+
+** message 字段
+如果你要设置一个静态消息，可以提供 message 而不是 messageExpression。 如果合法性检查失败，则 message 的值将被用作不透明的错误字符串。
+
+message 设置是可选的。
+
+** reason 字段
+你可以在 validation 中添加一个机器可读的验证失败原因，以便在请求未通过此验证规则时返回。
+
+例如：
+x-kubernetes-validations:
+- rule: "self.x <= self.maxLimit"
+  reason: "FieldValueInvalid"
+
+返回给调用者的 HTTP 状态码将与第一个失败的验证规则的原因匹配。 目前支持的原因有："FieldValueInvalid"、"FieldValueForbidden"、"FieldValueRequired"、"FieldValueDuplicate"。 如果未设置或原因未知，默认使用 "FieldValueInvalid"。
+
+reason 设置是可选的。
+
+** fieldPath 字段
+你可以指定在验证失败时返回的字段路径。
+
+例如：
+x-kubernetes-validations:
+- rule: "self.foo.test.x <= self.maxLimit"
+  fieldPath: ".foo.test.x"
+
+在上面的示例中，验证检查字段 x 的值应小于 maxLimit 的值。 如果未指定 fieldPath，当验证失败时，fieldPath 将默认为 self 的作用范围。 如果指定了 fieldPath，返回的错误将正确地将 fieldPath 指向字段 x 的位置。
+
+fieldPath 值必须是相对 JSON 路径，且限定为此 x-kubernetes-validations 扩展在模式定义中的位置。 此外，它应该指向模式定义中的一个现有字段。例如，当验证检查 testMap 映射下的特定属性 foo 时， 你可以将 fieldPath 设置为 ".testMap.foo" 或 .testMap['foo']'。 如果验证要求检查两个列表中的唯一属性，fieldPath 可以设置为其中一个列表。 例如，它可以设置为 .testList1 或 .testList2。它目前支持引用现有字段的取子操作。 更多信息请参阅 Kubernetes 中的 JSONPath 支持。 fieldPath 字段不支持按数字下表索引数组。
+
+fieldPath 设置是可选的。
+
+** optionalOldSelf 字段
+特性状态： Kubernetes v1.30 [beta] (enabled by default: true)
+如果你的集群未启用 CRDValidationRatcheting，则 CustomResourceDefinition API 不包含此字段，尝试设置它可能会导致错误。
+
+optionalOldSelf 字段是一个布尔字段，它会改变下文所述的转换规则的行为。 通常，在对象创建期间或在更新中引入新值时，如果无法确定 oldSelf，则不会处理转换规则。
+
+如果 optionalOldSelf 设置为 true，则一定会处理转换规则，并且 oldSelf 的类型会被更改为 CEL Optional 类型。
+
+optionalOldSelf 在以下情况下很有用， 模式的作者希望拥有比默认的基于相等性的行为的控制力更强的工具， 以便对新值引入更严格的约束，同时仍允许旧值通过旧的验证进行 "grandfathered"（溯源）或作逐步升级处理。
+
+示例用法：
+------------------------------------------------------------
+CEL	                                              描述
+------------------------------------------------------------
+`self.foo == "foo"	
+------------------------------------------------------------
+[oldSelf.orValue(""), self].all(x, ["OldCase1", 
+"OldCase2"].exists(case, x == case))	
+------------------------------------------------------------
+oldSelf.optMap(o, o.size()).orValue(0) < 4	
+------------------------------------------------------------
+
+** 验证函数
+可用的函数包括：
+. CEL 标准函数，在标准定义列表(https://github.com/google/cel-spec/blob/v0.7.0/doc/langdef.md#list-of-standard-definitions)中定义
+. CEL 标准宏(https://github.com/google/cel-spec/blob/v0.7.0/doc/langdef.md#macros)
+. CEL 扩展字符串函数库(https://pkg.go.dev/github.com/google/cel-go@v0.11.2/ext#Strings)
+. Kubernetes CEL 扩展库(https://pkg.go.dev/k8s.io/apiextensions-apiserver@v0.24.0/pkg/apiserver/schema/cel/library#pkg-functions)
+
+** 转换规则
+包含引用标识符 oldSself 的表达式的规则被隐式视为 转换规则（Transition Rule）。 转换规则允许模式作者阻止两个原本有效的状态之间的某些转换。例如：
+
+type: string
+enum: ["low", "medium", "high"]
+x-kubernetes-validations:
+- rule: "!(self == 'high' && oldSelf == 'low') && !(self == 'low' && oldSelf == 'high')"
+  message: cannot transition directly between 'low' and 'high'
+
+与其他规则不同，转换规则仅适用于满足以下条件的操作：
+. 更新现有对象的操作。转换规则从不适用于创建操作。
+. 旧的值和新的值都存在。仍然可以通过在父节点上放置转换规则来检查值是否已被添加或移除。 转换规则从不应用于定制资源创建。当. . 被放置在可选字段上时，转换规则将不适用于设置或取消设置该字段的更新操作。
+. 被转换规则验证的模式节点的路径必须解析到一个在旧对象和新对象之间具有可比性的节点。 例如，列表项和它们的后代（spec.foo[10].bar）不一定能在现有对象和后来对同一对象的更新之间产生关联。
+
+如果一个模式节点包含一个永远不能应用的转换规则，在 CRD 写入时将会产生错误，例如： "oldSelf cannot be used on the uncorrelatable portion of the schema within path"。
+
+转换规则只允许在模式的 可关联部分（Correlatable Portions） 中使用。 如果所有 array 父模式都是 x-kubernetes-list-type=map类型的，那么该模式的一部分就是可关联的； 任何 set 或者 atomic 数组父模式都不支持确定性地将 self 与 oldSelf 关联起来。
+
+这是一些转换规则的例子：
+----------------------------------------------------------------------------
+用例	                                                                    规则
+----------------------------------------------------------------------------
+不可变	                                                              self.foo == oldSelf.foo
+赋值后禁止修改/删除	                                  oldSelf != 'bar' || self == 'bar' 
+                            or !has(oldSelf.field) || has(self.field)
+----------------------------------------------------------------------------
+仅附加的 set	                  self.all(element, element in oldSelf)
+----------------------------------------------------------------------------
+如果之前的值为 X，则新值只能               oldSelf != 'X' || self in ['A', 'B']
+为 A 或 B，不能为 Y 或 Z	
+----------------------------------------------------------------------------
+单调（非递减）计数器	                            self >= oldSelf
+----------------------------------------------------------------------------
+
+** 验证函数的资源使用
+当你创建或更新一个使用验证规则的 CustomResourceDefinition 时， API 服务器会检查运行这些验证规则可能产生的影响。 如果一个规则的执行成本过高，API 服务器会拒绝创建或更新操作，并返回一个错误信息。
+
+运行时也使用类似的系统来观察解释器的行动。如果解释器执行了太多的指令，规则的执行将被停止，并且会产生一个错误。
+
+每个 CustomResourceDefinition 也被允许有一定数量的资源来完成其所有验证规则的执行。 如果在创建时估计其规则的总和超过了这个限制，那么也会发生验证错误。
+
+如果你只指定那些无论输入量有多大都要花费相同时间的规则，你不太可能遇到验证的资源预算问题。
+
+例如，一个断言 self.foo == 1 的规则本身不存在因为资源预算组验证而导致被拒绝的风险。
+
+但是，如果 foo 是一个字符串，而你定义了一个验证规则 self.foo.contains("someString")， 这个规则需要更长的时间来执行，取决于 foo 有多长。
+
+另一个例子是如果 foo 是一个数组，而你指定了验证规则 self.foo.all(x, x > 5)。 如果没有给出 foo 的长度限制，成本系统总是假设最坏的情况，这将发生在任何可以被迭代的事物上（list、map 等）。
+
+因此，通过 maxItems，maxProperties 和 maxLength 进行限制被认为是最佳实践， 以在验证规则中处理任何内容，以防止在成本估算期间验证错误。例如，给定具有一个规则的模式：
+
+openAPIV3Schema:
+  type: object
+  properties:
+    foo:
+      type: array
+      items:
+        type: string
+      x-kubernetes-validations:
+        - rule: "self.all(x, x.contains('a string'))"
+
+API 服务器以验证预算为由拒绝该规则，并显示错误：
+spec.validation.openAPIV3Schema.properties[spec].properties[foo].x-kubernetes-validations[0].rule: Forbidden:
+CEL rule exceeded budget by more than 100x (try simplifying the rule, or adding maxItems, maxProperties, and
+maxLength where arrays, maps, and strings are used)
+
+这个拒绝会发生是因为 self.all 意味着对 foo 中的每一个字符串调用 contains()， 而这又会检查给定的字符串是否包含 'a string'。如果没有限制，这是一个非常昂贵的规则。
+
+如果你不指定任何验证限制，这个规则的估计成本将超过每条规则的成本限制。 但如果你在适当的地方添加限制，该规则将被允许：
+openAPIV3Schema:
+  type: object
+  properties:
+    foo:
+      type: array
+      maxItems: 25
+      items:
+        type: string
+        maxLength: 10
+      x-kubernetes-validations:
+        - rule: "self.all(x, x.contains('a string'))"
+
+成本评估系统除了考虑规则本身的估计成本外，还考虑到规则将被执行的次数。 例如，下面这个规则的估计成本与前面的例子相同（尽管该规则现在被定义在单个数组项上）：
+openAPIV3Schema:
+  type: object
+  properties:
+    foo:
+      type: array
+      maxItems: 25
+      items:
+        type: string
+        x-kubernetes-validations:
+          - rule: "self.contains('a string'))"
+        maxLength: 10
+
+如果在一个列表内部的一个列表有一个使用 self.all 的验证规则，那就会比具有相同规则的非嵌套列表的成本高得多。 一个在非嵌套列表中被允许的规则可能需要在两个嵌套列表中设置较低的限制才能被允许。 例如，即使没有设置限制，下面的规则也是允许的：
+openAPIV3Schema:
+  type: object
+  properties:
+    foo:
+      type: array
+      items:
+        type: integer
+    x-kubernetes-validations:
+      - rule: "self.all(x, x == 5)"
+
+但是同样的规则在下面的模式中（添加了一个嵌套数组）产生了一个验证错误：
+openAPIV3Schema:
+  type: object
+  properties:
+    foo:
+      type: array
+      items:
+        type: array
+        items:
+          type: integer
+        x-kubernetes-validations:
+          - rule: "self.all(x, x == 5)"
+
+这是因为 foo 的每一项本身就是一个数组，而每一个子数组依次调用 self.all。 在使用验证规则的地方，尽可能避免嵌套的列表和字典。
+
+* 设置默认值
+说明：
+要使用设置默认值功能，你的 CustomResourceDefinition 必须使用 API 版本 apiextensions.k8s.io/v1。
+
+设置默认值的功能允许在 OpenAPI v3 合法性检查模式定义中设置默认值：
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: crontabs.stable.example.com
+spec:
+  group: stable.example.com
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        # openAPIV3Schema 是用来检查定制对象的模式定义
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                cronSpec:
+                  type: string
+                  pattern: '^(\d+|\*)(/\d+)?(\s+(\d+|\*)(/\d+)?){4}$'
+                  default: "5 0 * * *"
+                image:
+                  type: string
+                replicas:
+                  type: integer
+                  minimum: 1
+                  maximum: 10
+                  default: 1
+  scope: Namespaced
+  names:
+    plural: crontabs
+    singular: crontab
+    kind: CronTab
+    shortNames:
+    - ct
+
+使用此 CRD 定义时，cronSpec 和 replicas 都会被设置默认值：
+apiVersion: "stable.example.com/v1"
+kind: CronTab
+metadata:
+  name: my-new-cron-object
+spec:
+  image: my-awesome-cron-image
+
+会生成：
+apiVersion: "stable.example.com/v1"
+kind: CronTab
+metadata:
+  name: my-new-cron-object
+spec:
+  cronSpec: "5 0 * * *"
+  image: my-awesome-cron-image
+  replicas: 1
+
+默认值设定的行为发生在定制对象上：
+. 在向 API 服务器发送的请求中，基于请求版本的设定设置默认值；
+. 在从 etcd 读取对象时，使用存储版本来设置默认值；
+. 在 Mutating 准入控制插件执行非空的补丁操作时，基于准入 Webhook 对象 版本设置默认值。
+. 从 etcd 中读取数据时所应用的默认值设置不会被写回到 etcd 中。 需要通过 API 执行更新请求才能将这种方式设置的默认值写回到 etcd。
+
+默认值一定会被剪裁（除了 metadata 字段的默认值设置），且必须通过所提供的模式定义的检查。
+
+针对 x-kubernetes-embedded-resource: true 节点（或者包含 metadata 字段的结构的默认值） 的 metadata 字段的默认值设置不会在 CustomResourceDefinition 创建时被剪裁， 而是在处理请求的字段剪裁阶段被删除。
+
+* 设置默认值和字段是否可为空（Nullable）
+对于未设置其 nullable 标志的字段或者将该标志设置为 false 的字段，其空值（Null） 会在设置默认值之前被剪裁掉。如果对应字段存在默认值，则默认值会被赋予该字段。 当 nullable 被设置为 true 时，字段的空值会被保留，且不会在设置默认值时被覆盖。
+
+例如，给定下面的 OpenAPI 模式定义：
+type: object
+properties:
+  spec:
+    type: object
+    properties:
+      foo:
+        type: string
+        nullable: false
+        default: "default"
+      bar:
+        type: string
+        nullable: true
+      baz:
+        type: string
+
+像下面这样创建一个为 foo、bar 和 baz 设置空值的对象时：
+spec:
+  foo: null
+  bar: null
+  baz: null
+
+其结果会是这样：
+spec:
+  foo: "default"
+  bar: null
+
+其中的 foo 字段被剪裁掉并重新设置默认值，因为该字段是不可为空的。 bar 字段的 nullable: true 使得其能够保有其空值。 baz 字段则被完全剪裁掉，因为该字段是不可为空的，并且没有默认值设置。
+
+* 以 OpenAPI 形式发布合法性检查模式 
+https://kubernetes.io/zh-cn/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/
+
+
+
+### CustomResourceDefinition 的版本
+
+
+
+
+
+## 安装一个扩展的 API server
+## 配置多个调度器
+## 使用 HTTP 代理访问 Kubernetes API
+## 使用 SOCKS5 代理访问 Kubernetes API
+## 设置 Konnectivity 服务
+

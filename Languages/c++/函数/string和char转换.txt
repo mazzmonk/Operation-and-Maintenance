@@ -1,0 +1,8 @@
+string s1;
+const char *pc = "a character array";
+
+s1 = pc;   //把c风格字符串拷贝给string;
+
+char *str = s1; //不能反过来用
+
+const char *str = s1.c_str(); //这样处理把string类型的字符串拷贝给c风格字符串

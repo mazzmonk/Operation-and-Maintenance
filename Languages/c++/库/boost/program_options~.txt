@@ -1,0 +1,9 @@
+例子：
+"BOOST_ROOT/libs/program_options/example"
+命名空间：
+namespace po = boost::program_options;
+
+
+
+链接：
+http://www.boost.org/doc/libs/1_57_0/doc/html/program_options/tutorial.html#idp343134496

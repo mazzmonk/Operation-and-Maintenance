@@ -1,0 +1,60 @@
+k8s version: v1.21.2
+
+因为删除 ranch 的一些错误,最终将所有关于 ranch 的资源都删除了,但是,有 2 个命名空间
+
+不论使用 kubectl delete namespace NAMESPACE-NAME --force ,还是在 etcd 中直接删除,都不能生效,状态如下
+
+cattle-impersonation-system   Terminating   24h
+cattle-system                             Terminating   24h
+
+最后找到一个调用 api 的方式删除 
+
+1. 导出 json 文件,并修改
+$ kubectl get ns cattle-system -o json > cattle-system.json
+
+修改 cattle-system.json 文件
+
+{
+    "apiVersion": "v1",
+    "kind": "Namespace",
+    "metadata": {
+        "annotations": {
+            "cattle.io/status": "{\"Conditions\":[{\"Type\":\"ResourceQuotaInit\",\"Status\":\"True\",\"Message\"
+:\"\",\"LastUpdateTime\":\"2022-07-19T09:39:27Z\"},{\"Type\":\"InitialRolesPopulated\",\"Status\":\"True\",\"Mess
+age\":\"\",\"LastUpdateTime\":\"2022-07-19T09:39:33Z\"}]}",
+            "field.cattle.io/projectId": "c-m-f8w88zmz:p-shghz",
+            "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"v1\",\"kind\":\"Namespace\",\"
+metadata\":{\"annotations\":{},\"name\":\"cattle-system\"}}\n",
+            "lifecycle.cattle.io/create.namespace-auth": "true",
+            "management.cattle.io/no-default-sa-token": "true"
+        },
+        "creationTimestamp": "2022-07-19T07:43:21Z",
+        "deletionGracePeriodSeconds": 0,
+        "deletionTimestamp": "2022-07-19T07:58:06Z",
+        "finalizers": [
+            "controller.cattle.io/namespace-auth"                               # 注意这里,删除此行,就是把 finalizers 内容清空
+        ],
+        "labels": {
+            "kubernetes.io/metadata.name": "cattle-system"
+        },
+        "name": "cattle-system",
+        "resourceVersion": "106493",
+        "uid": "e0d801a7-6ab4-4bbc-b221-c8da6e7a8b6b"
+    },
+    "spec": {},
+    "status": {
+        "conditions": [
+            ......
+          ],
+        "phase": "Terminating"
+    }
+}
+
+2. 开启一个单独的 proxy
+$ kubectl proxy --port=8081
+
+3. 使用 curl 调用 api 
+$ curl -k -H "Content-Type:application/json" -X PUT --data-binary @cattle-system.json http://127.0.0.1:8081/api/v1/namespaces/cattle-system/finalize
+
+4. 查看 
+$ kubectl get ns    # cattle-system 这个 namespace 就被删除了

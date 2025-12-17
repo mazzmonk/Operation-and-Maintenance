@@ -1,0 +1,19 @@
+boost编译安装好以后在/usr/loca/include,/usr/local/lib下
+新建一个连接到/usr/inlcude下
+
+为了让eclipse能识别到lib路径需要在/etc/ld.so.conf中添加
+/usr/local/lib
+/usr/lib
+内容
+
+同时修改eclipse中的properties->c/c++ Build->Settings->右侧ToolSettings
+->GCC C++Linker->Libraries
+Libraries(-l)填入 boost_system boost_thread pthread
+library search path(-L) 填入 /usr/local/lib
+
+
+
+
+
+
+

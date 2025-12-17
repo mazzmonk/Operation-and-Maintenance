@@ -1,0 +1,160 @@
+W0816 12:28:51.936745   10465 start_master.go:297] Warning: assetConfig.loggingPublicURL: Invalid value: "": required to view aggregated container logs in the console, master start will continue.
+W0816 12:28:51.937237   10465 start_master.go:297] Warning: assetConfig.metricsPublicURL: Invalid value: "": required to view cluster metrics in the console, master start will continue.
+W0816 12:28:51.937486   10465 start_master.go:297] Warning: auditConfig.auditFilePath: Required value: audit can not be logged to a separate file, master start will continue.
+I0816 12:28:51.946000   10465 plugins.go:101] No cloud provider specified.
+E0816 12:28:52.019613   10465 controllermanager.go:337] Server isn't healthy yet.  Waiting a little while.
+2017-08-16 12:28:52.020041 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp 172.20.10.12:4001: getsockopt: connection refused"; Reconnecting to {172.20.10.12:4001 <nil>}
+2017-08-16 12:28:52.020369 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp 172.20.10.12:4001: getsockopt: connection refused"; Reconnecting to {172.20.10.12:4001 <nil>}
+2017-08-16 12:28:52.020676 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp 172.20.10.12:4001: getsockopt: connection refused"; Reconnecting to {172.20.10.12:4001 <nil>}
+2017-08-16 12:28:52.021021 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp 172.20.10.12:4001: getsockopt: connection refused"; Reconnecting to {172.20.10.12:4001 <nil>}
+2017-08-16 12:28:52.059555 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp 172.20.10.12:4001: getsockopt: connection refused"; Reconnecting to {172.20.10.12:4001 <nil>}
+I0816 12:28:52.134427   10465 start_master.go:529] Starting master on 0.0.0.0:8443 (v3.6.0+c4dd4cf)
+I0816 12:28:52.134819   10465 start_master.go:530] Public master address is https://172.20.10.12:8443
+I0816 12:28:52.135098   10465 start_master.go:534] Using images from "openshift/origin-<component>:v3.6.0"
+2017-08-16 12:28:52.135426 I | embed: peerTLS: cert = openshift.local.config/master/etcd.server.crt, key = openshift.local.config/master/etcd.server.key, ca = openshift.local.config/master/ca.crt, trusted-ca = , client-cert-auth = true
+2017-08-16 12:28:52.135883 I | embed: listening for peers on https://0.0.0.0:7001
+2017-08-16 12:28:52.135917 I | embed: listening for client requests on 0.0.0.0:4001
+2017-08-16 12:28:52.142256 I | etcdserver: name = openshift.local
+2017-08-16 12:28:52.142551 I | etcdserver: data dir = openshift.local.etcd
+2017-08-16 12:28:52.142782 I | etcdserver: member dir = openshift.local.etcd/member
+2017-08-16 12:28:52.142956 I | etcdserver: heartbeat = 100ms
+2017-08-16 12:28:52.143188 I | etcdserver: election = 1000ms
+2017-08-16 12:28:52.143362 I | etcdserver: snapshot count = 100000
+2017-08-16 12:28:52.143522 I | etcdserver: advertise client URLs = https://172.20.10.12:4001
+2017-08-16 12:28:52.143696 I | etcdserver: initial advertise peer URLs = https://172.20.10.12:7001
+2017-08-16 12:28:52.143875 I | etcdserver: initial cluster = openshift.local=https://172.20.10.12:7001
+2017-08-16 12:28:52.146496 I | etcdserver: starting member 7aa8e8de96fa6cde in cluster 4805d22433c1c487
+2017-08-16 12:28:52.147619 I | raft: 7aa8e8de96fa6cde became follower at term 0
+2017-08-16 12:28:52.147875 I | raft: newRaft 7aa8e8de96fa6cde [peers: [], term: 0, commit: 0, applied: 0, lastindex: 0, lastterm: 0]
+2017-08-16 12:28:52.148100 I | raft: 7aa8e8de96fa6cde became follower at term 1
+2017-08-16 12:28:52.151891 W | auth: simple token is not cryptographically signed
+2017-08-16 12:28:52.157478 I | etcdserver: starting server... [version: 3.2.1, cluster version: to_be_decided]
+2017-08-16 12:28:52.157943 I | embed: ClientTLS: cert = openshift.local.config/master/etcd.server.crt, key = openshift.local.config/master/etcd.server.key, ca = openshift.local.config/master/ca.crt, trusted-ca = , client-cert-auth = true
+2017-08-16 12:28:52.168163 I | etcdserver/membership: added member 7aa8e8de96fa6cde [https://172.20.10.12:7001] to cluster 4805d22433c1c487
+2017-08-16 12:28:52.168726 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp 172.20.10.12:4001: getsockopt: connection refused"; Reconnecting to {172.20.10.12:4001 <nil>}
+2017-08-16 12:28:52.648702 I | raft: 7aa8e8de96fa6cde is starting a new election at term 1
+2017-08-16 12:28:52.649204 I | raft: 7aa8e8de96fa6cde became candidate at term 2
+2017-08-16 12:28:52.651225 I | raft: 7aa8e8de96fa6cde received MsgVoteResp from 7aa8e8de96fa6cde at term 2
+2017-08-16 12:28:52.651305 I | raft: 7aa8e8de96fa6cde became leader at term 2
+2017-08-16 12:28:52.651324 I | raft: raft.node: 7aa8e8de96fa6cde elected leader 7aa8e8de96fa6cde at term 2
+2017-08-16 12:28:52.653420 I | etcdserver: setting up the initial cluster version to 3.2
+2017-08-16 12:28:52.654603 N | etcdserver/membership: set the initial cluster version to 3.2
+2017-08-16 12:28:52.654856 I | etcdserver/api: enabled capabilities for version 3.2
+2017-08-16 12:28:52.654883 I | etcdserver: published {Name:openshift.local ClientURLs:[https://172.20.10.12:4001]} to cluster 4805d22433c1c487
+2017-08-16 12:28:52.654893 I | embed: ready to serve client requests
+2017-08-16 12:28:52.658216 I | embed: serving client requests on [::]:4001
+I0816 12:28:52.658777   10465 run.go:85] Started etcd at 172.20.10.12:4001
+2017-08-16 12:28:52.679855 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+2017-08-16 12:28:52.685832 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+2017-08-16 12:28:52.687095 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+2017-08-16 12:28:52.687918 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+2017-08-16 12:28:52.688446 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+2017-08-16 12:28:52.694313 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+2017-08-16 12:28:52.701002 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+2017-08-16 12:28:52.701243 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+I0816 12:28:52.708619   10465 run_components.go:91] Using default project node label selector: 
+I0816 12:28:52.715746   10465 clusterquotamapping.go:160] Starting ClusterQuotaMappingController controller
+I0816 12:28:52.716932   10465 master.go:182] Starting OAuth2 API at /oauth
+I0816 12:28:52.717280   10465 master.go:190] Starting Web Console /console/
+E0816 12:28:52.719449   10465 reflector.go:201] github.com/openshift/origin/pkg/authorization/generated/informers/internalversion/factory.go:45: Failed to list *authorization.ClusterPolicyBinding: Get https://172.20.10.12:8443/apis/authorization.openshift.io/v1/clusterpolicybindings?resourceVersion=0: dial tcp 172.20.10.12:8443: getsockopt: connection refused
+E0816 12:28:52.728564   10465 reflector.go:201] github.com/openshift/origin/pkg/authorization/generated/informers/internalversion/factory.go:45: Failed to list *authorization.ClusterPolicy: Get https://172.20.10.12:8443/apis/authorization.openshift.io/v1/clusterpolicies?resourceVersion=0: dial tcp 172.20.10.12:8443: getsockopt: connection refused
+E0816 12:28:52.728844   10465 reflector.go:201] github.com/openshift/origin/pkg/authorization/generated/informers/internalversion/factory.go:45: Failed to list *authorization.PolicyBinding: Get https://172.20.10.12:8443/apis/authorization.openshift.io/v1/policybindings?resourceVersion=0: dial tcp 172.20.10.12:8443: getsockopt: connection refused
+E0816 12:28:52.729136   10465 reflector.go:201] github.com/openshift/origin/pkg/authorization/generated/informers/internalversion/factory.go:45: Failed to list *authorization.Policy: Get https://172.20.10.12:8443/apis/authorization.openshift.io/v1/policies?resourceVersion=0: dial tcp 172.20.10.12:8443: getsockopt: connection refused
+E0816 12:28:52.729383   10465 reflector.go:201] github.com/openshift/origin/pkg/quota/generated/informers/internalversion/factory.go:45: Failed to list *quota.ClusterResourceQuota: Get https://172.20.10.12:8443/apis/quota.openshift.io/v1/clusterresourcequotas?resourceVersion=0: dial tcp 172.20.10.12:8443: getsockopt: connection refused
+W0816 12:28:52.875567   10465 genericapiserver.go:295] Skipping API autoscaling/v2alpha1 because it has no resources.
+W0816 12:28:52.884335   10465 genericapiserver.go:295] Skipping API rbac.authorization.k8s.io/v1alpha1 because it has no resources.
+I0816 12:28:52.907985   10465 openshift_apiserver.go:237] Starting Origin API at /apis/project.openshift.io/v1
+I0816 12:28:52.911342   10465 openshift_apiserver.go:237] Starting Origin API at /apis/build.openshift.io/v1
+I0816 12:28:52.912651   10465 openshift_apiserver.go:237] Starting Origin API at /apis/quota.openshift.io/v1
+I0816 12:28:52.914152   10465 openshift_apiserver.go:237] Starting Origin API at /apis/user.openshift.io/v1
+I0816 12:28:52.915094   10465 openshift_apiserver.go:237] Starting Origin API at /apis/template.openshift.io/v1
+I0816 12:28:52.920095   10465 openshift_apiserver.go:237] Starting Origin API at /apis/oauth.openshift.io/v1
+I0816 12:28:52.921923   10465 openshift_apiserver.go:237] Starting Origin API at /apis/security.openshift.io/v1
+I0816 12:28:52.924096   10465 openshift_apiserver.go:237] Starting Origin API at /apis/network.openshift.io/v1
+I0816 12:28:52.925530   10465 openshift_apiserver.go:237] Starting Origin API at /apis/route.openshift.io/v1
+I0816 12:28:52.928145   10465 openshift_apiserver.go:237] Starting Origin API at /apis/image.openshift.io/v1
+I0816 12:28:52.930125   10465 openshift_apiserver.go:237] Starting Origin API at /apis/apps.openshift.io/v1
+I0816 12:28:52.937650   10465 openshift_apiserver.go:237] Starting Origin API at /apis/authorization.openshift.io/v1
+I0816 12:28:53.003025   10465 openshift_apiserver.go:243] Started Origin API at /oapi/v1
+[restful] 2017/08/16 12:28:53 log.go:30: [restful/swagger] listing is available at https://172.20.10.12:8443/swaggerapi
+[restful] 2017/08/16 12:28:53 log.go:30: [restful/swagger] https://172.20.10.12:8443/swaggerui/ is mapped to folder /swagger-ui/
+E0816 12:28:53.573371   10465 controllermanager.go:337] Server isn't healthy yet.  Waiting a little while.
+2017-08-16 12:28:53.763875 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+2017-08-16 12:28:53.764367 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+2017-08-16 12:28:53.764721 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+2017-08-16 12:28:53.765012 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+2017-08-16 12:28:53.765209 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+2017-08-16 12:28:53.765404 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+2017-08-16 12:28:53.765581 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+2017-08-16 12:28:53.765824 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+E0816 12:28:53.768212   10465 reflector.go:201] github.com/openshift/origin/pkg/authorization/generated/informers/internalversion/factory.go:45: Failed to list *authorization.ClusterPolicy: Get https://172.20.10.12:8443/apis/authorization.openshift.io/v1/clusterpolicies?resourceVersion=0: dial tcp 172.20.10.12:8443: getsockopt: connection refused
+E0816 12:28:53.795271   10465 reflector.go:201] github.com/openshift/origin/pkg/authorization/generated/informers/internalversion/factory.go:45: Failed to list *authorization.ClusterPolicyBinding: Get https://172.20.10.12:8443/apis/authorization.openshift.io/v1/clusterpolicybindings?resourceVersion=0: dial tcp 172.20.10.12:8443: getsockopt: connection refused
+I0816 12:28:53.803573   10465 serve.go:86] Serving securely on 0.0.0.0:8443
+E0816 12:28:53.808729   10465 reflector.go:201] github.com/openshift/origin/pkg/authorization/generated/informers/internalversion/factory.go:45: Failed to list *authorization.PolicyBinding: Get https://172.20.10.12:8443/apis/authorization.openshift.io/v1/policybindings?resourceVersion=0: dial tcp 172.20.10.12:8443: getsockopt: connection refused
+I0816 12:28:53.813061   10465 trace.go:76] Trace[134624419]: "cacher *user.Group: List" (started: 2017-08-16 12:28:52.71661163 +0800 HKT) (total time: 1.094505168s):
+Trace[134624419]: [1.094505168s] [1.094505168s] END
+W0816 12:28:53.928903   10465 run_components.go:60] Binding DNS on port 8053 instead of 53, which may not be resolvable from all clients
+I0816 12:28:53.929824   10465 logs.go:41] skydns: ready for queries on cluster.local. for tcp4://0.0.0.0:8053 [rcache 0]
+I0816 12:28:53.930003   10465 logs.go:41] skydns: ready for queries on cluster.local. for udp4://0.0.0.0:8053 [rcache 0]
+E0816 12:28:54.021392   10465 controllermanager.go:337] Server isn't healthy yet.  Waiting a little while.
+I0816 12:28:54.042181   10465 run_components.go:86] DNS listening at 0.0.0.0:8053
+I0816 12:28:54.074352   10465 ensure.go:231] No cluster policy found.  Creating bootstrap policy based on: openshift.local.config/master/policy.json
+W0816 12:28:54.237877   10465 lease_endpoint_reconciler.go:176] Resetting endpoints for master service "kubernetes" to [172.20.10.12]
+I0816 12:28:55.056476   10465 start_master.go:715] Started serviceaccount-token controller
+2017-08-16 12:28:55.086606 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+2017-08-16 12:28:55.180744 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+2017-08-16 12:28:55.310171 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+2017-08-16 12:28:55.461005 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+2017-08-16 12:28:55.548356 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+2017-08-16 12:28:55.616467 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+2017-08-16 12:28:55.616852 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+2017-08-16 12:28:55.696291 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+2017-08-16 12:28:57.236001 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+I0816 12:28:57.586768   10465 ensure.go:216] Created default security context constraint privileged
+I0816 12:28:57.592577   10465 ensure.go:216] Created default security context constraint nonroot
+I0816 12:28:57.596266   10465 ensure.go:216] Created default security context constraint hostmount-anyuid
+I0816 12:28:57.600146   10465 ensure.go:216] Created default security context constraint hostaccess
+I0816 12:28:57.611517   10465 ensure.go:216] Created default security context constraint restricted
+I0816 12:28:57.633420   10465 ensure.go:216] Created default security context constraint anyuid
+I0816 12:28:57.642449   10465 ensure.go:216] Created default security context constraint hostnetwork
+2017-08-16 12:28:57.776439 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+I0816 12:28:57.794154   10465 start_master.go:783] Started "garbagecollector"
+I0816 12:28:57.794679   10465 garbagecollector.go:122] Garbage Collector: Initializing
+2017-08-16 12:28:57.795737 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+2017-08-16 12:28:57.854288 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+I0816 12:28:57.976506   10465 start_master.go:783] Started "replicaset"
+I0816 12:28:57.977438   10465 replica_set.go:155] Starting ReplicaSet controller
+2017-08-16 12:28:57.991111 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+I0816 12:28:58.082369   10465 start_master.go:783] Started "replicationcontroller"
+I0816 12:28:58.082823   10465 replication_controller.go:150] Starting RC Manager
+2017-08-16 12:28:58.103039 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+2017-08-16 12:28:58.141405 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+I0816 12:28:58.231360   10465 start_master.go:783] Started "openshift.io/unidling"
+2017-08-16 12:28:58.240343 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+I0816 12:28:58.364325   10465 start_master.go:783] Started "openshift.io/cluster-quota-reconciliation"
+I0816 12:28:58.400032   10465 start_master.go:783] Started "cronjob"
+I0816 12:28:58.401053   10465 cronjob_controller.go:95] Starting CronJob Manager
+I0816 12:28:58.453362   10465 start_master.go:783] Started "openshift.io/origin-namespace"
+I0816 12:28:59.801775   10465 docker.go:364] Connecting to docker on unix:///var/run/docker.sock
+I0816 12:28:59.803590   10465 docker.go:384] Start docker client with request timeout=2m0s
+W0816 12:29:00.016324   10465 cni.go:157] Unable to update cni config: No networks found in /etc/cni/net.d
+W0816 12:29:00.042802   10465 shared_informer.go:298] resyncPeriod 300000000000 is smaller than resyncCheckPeriod 600000000000 and the informer has already started. Changing it to 600000000000
+I0816 12:29:00.047107   10465 start_master.go:783] Started "namespace"
+I0816 12:29:00.054012   10465 namespace_controller.go:184] Starting the NamespaceController
+I0816 12:29:00.214072   10465 start_master.go:783] Started "disruption"
+W0816 12:29:00.214371   10465 start_master.go:765] "tokencleaner" is skipped
+W0816 12:29:00.214604   10465 start_master.go:765] "ttl" is skipped
+I0816 12:29:00.215958   10465 disruption.go:269] Starting disruption controller
+I0816 12:29:00.380371   10465 node_config.go:367] DNS Bind to 172.20.10.12:53
+I0816 12:29:00.381086   10465 start_node.go:345] Starting node ubuntu (v3.6.0+c4dd4cf)
+I0816 12:29:00.387196   10465 start_node.go:354] Connecting to API server https://172.20.10.12:8443
+I0816 12:29:00.388799   10465 docker.go:364] Connecting to docker on unix:///var/run/docker.sock
+I0816 12:29:00.389443   10465 docker.go:384] Start docker client with request timeout=2m0s
+I0816 12:29:00.450903   10465 node.go:134] Connecting to Docker at unix:///var/run/docker.sock
+I0816 12:29:00.585027   10465 feature_gate.go:144] feature gates: map[]
+I0816 12:29:00.590689   10465 manager.go:143] cAdvisor running in container: "/user.slice/user-201.slice"
+I0816 12:29:00.596675   10465 node.go:348] Using iptables Proxier.
+W0816 12:29:00.656588   10465 node.go:488] Failed to retrieve node info: nodes "ubuntu" not found
+F0816 12:29:00.659600   10465 node.go:373] error: Could not initialize Kubernetes Proxy. You must run this process as root to use the service proxy: can't set sysctl net/ipv4/conf/all/route_localnet: open /proc/sys/net/ipv4/conf/all/route_localnet: permission denied
+2017-08-16 12:29:00.870596 I | etcdserver/api/v3rpc: grpc: addrConn.resetTransport failed to create client transport: connection error: desc = "transport: dial tcp [::]:4001: connect: cannot assign requested address"; Reconnecting to {[::]:4001 <nil>}
+
