@@ -1,0 +1,760 @@
+手动配置 kubernetes
+├── K8S
+│   ├── admin-csr.json
+│   ├── apiserver-csr.json
+│   ├── ca-config.json
+│   ├── ca-csr.json
+│   ├── cfssl
+│   ├── cfssljson
+│   ├── k8s setup.txt
+│   ├── kube-apiserver.service
+│   ├── kube-controller-manager-csr.json
+│   ├── kube-controller-manager.service
+│   ├── kube-scheduler-csr.json
+│   ├── kube-scheduler.service
+│   └── setup-auth.sh
+└── LB
+    ├── check-nginx.sh
+    ├── k8s.conf
+    ├── keepalived.conf
+    ├── Load balance setup.txt
+    └── nginx.conf
+网络穿透
+├── frp
+│   └── 配置手册
+└── nps
+    └── nps配置说明.txt
+ansible
+├── ansible 2.17 安装使用手册.txt
+└── ansible 安装配置手册.txt
+awk使用.txt
+curl命令详解.txt
+django 相关
+├── bigtree 项目.txt
+├── bootstrap 3.0 学习记录.docx
+├── django 视频学习记录.txt
+├── django 学习.txt
+└── python 的fabric 库.txt
+docker 19.x 相关 - 来之官方文档.txt
+docker registry ui(s)
+└── harbor
+elk-stack-guide-cn.pdf
+gdb调试.txt
+Google-File-System中文版_1.0.pdf
+google.pdf
+iptables删除某条记录.txt
+jenkins.txt
+k8s 日常操作&k8s v1.30.0备份
+├── 通过 kubeadm 升级 k8s 配置 feature gates 失败(已解决).txt
+├── 污点和容忍度.txt
+└── kubernetes 官方文档 - 任务
+    ├── k8s operation-10.txt
+    ├── k8s operation-1.txt
+    ├── k8s operation-2.txt
+    ├── k8s operation-3.txt
+    ├── k8s operation-4.txt
+    ├── k8s operation-5.txt
+    ├── k8s operation-6.txt
+    ├── k8s operation-7.txt
+    ├── k8s operation-8.txt
+    ├── k8s operation-9.txt
+    └── k8s operation-索引.txt
+k8s,docker,etcd,elk,harbor 操作笔记
+├── ELK 简单配置及filebeat,fluentd 推送日志到 ELK.txt
+├── etcd
+│   ├── etcd v3.3.13 参数,证书及启动.txt
+│   └── etcd v3.5
+│       ├── all.environment.variables.conf
+│       ├── ca-config.json
+│       ├── ca-csr.json
+│       ├── cfssl
+│       ├── cfssljson
+│       ├── client.json
+│       ├── etcd1.json
+│       ├── etcd2.json
+│       ├── etcd3.json
+│       ├── etcd.conf
+│       ├── etcd.no-auth.conf
+│       ├── etcd.service
+│       ├── etcd v3.5 使用系统服务启动及证书生成.txt
+│       ├── server.json
+│       └── setup-auth.sh
+├── etcdctl 命令及 k8s 的数据结构说明.txt
+├── k8s 卷,持久卷等等存储资源描述.txt
+├── k8s 中无法删除 namespace 的解决方法
+├── k8s Gatekeeper(OPA) 设置.txt
+├── k8s ingress-nginx 设置.txt
+├── RBAC 设置及操作.txt
+└── ubuntu 中删除 snap的docker
+k8s v1.29.3 安装及升级.txt
+kubernetes 官方文档 - 概念(未完).txt
+Languages
+├── c++
+│   ├── 变参函数.txt
+│   ├── 变参模板.txt
+│   ├── 操作符重载.txt
+│   ├── 代码风格.txt
+│   ├── 读书笔记.docx
+│   ├── 关于STL的经验.txt
+│   ├── 规则及有效方法.txt
+│   ├── 函数
+│   │   ├── assert.txt
+│   │   ├── c++时间函数转换到其他格式.txt
+│   │   ├── c++(时间函数).txt
+│   │   ├── calloc.txt
+│   │   ├── close.txt
+│   │   ├── fcntl.txt
+│   │   ├── free.txt
+│   │   ├── gethostbyname.txt
+│   │   ├── main()函数.txt
+│   │   ├── md5函数.txt
+│   │   ├── mem系列函数
+│   │   │   ├── memcpy.txt
+│   │   │   ├── memmove.txt
+│   │   │   └── memset.txt
+│   │   ├── pthread.txt
+│   │   ├── sendto.txt
+│   │   ├── sockaddr_in.txt
+│   │   ├── stat.txt
+│   │   ├── string和char转换.txt
+│   │   ├── struct ip.txt
+│   │   └── struct tcphdr.txt
+│   ├── 基本类型及占位.txt
+│   ├── 精度.txt
+│   ├── 库
+│   │   ├── 构造get请求头.txt
+│   │   ├── ACE.txt
+│   │   ├── boost
+│   │   │   ├── 日期和时间.txt
+│   │   │   ├── any.txt
+│   │   │   ├── boost安装.txt
+│   │   │   ├── boost程序.txt
+│   │   │   ├── boost及eclipse.txt
+│   │   │   ├── boost库列表.txt
+│   │   │   ├── boost同步.txt
+│   │   │   ├── function&bind.txt
+│   │   │   ├── noncopyable&enable_shared_from _this.txt
+│   │   │   ├── program_options.txt
+│   │   │   └── program_options~.txt
+│   │   ├── google abseil.txt
+│   │   ├── grpc
+│   │   │   ├── 无标题文档 2.txt
+│   │   │   ├── 无标题文档 3.txt
+│   │   │   ├── google protocol buff.txt
+│   │   │   ├── gperftools.txt
+│   │   │   ├── gRPC.txt
+│   │   │   └── Protocol Buffers
+│   │   ├── hpx.txt
+│   │   ├── libevent.txt
+│   │   ├── libhdfs.txt
+│   │   ├── libmemcached.txt
+│   │   ├── libpacp.txt
+│   │   ├── mpich.txt
+│   │   ├── muduo.txt
+│   │   ├── pistache
+│   │   │   ├── 官方文档翻译.txt
+│   │   │   └── 实现及实例.txt
+│   │   ├── pistache.txt
+│   │   ├── tbb.txt
+│   │   └── thrift.txt
+│   ├── 类型长度头文件.txt
+│   ├── 强制类型转换.txt
+│   ├── 去除const属性.txt
+│   ├── 容器.txt
+│   ├── 设计模式
+│   │   ├── AbstractFactory模式.txt
+│   │   ├── Adapter模式.txt
+│   │   ├── Bridge模式.txt
+│   │   ├── builder模式.txt
+│   │   ├── Decorator模式.txt
+│   │   ├── Facade模式.txt
+│   │   ├── factory模式.txt
+│   │   ├── Flyweight模式.txt
+│   │   ├── observer模式.txt
+│   │   ├── Proxy模式.txt
+│   │   ├── singleton模式.txt
+│   │   ├── Strategy模式.txt
+│   │   └── template模式.txt
+│   ├── 时间对换.txt
+│   ├── 我们必须.txt
+│   ├── 线程
+│   │   ├── 前20大C++多线程错误以及如何避免这些错误.txt
+│   │   ├── 条件变量.txt
+│   │   ├── 通用FAQ.txt
+│   │   ├── 线程相关.txt
+│   │   ├── 线程.doc
+│   │   ├── eclipse线程设置.txt
+│   │   ├── futre,async,promise,packaged_task.txt
+│   │   └── shared_ptr与线程安全队列与栈.txt
+│   ├── 指针
+│   │   ├── 堆栈.txt
+│   │   ├── 队列.txt
+│   │   ├── 函数指针.txt
+│   │   ├── 结构作为参数(指针,引用).txt
+│   │   ├── 双向链表.txt
+│   │   ├── 指針參數,值參數.txt
+│   │   ├── 指针及结构.txt
+│   │   ├── 指针,引用.txt
+│   │   ├── 指针与一维数组.txt
+│   │   ├── 指针const操作.txt
+│   │   ├── 字符串库函数.txt
+│   │   ├── 字符串指针操作.txt
+│   │   └── new,delete,malloc,free.txt
+│   ├── 最小公倍数和最大公约数.txt
+│   ├── c++11
+│   │   ├── 智能指针.txt
+│   │   ├── c++11支持.txt
+│   │   ├── c++报错.txt
+│   │   ├── c++笔记.txt
+│   │   ├── C ++技术文章片段.txt
+│   │   ├── ecplise 设置.txt
+│   │   ├── pimpl技法.txt
+│   │   └── Tuple.txt
+│   ├── c+ 11 冒号循环
+│   ├── c++类设计之前需要考虑的问题.docx
+│   ├── c++中的坑与注意事项.txt
+│   ├── c++中奇怪的关键字.txt
+│   ├── debug.txt
+│   ├── eplise中项目文件的设置.txt
+│   ├── gcc编译错误.txt
+│   ├── gcc 编译选项.txt
+│   ├── gethostbyname.txt
+│   ├── google glog日志库
+│   │   └── 事例.txt
+│   ├── googletest
+│   │   └── 属性.txt
+│   ├── IO.txt
+│   ├── mutable.txt
+│   ├── pthread.txt
+│   ├── sendto.txt
+│   ├── sockaddr_in.txt
+│   ├── struct ip.txt
+│   ├── struct tcphdr.txt
+│   └── this指針.txt
+├── eclipse快捷键.txt
+├── eplise中项目文件的设置.txt
+├── gcc
+│   ├── 手动编译.txt
+│   ├── codeviz+graphviz.txt
+│   └── gcc4.8.2编译.txt
+linux 命令解释
+├── csplit 命令.txt
+├── curl 部分参数解释.xlsx
+├── curl 命令详解.txt
+├── fmt 命令.txt
+├── git 命令.txt
+├── iptables删除某条记录.txt
+├── join 命令.txt
+├── linux 性能分析工具.txt
+├── linux eval 命令.txt
+├── look 命令.txt
+├── ltrace 命令.txt
+├── shuf 命令.txt
+├── split 命令.txt
+├── strace 命令.txt
+├── xargs 使用.txt
+└── yes 命令.txt
+mapreduce-osdi04.pdf
+my.cnf
+O&M(Operation and Maintenance)
+├── 代码仓库
+│   ├── git操作.txt
+│   └── svn服务器.txt
+├── 分布式系统
+│   ├── ceph
+│   │   └── 安装配置.txt
+│   ├── fastdfs安装及php配置.docx
+│   ├── fastdfs客户端及返回值.txt
+│   ├── glusterFS
+│   │   ├── 安装配置手册.txt
+│   │   ├── glusterFS-20170322故障.txt
+│   │   └── glusterfs with k8s for grafana
+│   │       ├── glusterfs-endpoints.yaml
+│   │       ├── glusterfs-for-grafana-pvc.yaml
+│   │       ├── glusterfs-for-grafana-pv.yaml
+│   │       ├── glusterfs-svc.yaml
+│   │       ├── grafana-deploy.yaml
+│   │       └── grafana-svc.yaml
+│   ├── hadoop2.7.1
+│   │   ├── hadoop1.2.1.txt
+│   │   ├── hadoop2.4.1.txt
+│   │   ├── hadoop2.7.1配置.txt
+│   │   └── hadoop-2.7.1_hbae-1.1.2详细配置.txt
+│   └── torus.txt
+├── 服务
+│   ├── 负载均衡
+│   │   └── lvs.txt
+│   ├── 数据库
+│   │   ├── mysql参数调整.txt
+│   │   ├── mysql及集群
+│   │   │   ├── galera cluster笔记.txt
+│   │   │   ├── Galera Cluster.txt
+│   │   │   ├── mysql参数.txt
+│   │   │   ├── mysql操作.txt
+│   │   │   ├── mysql查看存储过程.txt
+│   │   │   ├── mysql触发器.txt
+│   │   │   ├── mysql手册笔记1.txt
+│   │   │   ├── mysql手册笔记2.txt
+│   │   │   ├── mysql_connect.txt
+│   │   │   ├── mysql.txt
+│   │   │   └── xtrabackup.txt
+│   │   ├── mysql相关技术及工具.txt
+│   │   ├── my.txt
+│   │   ├── oracle学习笔记.txt
+│   │   └── vitess.txt
+│   ├── NoSQL
+│   │   ├── mongodb
+│   │   │   ├── 新建文本文档.txt
+│   │   │   ├── mongodb操作.txt
+│   │   │   ├── mongodb.txt
+│   │   │   └── mongodb v4.0.10
+│   │   │       ├── 无标题文档 2
+│   │   │       ├── aa
+│   │   │       └── readme.txt
+│   │   ├── redis命令.txt
+│   │   └── redis.txt
+│   ├── rsyncd
+│   │   ├── 配置文档.txt
+│   │   └── rsyncd.conf
+│   └── web&cache&中间件
+│       ├── memcache及相关.txt
+│       ├── nginx
+│       │   ├── nginx-1.9.9
+│       │   │   ├── nginx1.99_install.txt
+│       │   │   ├── nginx参数.txt
+│       │   │   └── nginx操作命令
+│       │   ├── nginx代码分析
+│       │   │   ├── ngx1.txt
+│       │   │   └── ngx.txt
+│       │   └── nginx模板文件.txt
+│       ├── php加速器.txt
+│       ├── tomcat相关
+│       │   ├── tomcat管理平台应用.txt
+│       │   └── tomcat日志记录.txt
+│       └── varnish
+│           ├── varnish基本操作命令.txt
+│           ├── varnish.txt
+│           └── varnish-v4.1.2安装及配置.txt
+├── 服务发现
+│   └── consul配置手册.txt
+├── 监控
+│   ├── cacti
+│   │   ├── cacti.txt
+│   │   └── snmp.txt
+│   ├── cacti时间精度.txt
+│   ├── cacti修改连接数据库端口.txt
+│   ├── ELK
+│   │   └── ELK使用说明.docx
+│   ├── nagios4.1.1
+│   │   ├── 安装配置.txt
+│   │   └── nrpe.cfg
+│   ├── nagios的nrpe安装设置.txt
+│   ├── prometheus
+│   │   ├── dashboard
+│   │   │   └── kubernetes-pod-monitoring_rev1.json
+│   │   ├── plugs
+│   │   │   ├── node-exporter-ds.yaml
+│   │   │   └── node-exporter-service.yaml
+│   │   ├── prometheus for k8s
+│   │   │   ├── configmap.yaml
+│   │   │   ├── prometheus.deploy.yaml
+│   │   │   ├── prometheus.svc.yaml
+│   │   │   └── rbac-setup.yaml
+│   │   ├── prometheus.yaml.default
+│   │   └── readme.txt
+│   ├── rrdtool.txt
+│   └── zabbix
+│       ├── zabbix 2.4.6安装配置.txt
+│       ├── zabbix_agentd.conf
+│       ├── zabbix_server.conf
+│       └── zabbix v4.4.x
+│           ├── zabbix监控mongodb.txt
+│           ├── zabbix监控postgres.txt
+│           ├── zabbix监控rabbitmq.txt
+│           ├── zabbix监控redis.txt
+│           ├── zabbix配置邮件报警及设置对应报警项目.docx
+│           ├── zabbix添加WEB监控项目.docx
+│           ├── zabbix agent配置.txt
+│           ├── zabbix for activemq
+│           │   ├── zabbix_activemq.py
+│           │   └── zbx-activemq-template.xml
+│           ├── zabbix for nginx
+│           │   └── zabbix_monitor_nginx_template_ttlsa_com.zip
+│           ├── zabbix for rabbitmq
+│           │   └── rabbitmq-zabbix-master.zip
+│           └── zabbix for redis
+│               ├── zbx_export_templates.xml
+│               └── zbx_redis_by_piotr_sikora.xml
+├── 日志
+│   ├── goaccess.txt
+│   └── splunk.txt
+├── 容器及云平台
+│   ├── docker
+│   │   ├── 镜像及容器操作命令.txt
+│   │   ├── 容器操作.xlsx
+│   │   ├── docker安装配置.txt
+│   │   ├── docker代理设置.txt
+│   │   ├── docker基本操作.txt
+│   │   ├── docker容器初始化.txt
+│   │   ├── docker私有仓库.txt
+│   │   ├── docker相关.txt
+│   │   ├── docker指令.jpg
+│   │   ├── Dockerfile
+│   │   │   ├──  实例手册.txt
+│   │   │   └── dockerfile相关.txt
+│   │   ├── Dockerfile文件中的启动脚本说明.txt
+│   │   ├── docker inspect参数.txt
+│   │   └── docker network参数.txt
+│   ├── docker指令.jpg
+│   ├── docker registry ui(s)
+│   │   └── harbor
+│   │       ├── 使用curl的方式操作harbor.txt
+│   │       ├── FAQ.txt
+│   │       ├── harbor container.txt
+│   │       ├── harbor.txt
+│   │       └── readme.txt
+│   ├── istio
+│   │   └── istio及例子.txt
+│   ├── kubernetes报错.txt
+│   ├── kubernetes-and-deployment-k8s-overview.png
+│   ├── Kubernetes Dashboard.txt
+│   ├── Kubernetes Dashboard - v1.0.1.txt
+│   ├── kubernets&etcd&fannel&docker
+│   │   ├── 2016-06-24-demystifying-kubernetes-and-deployment-k8s-overview.png
+│   │   ├── 安装文档
+│   │   │   └── v1.3.10
+│   │   │       ├── 使用说明.txt
+│   │   │       ├── 维护手册.txt
+│   │   │       ├── etcd
+│   │   │       │   ├── etcd-startup.sh
+│   │   │       │   ├── first-install-etcd.sh
+│   │   │       │   └── srv.etcd
+│   │   │       ├── etcd安装配置.txt
+│   │   │       ├── GLOBAL-ENV
+│   │   │       ├── init-os-centos7.x.sh
+│   │   │       ├── master
+│   │   │       │   ├── srv.kube-apiserver
+│   │   │       │   ├── srv.kube-controller-manager
+│   │   │       │   ├── srv.kube-dns
+│   │   │       │   └── srv.kube-scheduler
+│   │   │       ├── master-install.sh
+│   │   │       ├── master-startup.sh
+│   │   │       ├── other
+│   │   │       │   └── kubernetes-dashboard.yaml
+│   │   │       ├── slave
+│   │   │       │   ├── mk-docker-opts.sh
+│   │   │       │   ├── set-docker
+│   │   │       │   ├── set-netbridge
+│   │   │       │   ├── srv.docker
+│   │   │       │   ├── srv.flanneld
+│   │   │       │   ├── srv.kubelet
+│   │   │       │   └── srv.kube-proxy
+│   │   │       ├── slave-install.sh
+│   │   │       └── slave-startup.sh
+│   │   ├── 汇总(最原始docker 1.12,k8s 1.3).txt
+│   │   ├── 镜像注意事项.txt
+│   │   ├── 新镜像注意.txt
+│   │   ├── etcd
+│   │   │   ├── etcd安装配置.txt
+│   │   │   └── etcd.conf
+│   │   ├── flannel
+│   │   │   ├── docker利用flannel来保证docker容器间的通讯.txt
+│   │   │   └── flannel安装配置.txt
+│   │   ├── k8s相关yaml文件
+│   │   │   ├── 容器集群.txt
+│   │   │   ├── ELK
+│   │   │   │   ├── elasticsearch_deployment.yaml
+│   │   │   │   ├── kibana_deployment.yaml
+│   │   │   │   ├── kibana_service.yaml
+│   │   │   │   ├── logstash01_deployment.yaml
+│   │   │   │   ├── logstash01_service.yaml
+│   │   │   │   └── logstash_deployment.yaml
+│   │   │   ├── kubernetes-dashboard
+│   │   │   │   ├── kubernetes-dashboard-service.yaml
+│   │   │   │   └── kubernetes-dashboard.yaml
+│   │   │   ├── murder
+│   │   │   │   ├── tracker_deployment.yaml
+│   │   │   │   └── tracker_service.yaml
+│   │   │   ├── namespace.yaml
+│   │   │   ├── nexus
+│   │   │   │   ├── nexus_deployment.yaml
+│   │   │   │   └── nexus_service.yaml
+│   │   │   ├── petset
+│   │   │   │   ├── petset-test.yaml
+│   │   │   │   └── petset.yaml
+│   │   │   ├── rsync
+│   │   │   │   ├── rsync_deployment.yaml
+│   │   │   │   ├── rsync_log_service.yaml
+│   │   │   │   └── rsync_service.yaml
+│   │   │   ├── tyyx
+│   │   │   │   ├── 端口
+│   │   │   │   └── test
+│   │   │   │       ├── txxy_memcached_deployment.yaml
+│   │   │   │       ├── txxy_memcached_service.yaml
+│   │   │   │       ├── txxy_mysql_deployment.yaml
+│   │   │   │       ├── txxy_mysql_service.yaml
+│   │   │   │       ├── txxy_redis_deployment.yaml
+│   │   │   │       ├── txxy_redis_service.yaml
+│   │   │   │       ├── txxy_tomcat_cms_deployment.yaml
+│   │   │   │       ├── txxy_tomcat_cms_service.yaml
+│   │   │   │       ├── txxy_tomcat_open_deployment.yaml
+│   │   │   │       ├── txxy_tomcat_open_service.yaml
+│   │   │   │       ├── txxy_zookeeper_deployment.yaml
+│   │   │   │       └── txxy_zookeeper_service.yaml
+│   │   │   └── zabbix
+│   │   │       ├── zabbix_mysql_deployment.yaml
+│   │   │       └── zabbix_mysql_services.yaml
+│   │   ├── k8s v1.14
+│   │   │   ├── 汇总-docker-18.09.06+k8s-v1.14+flannel-v0.11.0+etcd-v3.3.txt
+│   │   │   ├── etcd
+│   │   │   │   ├── etcd证书及启动.txt
+│   │   │   │   └── PKI相关.txt
+│   │   │   ├── init.sh
+│   │   ├── k8s v1.3.x
+│   │   │   ├── 汇总-docker1.12+k8s1.3.x+flannel+etcd3.0.txt
+│   │   │   ├── kubectl命令参数及用法.txt
+│   │   │   ├── kubernetes 1.3新特性.txt
+│   │   │   ├── kubernetes管理平台Dashboard配置.txt
+│   │   │   ├── kubernetes-dashboard.txt
+│   │   │   ├── kubernets及相关集群启动次序.txt
+│   │   │   ├── kubernets及docker相关FAQ.txt
+│   │   │   └── kubernets使用及启动脚本.txt
+│   │   ├── k8s v1.8
+│   │   │   ├── 汇总-docker17.03+k8s-v1.8.7+flannel-v0.10.0+etcd-v3.2.txt
+│   │   │   ├── 启动脚本
+│   │   │   │   ├── GLOBAL-ENV
+│   │   │   │   ├── srv.etcd
+│   │   │   │   ├── srv.flanneld
+│   │   │   │   ├── srv.kube-apiserver
+│   │   │   │   ├── srv.kube-controller-manager
+│   │   │   │   ├── srv.kubelet
+│   │   │   │   ├── srv.kube-proxy
+│   │   │   │   └── srv.kube-scheduler
+│   │   │   ├── 认证模式
+│   │   │   │   ├── 官方x509证书服务端.txt
+│   │   │   │   ├── bootstrap.txt
+│   │   │   │   ├── k8s证书生成.txt
+│   │   │   │   └── kubelet认证及授权方式.txt
+│   │   │   ├── 资源.txt
+│   │   │   ├── api server注意事项.txt
+│   │   │   ├── docker镜像制作.txt
+│   │   │   ├── docker_start.sh
+│   │   │   ├── kube-controller-manager注意事项.txt
+│   │   │   └── kubelet注意事项.txt
+│   │   ├── rc,service,pod标准定义文件.txt
+│   │   ├── scripts
+│   │   │   ├── putWarToRsync.sh
+│   │   │   └── srv.jenkins
+│   │   └── src
+│   │       └── Docker镜像
+│   │           └── project
+│   │               ├── ActiveMQ
+│   │               │   ├── 集群模式.txt
+│   │               │   ├── 技术手册.txt
+│   │               │   ├── activeMQ容器化说明文档.txt
+│   │               │   ├── Dockerfile
+│   │               │   └── entrypoint.sh
+│   │               ├── base
+│   │               │   ├── checkpage.txt
+│   │               │   ├── checkServices.sh
+│   │               │   ├── Dockerfile
+│   │               │   ├── profile
+│   │               │   ├── scheduledTasks
+│   │               │   ├── start.sh
+│   │               │   └── watchdog.sh
+│   │               ├── centos
+│   │               │   └── Dockerfile
+│   │               ├── clock
+│   │               │   ├── checkpage.txt
+│   │               │   ├── checkServices.sh
+│   │               │   ├── Dockerfile
+│   │               │   ├── profile
+│   │               │   ├── quarzCon.properties
+│   │               │   ├── scheduledTasks
+│   │               │   ├── start.sh
+│   │               │   └── watchdog.sh
+│   │               ├── ftp
+│   │               │   ├── Dockerfile
+│   │               │   └── start.sh
+│   │               └── itfc
+│   │                   ├── checkpage.txt
+│   │                   ├── checkServices.sh
+│   │                   └── Dockerfile
+│   ├── mesos
+│   │   ├── marathon安装文档.txt
+│   │   ├── marathon使用.txt
+│   │   ├── mesos使用启动.txt
+│   │   └── singularity.txt
+│   ├── openshift
+│   │   ├── 80-openshift-sdn.conf.txt
+│   │   ├── 使用手册.txt
+│   │   ├── a.sh
+│   │   ├── b.sh
+│   │   ├── centos7安装openshift.txt
+│   │   ├── centos7无密码登录.txt
+│   │   ├── CONTRIBUTING.adoc
+│   │   ├── c.sh
+│   │   ├── dnsmasq
+│   │   ├── hosts.origin.example
+│   │   ├── master-config.yaml
+│   │   ├── node启动日志.txt
+│   │   ├── openshift包及网盘.txt
+│   │   ├── openshift启动报错日志.txt
+│   │   ├── openshift相关.txt
+│   │   ├── openshift-master.kubeconfig
+│   │   ├── readme.txt
+│   │   └── scripts
+│   │       ├── 1.sh
+│   │       ├── 2.sh
+│   │       ├── 3.sh
+│   │       ├── set-socket.sh
+│   │       └── srv.dockerd
+│   └── rancher
+│       ├── cluster.yml
+│       └── kube_config_cluster.yml
+├── 系统,应用,工具程序
+│   ├── 动态静态库.txt
+│   ├── 小型代理.txt
+│   ├── 修改全局代理变量.txt
+│   ├── curl命令详解.txt
+│   ├── curl.txt
+│   ├── dbt2安装及压力测试.txt
+│   ├── glances.txt
+│   ├── ip命令参数.txt
+│   ├── iptables内网共享上网.txt
+│   ├── iredmail 设置.txt
+│   ├── linux编译有关命令.txt
+│   ├── linux服务器记录登录后所有操作.txt
+│   ├── linux date命令及函数.txt
+│   ├── linux log设置.txt
+│   ├── linux rsync设置.txt
+│   ├── mediawiki安装配置.txt
+│   ├── murder.txt
+│   ├── mutt邮件命令行工具.txt
+│   ├── raid及相关.txt
+│   ├── SharePoint安装使用.txt
+│   ├── shell执行错误提示.txt
+│   ├── TCP数据包分析.txt
+│   ├── tengine安装(失败).txt
+│   └── ulimit参数.txt
+├── 压力测试
+│   └── sysbench
+│       └── sysbench_command.txt
+├── 知识库
+│   └── redmine
+│       └── redmine.txt
+├── 自动化
+│   ├── ansible
+│   │   ├── ansible配置.txt
+│   │   ├── ansible支持windows
+│   │   │   ├── 使用windows的ssh远程功能.txt
+│   │   │   ├── ConfigureRemotingForAnsible.ps1
+│   │   │   ├── install-powershell.ps1
+│   │   │   ├── MicrosoftRootCertificateAuthority2011.cer
+│   │   │   ├── upgrade_to_ps3.ps1
+│   │   │   └── uptime.py
+│   │   └── ansible-tran.epub
+│   ├── cobbler自动化安装
+│   │   └── cobbler.txt
+│   ├── puppet.txt
+│   ├── rundeck2.6.4.txt
+│   ├── rundeck容器.txt
+│   ├── salt.doc
+│   ├── stackstorm
+│   │   ├── 报错.txt
+│   │   ├── 官方操作.txt
+│   │   ├── 流程.txt
+│   │   ├── stackstorm表.txt
+│   │   └── stackstorm技术手册.txt
+│   └── stackstorm的workflow
+│       └── ActionChain - StackStorm 2.7.2文档.pdf
+├── CI&CD
+│   └── jenkins.txt
+└── CMDB
+    └── cmdbuild
+        └── cmdbuild.txt
+OS
+├── coreos-install.txt
+├── coreos.txt
+├── freebsd 12.0使用.txt
+└── ubuntu
+    ├── clean.txt
+    └── pkg.txt
+README.md
+rundeck容器.txt
+Scripting language
+├── perl笔记
+│   ├── 符号应用(typeglob,别名).txt
+│   ├── 文件操作.txt
+│   ├── 文件时间对比.txt
+│   ├── 子程序传递引用.txt
+│   ├── 字符串处理函数.txt
+│   ├── get_cpu.txt
+│   ├── localtime,stats函数.txt
+│   ├── perl入门学习笔记.txt
+│   ├── perl实现自动化管理.txt
+│   ├── perl系统变量.txt
+│   ├── perl学习笔记.txt
+│   ├── perl正则表达式汇总.txt
+│   └── perl dbi.txt
+└── php
+    ├── memcache及相关
+    ├── php加速器
+    └── symfony.txt
+sed 例子.txt
+shell 工具汇总说明(good).txt
+shell及管道技巧.txt
+shell及管道,awk技巧.txt
+shell使用.txt
+shell条件判断.txt
+SRE 读书笔记.docx
+tensorflow
+├── 0. 预备知识(重要,优先阅读).docx
+├── 10. 张量切片简介.docx
+├── 11. Keras Sequential 模型.docx
+├── 12. Keras functional api 模型.docx
+├── 13. Keras 使用内置方法进行训练和评估.docx
+├── 14. Keras 通过子类化创建新的层和模型.docx
+├── 15. Keras 保存,序列化,导出模型.docx
+├── 16. Keras 自定义保存和序列化.docx
+├── 17. Keras 与预处理层一起工作.docx
+├── 18. Keras 自定义 fit 过程.docx
+├── 19. Keras 从头开始编写循环.docx
+├── 1. 基础知识 - (tensor)张量.docx
+├── 20. Keras 循环神经网络 RNN.docx
+├── 21. Keras 中的填充(padding(和遮盖(masking).docx
+├── 22. Keras 编写自己的回调函数.docx
+├── 23. Keras 迁移学习及微调.docx
+├── 2. 基础知识 - Variable(不是指变量,这里是一个构造函数).docx
+├── 3. 计算图和 tf.function.docx
+├── 4. 模块,层和模型.docx
+├── 5. 基本训练循环.docx
+├── 6. 高级自动微分.docx
+├── 7. 不规则张量.docx
+├── 8. 稀疏张量.docx
+├── 9. TensorFlow 上的 NumPy API.docx
+├── 必备知识
+│   ├── keras 3.9 - Datasets.txt
+│   ├── matplotlib 使用.docx
+│   ├── matplotlib pyplot API 说明.docx
+│   ├── scikit-image 简要例子及用法.docx
+│   └── scikit-image API 说明.docx
+├── 函数.docx
+├── 函数 - Keras.docx
+├── 函数 - Tensorflow.docx
+├── 使用模型流程.docx
+├── 使用keras 来进行训练流程.txt
+├── colab(google神经网络训练平台) 使用方式.txt
+├── keras 3.9 中的层.txt
+├── keras 3.9 API 简述.txt
+├── keras 3.9 API - OPS API 函数.txt
+├── keras 使用流程.txt
+├── python 中的 with as 关键字.txt
+├── python 中类普及知识.txt
+├── tensorflow 2.16.1 API.txt
+└── tensorflow 安装配置.txt
+tldr 命令,man 的简易版本.txt
+vim 设置.txt
+vs code 配置.txt
+xargs使用.txt
+
