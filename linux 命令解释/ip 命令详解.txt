@@ -1,0 +1,55 @@
+ip命令对象介绍
+Usage: ip [ OPTIONS ] OBJECT { COMMAND | help }
+       ip [ -force ] -batch filename
+where  OBJECT := { address | addrlabel | fou | help | ila | ioam | l2tp | link |
+                   macsec | maddress | monitor | mptcp | mroute | mrule |
+                   neighbor | neighbour | netconf | netns | nexthop | ntable |
+                   ntbl | route | rule | sr | stats | tap | tcpmetrics |
+                   token | tunnel | tuntap | vrf | xfrm }
+       OPTIONS := { -V[ersion] | -s[tatistics] | -d[etails] | -r[esolve] |
+                    -h[uman-readable] | -iec | -j[son] | -p[retty] |
+                    -f[amily] { inet | inet6 | mpls | bridge | link } |
+                    -4 | -6 | -M | -B | -0 |
+                    -l[oops] { maximum-addr-flush-attempts } | -echo | -br[ief] |
+                    -o[neline] | -t[imestamp] | -ts[hort] | -b[atch] [filename] |
+                    -rc[vbuf] [size] | -n[etns] name | -N[umeric] | -a[ll] |
+                    -c[olor]}
+
+
+对象参数释义:
+------------------------------------
+对象            释义
+link          网络设备
+address       设备的协议地址(IP或IPv6)
+addrlabel     用于协议地址选择的标签配置
+route         路由表项
+rule          路由策略数据库中的规则
+neighbour     管理ARP或NDISC缓存项
+ntable        管理邻居cache的操作
+tunnel        IP隧道
+tuntap        管理TUN/TAP设备
+maddress      多播地址
+mroute        组播路由缓存项
+mrule         组播路由策略数据库中的规则
+monitor       监控netlink消息
+xfrm          管理IPSec策略
+l2tp          隧道以太网over IP (L2TPv3)
+-------------------------------------------
+
+选项介绍:
+-V: 显示指令版本信息;
+-s: 输出更详细的信息;
+-d: 输出更详细的信息
+-r: 使用系统的名称解析器来打印DNS名称而不是主机地址
+-h: 输出带有人类可读值的统计信息,后面跟着后缀
+-f: 强制使用指定的协议族;
+-4: 指定使用的网络层协议是IPv4协议;
+-6: 指定使用的网络层协议是IPv6协议;
+-0: 输出信息每条记录输出一行,即使内容较多也不换行显示;
+-l: 指定“ip地址刷新”逻辑在放弃之前尝试的最大循环次数。默认值是10。零(0)表示循环,直到移除所有地址
+-b: 从提供的文件或标准输入中读取命令并调用它们。第一次失败将导致ip终止
+-o: 在单行上输出每个记录,用'\'字符替换换行。这在你需要的时候很方便以wc(1)或grep(1)计数输出记录
+-rc: 设置netlink套接字接收缓冲区大小,默认为1MB
+-n: 将ip切换到指定的网络命名空间NETNS
+————————————————
+

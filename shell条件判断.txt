@@ -269,3 +269,15 @@ fi
 # -d 表示目录,-t表示在/tmp目录,如果没有-t则在当前目录下生成目录和文件
 mktemp -d -t tmp.XXXXX
 
+
+对于浮点数的比较，上述的方式无法使用
+a=2.3
+if [ `echo "$a < 2.0" |bc` -eq 1 ];then
+  echo "$a < 2.0"
+else
+  echo "$a > 2.0"
+fi
+
+
+
+

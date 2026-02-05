@@ -1,0 +1,269 @@
+OCSP 是一种新的 web 的 ssl 的证书认证方式，具体技术细节的不描述
+
+这里具体讲解配置方式
+环境：
+httpd 2.4.66
+
+1. 整个的配置重点是证书，这里使用的是自建 CA 及 server 证书，在正式的环境中用的都是权威机构颁发的 ca 和 server 证书
+要点：
+1.1 生成 CA 证书的时候，要指定 .cnf 文件，很重要，文件中标识了此 CA 用于何种目的.
+例子：使用安装 openssl 以后有的 openssl.cnf 文件是最好选择
+
+# 使用 openssl.cnf 配置时，需要的目录及文件
+mkdir demoCA
+mkdir demoCA/newcerts
+touch demoCA/index.txt
+touch demoCA/serial
+
+openssl genrsa -out private/ca.key 2048
+openssl req -new -x509 -days 3650 \
+	    -key private/ca.key \
+	    -out private/ca.crt  \
+	    -subj "/C=CN/ST=Beijing/L=Beijing/O=MyCompany/OU=IT/CN=www.example.com" \
+	    # CN 表示此证书要用于 www.example.com 这个网站，即最终配置的 web 服务用的 servername 及域名
+	    -config openssl.cnf
+
+# 命令用于查看证书的用途
+openssl x509 -noout -in private/ca.crt -purpose
+---------------------------------------------
+Certificate purposes:
+SSL client : Yes
+SSL client CA : Yes
+SSL server : Yes
+SSL server CA : Yes
+Netscape SSL server : Yes
+Netscape SSL server CA : Yes
+S/MIME signing : Yes
+S/MIME signing CA : Yes
+S/MIME encryption : Yes
+S/MIME encryption CA : Yes
+CRL signing : Yes
+CRL signing CA : Yes
+Any Purpose : Yes
+Any Purpose CA : Yes
+OCSP helper : Yes
+OCSP helper CA : Yes
+Time Stamp signing : No
+Time Stamp signing CA : Yes
+Code signing : No
+Code signing CA : Yes
+---------------------------------------------
+上述的输出几乎所有的用途都有。
+
+1.2 生成 server 证书的时候，指定的 .cnf 文件中必须包含这部分，表示开启 OCSP Signing 功能
+   同时必须开启 AIA 功能，AIA 功能是指在 SSL 的整个交互的过程中，用于证书吊销，及验证证书的 web 是另外的服务，没有通过配置本 web 来完成，即必须有 ocsp server 及 用于 ca 证书下载用的地址
+---------------------------------------------
+[v3_OCSP]
+basicConstraints 	= CA:FALSE
+keyUsage 		= digitalSignature
+extendedKeyUsage 	= OCSP Signing
+subjectKeyIdentifier 	= hash
+---------------------------------------------
+
+openssl genrsa -out private/server.key 2048
+openssl req -new \
+    -key private/server.key \
+    -out server.csr \
+    -config req-ocsp.cnf
+
+详细 req-ocsp.cnf
+---------------------------------------------
+[req]
+default_bits       	= 4096
+default_keyfile    	= ca.key
+prompt 			        = no
+encrypt_key         = no
+distinguished_name 	= dn
+req_extensions 		  = ext
+x509_extensions    	= v3_OCSP
+
+[dn]
+C  			= CN
+ST 			= Beijing
+L 			= Beijing
+O 			= MyCompany
+OU 			= IT
+CN 			= www.example.com   # 注意这里一定要和配置的 web 服务的 servername 一致
+
+[v3_OCSP]
+basicConstraints 	    = CA:FALSE
+keyUsage 		          = digitalSignature
+extendedKeyUsage 	    = OCSP Signing
+subjectKeyIdentifier 	= hash
+
+[ext]
+subjectAltName 		= @alt_names
+
+[alt_names]
+IP.0 			  = 127.0.0.1
+DNS.0 			= example.com
+DNS.1 			= www.example.com
+DNS.2			  = ocsp.example.com
+DNS.3 			= ca.example.com
+DNS.4 			= crl.example.com
+DNS.3 			= *.example.com
+---------------------------------------------
+
+openssl ca -days 3650 -notext -batch \
+    -config <(cat openssl.cnf v3-ext.cnf) \
+    -extensions v3_ext \
+    -cert private/ca.crt \
+    -keyfile private/ca.key \
+    -in server.csr \
+    -out private/echocert.crt
+
+v3-ext.cnf 详细内容：
+---------------------------------------------
+[v3_ext]
+basicConstraints = CA:FALSE
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer
+keyUsage = digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth, clientAuth
+subjectAltName = @alt_names
+
+crlDistributionPoints = @crl_info
+authorityInfoAccess = @issuer_info    # 必须， AIA 功能
+
+[alt_names]
+IP.0 = 127.0.0.1
+DNS.0 = example.com
+DNS.1 = www.example.com
+DNS.2 = ocsp.example.com
+DNS.3 = ca.example.com
+DNS.4 = crl.example.com
+DNS.5 = *.example.com
+
+[crl_info]
+URI.0 = http://crl.example.com/crl.pem
+
+[ issuer_info ]
+caIssuers;URI.0 = http://ca.exmaple.com/ca.crt    # 用于下载 CA 的 url
+OCSP;URI.0 = http://ocsp.example.com:9090         # 用于 ocsp server
+---------------------------------------------
+
+# 当成功的生成上述的证书以后，此命令可以查看 AIA 的功能是否生效
+openssl x509 -text -noout -in /app/private/echocert.crt |  grep -A2 "Authority Information Access"
+---------------------------------------------
+Authority Information Access:
+                CA Issuers - URI:http://ca.exmaple.com/ca.crt
+                OCSP - URI:http://ocsp.example.com:9090
+---------------------------------------------
+
+# 此命令生成的证书用于在 httpd 的 ssl
+cat private/echocert.crt private/ca.crt > private/fullchain.pem
+
+2. 配置 httpd
+2.1 配置用于 ca 下载的 url - http://ca.exmaple.com/ca.crt
+开启 httpd.conf 中的 vhost，包括：
+Include conf/extra/httpd-vhosts.conf
+
+conf/extra/httpd-vhosts.conf 的配置
+---------------------------------------------
+<VirtualHost *:80>
+    ServerAdmin webmaster@ca.example.com
+    DocumentRoot "/usr/local/apache2/htdocs/ca.example.com"   # 注意目录，其他目录则得在
+                                                              #  httpd.conf 中设置权限
+    ServerName ca.example.com
+    ServerAlias www.ca.example.com
+    ErrorLog "logs/ca.example.com-error_log"
+    CustomLog "logs/ca.example.com-access_log" common
+</VirtualHost>
+---------------------------------------------
+
+2.2 配置 ssl
+开启 httpd.conf 中的 ssl，包括：
+LoadModule ssl_module modules/mod_ssl.so
+LoadModule socache_shmcb_module modules/mod_socache_shmcb.so
+
+Include conf/extra/httpd-ssl.conf
+
+
+conf/extra/httpd-ssl.conf 的配置
+---------------------------------------------
+Listen 443
+
+SSLCipherSuite HIGH:MEDIUM:!MD5:!RC4:!3DES
+SSLProxyCipherSuite HIGH:MEDIUM:!MD5:!RC4:!3DES
+
+SSLHonorCipherOrder on
+
+SSLProtocol all -SSLv3
+SSLProxyProtocol all -SSLv3
+
+SSLPassPhraseDialog  builtin
+
+SSLSessionCache        "shmcb:/usr/local/apache2/logs/ssl_scache(512000)"
+SSLSessionCacheTimeout  300
+
+SSLUseStapling On     # 开启 stapling 必须
+
+SSLStaplingCache "shmcb:/usr/local/apache2/logs/ssl_stapling(128000)"   # 开启 stapling 必须
+
+<VirtualHost _default_:443>
+
+DocumentRoot "/usr/local/apache2/htdocs"
+ServerName www.example.com:443    # 用于访问的域名
+ServerAdmin you@example.com
+ErrorLog /usr/local/apache2/logs/ssl-error.log
+TransferLog /usr/local/apache2/logs/ssl-transferlog.log
+
+SSLEngine on
+
+SSLCertificateFile "/usr/local/apache2/conf/echocert.crt"       # 服务器证书
+SSLCertificateKeyFile "/usr/local/apache2/conf/server.key"      # 服务器 key
+SSLCertificateChainFile "/usr/local/apache2/conf/fullchain.pem" # chain 证书
+SSLCACertificateFile "/usr/local/apache2/conf/ca.crt"           # ca 证书
+
+<FilesMatch "\.(cgi|shtml|phtml|php)$">
+    SSLOptions +StdEnvVars
+</FilesMatch>
+<Directory "/usr/local/apache2/cgi-bin">
+    SSLOptions +StdEnvVars
+</Directory>
+
+BrowserMatch "MSIE [2-5]" \
+         nokeepalive ssl-unclean-shutdown \
+         downgrade-1.0 force-response-1.0
+
+CustomLog /usr/local/apache2/logs/ssl-access.log \
+          "%t %h %{SSL_PROTOCOL}x %{SSL_CIPHER}x \"%r\" %b"
+
+</VirtualHost>
+
+3. 启动 httpd 及 ocsp server 服务
+3.1 启动 httpd
+# /usr/local/apache2/bin/httpd -k start
+
+注意：
+把 ca.crt 证书拷贝到 htdocs/ca.example.com/ 下，即在 httpd-vhost.conf 配置的 DocumentRoot，保证通过http://ca.example.com/ca.crt 可以下载到 ca.crt
+
+3.2 启动 ocsp server
+openssl ocsp -port 9090 \                 # 通过 ocsp.example.com:9090 可以访问到 ocsp server
+             -index demoCA/index.txt \    # 通过生成 ca 证书的时候生成
+             -CA private/ca.crt \
+             -rkey private/server.key \
+             -rsigner private/echocert.crt \
+             -out ocsp_responder.log \
+             -ndays 100
+
+注意：
+一定不要用 curl 类似的命令或者 python 的 request 构建 http get 命令去直接访问 ocsp.example.com：9090,否则就会导致上述的 oscp server 崩溃
+
+3.3 域名设置，在证书中必须配置的域名是,即配置文件中的 [alt_names] 部分
+www.example.com
+ca.example.com
+ocsp.example.com
+
+这里使用的测试环境，因此域名是直接在 /etc/hosts 中设置的
+
+4. 测试及查看证书命令
+# 测试 http ssl 的 url
+curl --cacert private/ca.crt --capath . \
+     --key private/server.key \
+     --cert private/echocert.crt \
+     https://www.example.com
+
+# 命令用于查看证书在访问时候的交互过程
+openssl s_client -quiet -connect www.example.com:443 -status
+openssl s_client -connect www.example.com:443 -servername www.example.com -showcerts

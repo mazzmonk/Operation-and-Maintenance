@@ -23,3 +23,30 @@
   . sed '1,${s/old/new/g}' file.txt: 替换file.txt文件中,从第1行到最后一行中所有"old"为"new".
   . sed '1,5{s/old/new/g; p }' file.txt: 替换file.txt文件中,从第1行到第5行中所有"old"为"new",并打印这些行.
   . sed -n '1,5p' file.txt: 打印file.txt文件的第1行到第5行.
+
+4. 将多个空行合并成一个
+  . sed -i  '/^$/{N;/^\n*$/D}' file.txt
+
+5. 匹配 http/https 开头的 url
+  . (http|https):\/\/([\w.]+\/?)\S*
+
+6. 问题：现有一 httpd-vhosts.conf 文本内容如下：
+    <VirtualHost *:80>
+    ServerAdmin webmaster@dummy-host.example.com
+    DocumentRoot "/usr/local/apache2/docs/dummy-host.example.com"
+    ServerName dummy-host.example.com
+    ServerAlias www.dummy-host.example.com
+    ErrorLog "logs/dummy-host.example.com-error_log"
+    CustomLog "logs/dummy-host.example.com-access_log" common
+    </VirtualHost>
+
+    <VirtualHost *:80>
+    ServerAdmin webmaster@dummy-host2.example.com
+    DocumentRoot "/usr/local/apache2/docs/dummy-host2.example.com"
+    ServerName dummy-host2.example.com
+    ErrorLog "logs/dummy-host2.example.com-error_log"
+    CustomLog "logs/dummy-host2.example.com-access_log" common
+    </VirtualHost>
+
+  现要用 'dummy-host' 替换成 'www'，只替换第一段里面的，必须使用精准匹配
+  sed 's/\<dummy-host\>/abc/g' httpd-vhosts.conf
